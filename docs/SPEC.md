@@ -135,7 +135,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | **Built** (model-designed housing, per-part interference against the board's 3D models, process rules, STEP/STL/GLB/drawings). The physical exit test needs a real board. |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
-| M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | Planned |
+| M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | Planned |
 | G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | Planned (move earlier if the motherboard work lives in Flux) |
 | G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | Planned |
@@ -579,6 +579,19 @@ Implementation notes:
   never see internal notes, costs or other clients. Engineers keep the full views.
 - External accounts arrive with M-UI rather than waiting for M-RFQ (this replaces open decision 3).
 
+**Built (17 Nov 2026):**
+- `client` project role. Clients read requirements, the plan and tasks, approvals, outputs, checks, models and the chat; runs,
+  executions, cost events, audit events and worker logs are staff-only (RLS). Clients may approve or return at stops
+  (`decide_task`), alongside owners and reviewers.
+- Owners invite by email (`invite_member`); an invitation waits until that address signs up and becomes a membership on the
+  first visit (`accept_invitations`). VX Design does not send email yet: the owner shares the sign-up link.
+- Chat (`project_messages`, written only through `post_message`). The assistant answers from context read with the
+  asker's own credentials, so it cannot reveal anything RLS hides from them. It points to outputs (links open in the centre
+  viewer) and restates requested changes as suggested requirement changes for the team; it cannot change the project.
+  Without an API key (`VX_LLM=offline`) it returns a deterministic, labelled status summary.
+- Workspace page: chat (left), overview or embedded output viewer (centre), live checklist with approval stops (right).
+  Clients are sent to the workspace; staff reach it from the project page.
+
 ## 18. Data and API contracts
 
 **Built schema:**
@@ -638,7 +651,7 @@ v1.0's backlog, merged with build status:
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. It runs alongside 1 and 2, since it needs no hardware.
 4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
-5. **M-UI** (client workspace), **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
+5. **M-UI** (client workspace) *Built*. **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
 v1.0's 16-week sequence is kept as a target, not a commitment:
 - weeks 1–2: foundation and source registry;
@@ -679,8 +692,6 @@ Decided 17 Nov 2026:
 
 Still open:
 - Which image provider to start with, after its terms and pricing are reviewed.
-- When M-UI is scheduled relative to M-SRC and M-ENC (recommended: start the workspace layout and chat once M-SRC's
-  adapters are in, because the chat is most useful once there is sourcing data to talk about).
 
 ## 22. Success metrics and launch boundaries
 

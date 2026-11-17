@@ -7,6 +7,8 @@ import { createProject } from "./actions";
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
   const { supabase } = await requireUser();
+  // Invitations sent to this email before the account existed become memberships on first visit.
+  await supabase.rpc("accept_invitations");
   const { data: projects } = await supabase
     .from("projects")
     .select("id, name, description, created_at, plans(status, version)")

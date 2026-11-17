@@ -425,16 +425,44 @@ pnpm test:enclosure            # schematic -> layout -> enclosure with real KiCa
 pnpm test:e2e:enclosure        # browser: fit report, exploded 3D view, approve
 ```
 
+## M-UI: client workspace
+
+Clients get their own login and a workspace per project: a running **chat** on the left, the **results** in the
+centre, and the live **checklist** on the right that stops at approval points.
+
+- **People.** Owners invite by email on the project page (client, reviewer, engineer or viewer). If the address has no
+  account yet the invitation waits, and it becomes a membership when that person signs up. VX Design does not send
+  email yet: share the sign-up link yourself.
+- **What clients see.** Requirements, the plan's tasks and their status, approval stops, outputs and their checks, the
+  model library and the chat. Runs, executions, costs, the audit trail and worker logs are staff-only, enforced by
+  row-level security, not just hidden in the UI. Clients opening the project page are sent to the workspace.
+- **Checklist.** The approved plan in order: done, working, queued, blocked, and **approval needed**. At a stop the
+  reason is shown with Approve / Return (a note is required to return). Clients, owners and reviewers can decide.
+  The checklist refreshes while work is running.
+- **Centre.** An overview (progress and one result tile per task) or any output, shown in the same viewers as the
+  engineering pages (power report, schematic, 3D board, fit report, BOM, fab package).
+- **Chat.** Claude answers from the project's requirements, plan, approvals, outputs, checks and recent chat, read with
+  the asker's own permissions. It links the outputs it mentions (they open in the centre) and restates requested changes
+  as suggested requirement changes for the team; it cannot approve or change anything. Messages are stored per project
+  and every member sees the same conversation. With `VX_LLM=offline` it gives a labelled status summary instead (not AI).
+
+```bash
+./scripts/test-db.sh           # workspace_test: invitations, client visibility, who can decide, chat writes
+pnpm test:e2e:workspace        # browser: invite, client signs up, checklist stop, chat, viewer, client approves
+```
+
+Screenshots: `docs/workspace/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
 `task_dependencies`, `decisions`, `approvals`, `runs`, `executions`, `artifacts`,
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
-`audit_events`, plus a private `project-files` storage bucket.
+`audit_events`, `project_invitations`, `project_messages`, plus a private `project-files` storage bucket.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 
-- Project data is visible only to project members (row level security).
+- Project data is visible only to project members (row level security); clients never see runs, executions, costs, audit events or logs.
 - Task status follows the spec §6 state machine; every change is written to `audit_events`.
 - Task dependencies stay within one plan and cannot form cycles.
 - Decisions are immutable; changes are recorded as new decisions that supersede old ones.

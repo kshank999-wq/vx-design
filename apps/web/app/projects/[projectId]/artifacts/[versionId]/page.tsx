@@ -7,8 +7,12 @@ import { requireUser } from "@/lib/auth";
 
 const MAX_INLINE = 2 * 1024 * 1024;
 
-export default async function ArtifactVersionPage({ params }: { params: Promise<{ projectId: string; versionId: string }> }) {
+export default async function ArtifactVersionPage({ params, searchParams }: {
+  params: Promise<{ projectId: string; versionId: string }>;
+  searchParams: Promise<{ embed?: string }>;
+}) {
   const { projectId, versionId } = await params;
+  const embed = (await searchParams).embed === "1";
   const { supabase } = await requireUser();
   const { data: v } = await supabase.from("artifact_versions")
     .select("id, version, status, sha256, size_bytes, content_type, storage_path, tool_name, tool_version, tool_config, summary, created_at, committed_at, validated_at, produced_by_task_id, produced_by_execution_id, artifacts(name, kind), tasks:produced_by_task_id(key, title), projects(name)")
@@ -71,7 +75,7 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
   ]);
 
   return (
-    <main>
+    <main className={embed ? "embed" : undefined}>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{(v.projects as unknown as { name: string }).name}</Link> /</p>
       <div className="row spread">
         <h1>{artifact.name} <span className="muted">v{v.version}</span></h1>
@@ -162,7 +166,7 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
         <section>
           <h2>Other outputs of this task</h2>
           <ul className="small">{others.map((s) => (
-            <li key={s.id}><Link href={`/projects/${projectId}/artifacts/${s.id}`}>{(s.artifacts as unknown as { name: string }).name} v{s.version}</Link>
+            <li key={s.id}><Link href={`/projects/${projectId}/artifacts/${s.id}${embed ? "?embed=1" : ""}`}>{(s.artifacts as unknown as { name: string }).name} v{s.version}</Link>
               <span className="muted"> {s.content_type}</span></li>
           ))}</ul>
         </section>

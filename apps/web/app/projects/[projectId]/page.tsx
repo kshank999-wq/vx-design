@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { createPlan, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
+import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
 
 export const maxDuration = 300;
 
@@ -40,6 +40,15 @@ export default async function ProjectPage({ params, searchParams }: {
       .order("created_at", { ascending: false }).limit(10),
   ]);
   if (!project) notFound();
+  // Clients work in the workspace: chat, results and approval stops, without the engineering internals.
+  if (me?.role === "client") redirect(`/projects/${projectId}/workspace`);
+  const isOwner = me?.role === "owner";
+  const [{ data: members }, { data: invitations }] = await Promise.all([
+    supabase.from("project_members").select("user_id, role").eq("project_id", projectId),
+    isOwner ? supabase.from("project_invitations").select("id, email, role, created_at, accepted_at").eq("project_id", projectId).order("created_at")
+            : Promise.resolve({ data: [] as never[] }),
+  ]);
+  const roleCounts = Object.entries((members ?? []).reduce<Record<string, number>>((m, x) => ({ ...m, [x.role]: (m[x.role] ?? 0) + 1 }), {}));
   const canEdit = me?.role === "owner" || me?.role === "engineer";
   const docTitle = new Map((docs ?? []).map((d) => [d.id, d.title]));
   const counts = { total: reqs?.length ?? 0, rejected: reqs?.filter((r) => r.status === "rejected").length ?? 0,
@@ -51,6 +60,8 @@ export default async function ProjectPage({ params, searchParams }: {
       <h1>{project.name}</h1>
       {project.description && <p className="muted">{project.description}</p>}
       <Banner error={error} notice={notice} />
+      <p><Link href={`/projects/${projectId}/workspace`} className="btn">Open the workspace</Link>
+        <span className="muted small"> Chat, results and approval stops: the view your client sees.</span></p>
 
       <section>
         <h2>1. Specification documents</h2>
@@ -187,6 +198,35 @@ export default async function ProjectPage({ params, searchParams }: {
         <h2>5. 3D model library</h2>
         <p className="small">Manufacturer STEP models for this project&apos;s parts, checked against their footprints and verified before layouts
           use them. <Link href={`/projects/${projectId}/models`}>Open the model library</Link></p>
+      </section>
+
+      <section>
+        <h2>6. People</h2>
+        <p className="small muted">{roleCounts.map(([r, n]) => `${n} ${r}${n > 1 ? "s" : ""}`).join(" · ")}. Clients see the workspace only:
+          requirements, the checklist, results and checks, and the chat. They approve or return work at approval stops, and never see
+          runs, worker logs, costs or the audit trail.</p>
+        {isOwner && (
+          <>
+            {!!invitations?.length && (
+              <table className="small" data-testid="invitations">
+                <thead><tr><th>Invited</th><th>Role</th><th>Status</th></tr></thead>
+                <tbody>{invitations.map((i) => (
+                  <tr key={i.id}><td>{i.email}</td><td>{i.role}</td><td>{i.accepted_at ? `joined ${new Date(i.accepted_at).toLocaleDateString()}` : "waiting for sign-up"}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+            <form action={inviteMember.bind(null, projectId)} className="row upload">
+              <input type="email" name="email" required placeholder="name@company.com" aria-label="Email to invite" />
+              <select name="role" aria-label="Role" defaultValue="client">
+                <option value="client">Client</option>
+                <option value="reviewer">Reviewer</option>
+                <option value="engineer">Engineer</option>
+                <option value="viewer">Viewer</option>
+              </select>
+              <SubmitButton pendingText="Inviting…">Invite</SubmitButton>
+            </form>
+          </>
+        )}
       </section>
     </main>
   );

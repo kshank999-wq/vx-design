@@ -1,0 +1,162 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { Banner } from "@/components/Banner";
+import { SubmitButton } from "@/components/SubmitButton";
+import { loadContext } from "@/lib/assistant";
+import { requireUser } from "@/lib/auth";
+import { decideFromWorkspace, sendMessage } from "./actions";
+
+export const maxDuration = 120;
+
+const ICON: Record<string, string> = {
+  complete: "✓", awaiting_approval: "!", running: "◐", validating: "◐", ready: "○", draft: "○",
+  blocked: "✕", failed: "✕", canceled: "–", superseded: "–",
+};
+const LABEL: Record<string, string> = {
+  complete: "Done", awaiting_approval: "Approval needed", running: "Working", validating: "Checking", ready: "Queued",
+  draft: "Not started", blocked: "Blocked", failed: "Needs the team", canceled: "Canceled", superseded: "Replaced",
+};
+
+interface MessageData { model?: string; offline?: boolean; references?: string[]; suggested_requirement_change?: string | null; error?: boolean }
+
+export default async function WorkspacePage({ params, searchParams }: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ view?: string; error?: string; notice?: string }>;
+}) {
+  const { projectId } = await params;
+  const { view, error, notice } = await searchParams;
+  const { supabase, userId } = await requireUser();
+  const ctx = await loadContext(supabase, projectId);
+  if (!ctx) notFound();
+  const [{ data: me }, { data: messages }] = await Promise.all([
+    supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
+    supabase.from("project_messages").select("id, author_kind, body, data, created_at").eq("project_id", projectId).order("id").limit(200),
+  ]);
+  const role = me?.role ?? "viewer";
+  const canDecide = ["owner", "reviewer", "client"].includes(role);
+  const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
+  const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
+  const outputName = new Map(ctx.outputs.map((o) => [o.id, o.name]));
+  const done = ctx.tasks.filter((t) => t.status === "complete").length;
+  const live = ctx.tasks.some((t) => ["running", "validating", "ready"].includes(t.status));
+  const selected = view && ctx.outputs.find((o) => o.id === view);
+  const href = (v?: string) => `/projects/${projectId}/workspace${v ? `?view=${v}` : ""}`;
+  // Prefer the reports people read (power budget, fit report, BOM, DRC) over raw files when pointing at a task's result.
+  const PREFERRED = ["power-budget", "fit-report", "sourced-bom", "fab-package", "drc-report", "kicad-project", "erc-report", "design", "brief"];
+  const mainOutput = (key: string) => {
+    const outs = outputsOf(key);
+    return PREFERRED.map((p) => outs.find((o) => o.name.endsWith(`/${p}`))).find(Boolean) ?? outs[0];
+  };
+
+  return (
+    <main className="workspace">
+      <div className="ws-head">
+        <p className="crumbs">{role === "client" ? <Link href="/projects">Projects</Link> : <><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{ctx.project.name}</Link></>} /</p>
+        <h1>{ctx.project.name} <span className="muted small">workspace</span></h1>
+        <Banner error={error} notice={notice} />
+      </div>
+
+      <section className="ws-chat card" aria-label="Project chat">
+        <h2>Chat</h2>
+        <ol className="chat" data-testid="chat">
+          {(messages ?? []).map((m) => {
+            const d = (m.data ?? {}) as MessageData;
+            return (
+              <li key={m.id} className={`msg msg-${m.author_kind}`}>
+                <div className="msg-body">{m.body}</div>
+                {d.suggested_requirement_change && (
+                  <div className="small warn-text">Suggested requirement change, for the team to review: {d.suggested_requirement_change}</div>
+                )}
+                {!!d.references?.length && (
+                  <div className="small">{d.references.filter((r) => outputName.has(r)).map((r) => (
+                    <Link key={r} href={href(r)} className="ref">{outputName.get(r)!.split("/").pop()}</Link>
+                  ))}</div>
+                )}
+                {m.author_kind === "assistant" && d.model && <div className="muted small">{d.model}</div>}
+              </li>
+            );
+          })}
+          {!messages?.length && <li className="muted small">Ask about progress, a report, or what needs your approval.</li>}
+        </ol>
+        <form action={sendMessage.bind(null, projectId, selected ? selected.id : null)} className="stack">
+          <textarea name="message" rows={3} required maxLength={4000} placeholder="Ask about the project…" aria-label="Message" />
+          <div><SubmitButton pendingText="Thinking…">Send</SubmitButton></div>
+        </form>
+      </section>
+
+      <section className="ws-view" aria-label="Results">
+        {selected ? (
+          <>
+            <div className="row spread">
+              <Link href={href()}>← Overview</Link>
+              <Link href={`/projects/${projectId}/artifacts/${selected.id}`} target="_blank">Open in a new tab</Link>
+            </div>
+            <iframe className="ws-frame" src={`/projects/${projectId}/artifacts/${selected.id}?embed=1`} title={selected.name} data-testid="viewer" />
+          </>
+        ) : (
+          <div className="card" data-testid="overview">
+            <h2>Overview</h2>
+            {ctx.plan ? (
+              <>
+                <p>{ctx.plan.summary}</p>
+                <div className="progress" aria-label={`${done} of ${ctx.tasks.length} tasks done`}>
+                  <span style={{ width: `${ctx.tasks.length ? (100 * done) / ctx.tasks.length : 0}%` }} />
+                </div>
+                <p className="small muted">{done} of {ctx.tasks.length} steps done · {ctx.approvals.length} waiting for approval · {ctx.requirements.length} requirements</p>
+              </>
+            ) : <p className="muted">The team is still turning the specification into a plan. Results will appear here as work completes.</p>}
+            <h3>Results</h3>
+            <div className="tiles">
+              {ctx.tasks.filter((t) => mainOutput(t.key)).map((t) => {
+                const o = mainOutput(t.key)!;
+                return (
+                  <Link key={t.id} href={href(o.id)} className="tile">
+                    <strong>{t.title}</strong>
+                    <span className="small">{o.summary ?? o.name}</span>
+                    <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status === "committed" ? "approved" : "for review"}</span>
+                  </Link>
+                );
+              })}
+              {!ctx.outputs.length && <p className="muted small">No results yet.</p>}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <aside className="ws-checklist card" aria-label="Checklist" data-testid="checklist">
+        <div className="row spread"><h2>Checklist</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
+        <ol className="checklist">
+          {ctx.tasks.map((t) => {
+            const a = approvalFor.get(t.id);
+            const o = mainOutput(t.key);
+            return (
+              <li key={t.id} className={`check check-${t.status}`} data-status={t.status}>
+                <span className="check-icon" aria-hidden>{ICON[t.status] ?? "○"}</span>
+                <div>
+                  <div>{o ? <Link href={href(o.id)}>{t.title}</Link> : t.title}</div>
+                  <div className="small muted">{LABEL[t.status] ?? t.status}</div>
+                  {a && (
+                    <div className="approval-stop" data-testid="approval-stop">
+                      <div className="small"><strong>Approval stop.</strong> {a.reason}</div>
+                      {canDecide ? (
+                        <form className="stack" action={decideFromWorkspace.bind(null, projectId, t.id, true)}>
+                          <textarea name="note" rows={2} placeholder="Note (required to return)" aria-label={`Note for ${t.title}`} />
+                          <div className="row tight">
+                            <SubmitButton pendingText="Approving…">Approve</SubmitButton>
+                            <SubmitButton variant="danger" formAction={decideFromWorkspace.bind(null, projectId, t.id, false)} pendingText="Returning…">Return</SubmitButton>
+                          </div>
+                        </form>
+                      ) : <div className="small muted">Waiting for the client or a reviewer.</div>}
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {!ctx.tasks.length && <li className="muted small">The checklist appears once the plan is approved.</li>}
+        </ol>
+      </aside>
+    </main>
+  );
+}

@@ -1,0 +1,157 @@
+// End-to-end test of the client workspace: an owner invites a client by email; the client signs up, lands in
+// the workspace, sees the checklist stop at an approval, asks the chat what needs approval, opens the power
+// report in the centre viewer, and approves. The client cannot read runs, executions, costs, audit or logs.
+//
+// Needs the app running (VX_LLM=offline) and the local Supabase stack (./scripts/test-e2e-workspace.sh).
+import { createRequire } from "node:module";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const { createClient } = createRequire(join(here, "../../../services/orchestrator/package.json"))("@supabase/supabase-js");
+
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const { SUPABASE_URL: URL, SUPABASE_SERVICE_ROLE_KEY: SERVICE, SUPABASE_ANON_KEY: ANON } = process.env;
+if (!URL || !SERVICE || !ANON) throw new Error("SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and SUPABASE_ANON_KEY are required");
+const SHOTS = process.env.SCREENSHOTS;
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
+const owner = { email: `ws-owner-${Date.now()}@example.test`, password: "correct-horse-battery" };
+
+let step = 0;
+async function shot(page, name) {
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `${String(++step).padStart(2, "0")}-${name}.png`), fullPage: true });
+}
+async function waitFor(what, fn, timeoutMs = 120_000) {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+const client = { email: `ws-client-${Date.now()}@example.test`, password: "correct-horse-battery" };
+
+async function signUp(page, who) {
+  await page.goto(`${BASE}/login`);
+  await page.getByLabel("Email").fill(who.email);
+  await page.getByLabel("Password").fill(who.password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.waitForURL(/\/projects$/);
+}
+
+const browser = await chromium.launch();
+const worker = spawn(process.execPath, [join(here, "../../../services/orchestrator/src/main.ts")], {
+  env: { ...process.env, WORKER_ID: "ws-worker", VX_LLM: "offline", VX_ENGINEERING: "off", VX_SOURCING: "off", WORKER_POLL_MS: "500" },
+  stdio: ["ignore", "ignore", "inherit"],
+});
+const ctxOpts = { viewport: { width: 1440, height: 900 }, deviceScaleFactor: SHOTS ? 2 : 1 };
+try {
+  // Owner: a project with one power task that stops for approval.
+  const page = await (await browser.newContext(ctxOpts)).newPage();
+  await signUp(page, owner);
+  const user = createClient(URL, ANON, { auth: { persistSession: false } });
+  assert.ifError((await user.auth.signInWithPassword(owner)).error);
+  const { data: project } = await user.from("projects").insert({ name: "Timecode slate (workspace e2e)", description: "Wireless timecode slate" }).select("id").single();
+  await user.from("requirements").insert([{ project_id: project.id, ref_code: "REQ-PWR-001", kind: "power", priority: "must",
+    text: "The slate shall run a full 12 hour shooting day from one 1S Li-ion pack." }]);
+  const { data: planId } = await user.rpc("create_plan_version", { p_project_id: project.id, p_payload: { summary: "Power design for the slate.", tasks: [
+    { key: "power-budget", title: "Power tree and budget", discipline: "power", requirement_refs: ["REQ-PWR-001"],
+      acceptance_tests: [{ id: "AT1", description: "Power budget passes the calculator", method: "validation", validationKind: "power_budget" }] },
+  ] } });
+  await user.rpc("submit_plan", { p_plan_id: planId });
+  await user.rpc("decide_plan", { p_plan_id: planId, p_approve: true, p_note: null });
+  await user.rpc("authorize_run", { p_plan_id: planId, p_mode: "autonomous", p_max_ai_spend_usd: 5, p_max_compute_spend_usd: 5, p_name: "ws" });
+  const task = async () => (await admin.from("tasks").select("id, status").eq("plan_id", planId).single()).data;
+  await waitFor("power task to stop for approval", async () => (await task()).status === "awaiting_approval");
+  console.log("✓ power task ran and stopped for approval");
+
+  // Owner invites the client by email before the client has an account.
+  await page.goto(`${BASE}/projects/${project.id}`);
+  await page.getByLabel("Email to invite").fill(client.email);
+  await page.getByLabel("Role").selectOption("client");
+  await page.getByRole("button", { name: "Invite" }).click();
+  await page.getByText(/Invitation recorded/).waitFor();
+  assert.match(await page.getByTestId("invitations").innerText(), /waiting for sign-up/);
+  await shot(page, "owner-invites-client");
+  console.log("✓ owner invited the client");
+
+  // Client signs up, sees the project, and lands in the workspace.
+  const cpage = await (await browser.newContext(ctxOpts)).newPage();
+  await signUp(cpage, client);
+  await cpage.getByRole("link", { name: "Timecode slate (workspace e2e)" }).click();
+  await cpage.waitForURL(/\/workspace$/);
+  const checklist = cpage.getByTestId("checklist");
+  await checklist.getByText("Power tree and budget").waitFor();
+  assert.match(await checklist.getByTestId("approval-stop").innerText(), /Approval stop\..*Offline stand-in/s);
+  assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
+  await shot(cpage, "client-workspace");
+  console.log("✓ client joined through the invitation and sees the checklist with the approval stop");
+
+  // Chat.
+  await cpage.getByLabel("Message").fill("What needs my approval?");
+  await cpage.getByRole("button", { name: "Send" }).click();
+  const reply = cpage.locator(".msg-assistant").last();
+  await reply.waitFor();
+  const text = await reply.innerText();
+  assert.match(text, /Waiting for your approval \(1\):\n• Power tree and budget: /);
+  assert.match(text, /Offline status summary, not AI/);
+  assert.equal(await cpage.locator(".msg-user").last().innerText(), "What needs my approval?");
+  console.log("✓ chat answered from the project's state");
+
+  // Centre viewer: the power report, embedded without the app chrome.
+  await reply.getByRole("link", { name: "power-budget" }).click();
+  await cpage.waitForURL(/\?view=/);
+  const frame = cpage.frameLocator("[data-testid=viewer]");
+  assert.match(await frame.getByTestId("power-status").innerText(), /0 error\(s\)/);
+  assert.equal(await frame.locator(".topbar").isVisible(), false);
+  await shot(cpage, "client-views-power-report");
+  console.log("✓ centre viewer shows the power report");
+
+  // What the client cannot read.
+  const capi = createClient(URL, ANON, { auth: { persistSession: false } });
+  assert.ifError((await capi.auth.signInWithPassword(client)).error);
+  for (const table of ["runs", "executions", "cost_events", "audit_events", "execution_logs"]) {
+    const { data, error } = await capi.from(table).select("id").eq("project_id", project.id);
+    assert.ifError(error);
+    assert.equal(data.length, 0, `client must not read ${table}`);
+  }
+  assert.equal((await capi.from("tasks").select("id").eq("project_id", project.id)).data.length, 1);
+  const { error: forged } = await capi.from("project_messages").insert({ project_id: project.id, author_kind: "assistant", body: "forged" });
+  assert.ok(forged, "client cannot write assistant messages directly");
+  const { error: ownerOnly } = await capi.rpc("invite_member", { p_project_id: project.id, p_email: "x@example.test", p_role: "client" });
+  assert.ok(ownerOnly, "client cannot invite");
+  console.log("✓ client cannot read runs, executions, costs, audit or logs, forge messages, or invite");
+
+  // Client approves at the stop.
+  await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
+  await cpage.getByRole("button", { name: "Approve" }).click();
+  await cpage.getByText("Approved. The team's next steps are unblocked.").waitFor();
+  assert.equal((await task()).status, "complete");
+  const { data: versions } = await admin.from("artifact_versions").select("status").eq("produced_by_task_id", (await task()).id);
+  assert.deepEqual(versions.map((v) => v.status), ["committed"]);
+  assert.match(await cpage.getByTestId("overview").innerText(), /1 of 1 steps done · 0 waiting for approval/);
+  await shot(cpage, "client-approved");
+  const { data: audit } = await admin.from("audit_events").select("event_type, actor_id").eq("project_id", project.id).eq("event_type", "task.approved");
+  assert.equal(audit.length, 1);
+  console.log("✓ client approved: output committed and audited");
+
+  // The owner sees the same chat.
+  await page.goto(`${BASE}/projects/${project.id}/workspace`);
+  await page.locator(".msg-user").getByText("What needs my approval?").waitFor();
+  console.log("✓ owner sees the client's conversation");
+  console.log("\nWorkspace end-to-end flow passed.");
+} catch (e) {
+  console.error("\n✗ Workspace end-to-end flow failed:", e.message);
+  process.exitCode = 1;
+} finally {
+  worker.kill("SIGKILL");
+  await browser.close();
+}

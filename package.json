@@ -28,7 +28,8 @@
     "test:models": "./scripts/test-models.sh",
     "test:e2e:models": "./scripts/test-e2e-models.sh",
     "test:enclosure": "./scripts/test-enclosure.sh",
-    "test:e2e:enclosure": "./scripts/test-e2e-enclosure.sh"
+    "test:e2e:enclosure": "./scripts/test-e2e-enclosure.sh",
+    "test:e2e:workspace": "./scripts/test-e2e-workspace.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

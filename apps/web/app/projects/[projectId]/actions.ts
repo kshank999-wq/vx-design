@@ -217,3 +217,19 @@ export async function createPlan(projectId: string) {
   }
   redirect(`${path}/plans/${planId}`);
 }
+
+const INVITE_ROLES = ["client", "reviewer", "engineer", "viewer"];
+
+export async function inviteMember(projectId: string, form: FormData) {
+  const path = `/projects/${projectId}`;
+  const { supabase } = await requireUser();
+  const email = String(form.get("email") ?? "").trim();
+  const role = String(form.get("role") ?? "client");
+  if (!INVITE_ROLES.includes(role)) fail(path, "Unknown role.");
+  const { data, error } = await supabase.rpc("invite_member", { p_project_id: projectId, p_email: email, p_role: role });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  const notice = data === "added" ? `${email} already has an account and was added as ${role}.`
+    : `Invitation recorded: when ${email} signs up with that address, they join as ${role}. Send them the sign-up link yourself; VX Design does not email yet.`;
+  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
+}
