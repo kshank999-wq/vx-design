@@ -39,7 +39,7 @@ export default async function RunPage({ params, searchParams }: {
     .eq("id", runId).eq("project_id", projectId).maybeSingle();
   if (!run) notFound();
 
-  const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }] = await Promise.all([
+  const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }, { data: workers }] = await Promise.all([
     supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position")
       .eq("plan_id", run.plan_id).order("position"),
     supabase.from("executions").select("id, task_id, attempt, status, worker_id, checkpoint_seq, resumed_from_id, started_at, finished_at, heartbeat_at, error, summary, compute_seconds")
@@ -47,6 +47,7 @@ export default async function RunPage({ params, searchParams }: {
     supabase.from("cost_events").select("kind, cost_usd").eq("run_id", runId),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("runs").select("id").eq("plan_id", run.plan_id).in("status", ["pending", "running", "paused"]),
+    supabase.from("workers").select("id, disciplines, last_seen_at").gte("last_seen_at", new Date(Date.now() - 30_000).toISOString()),
   ]);
   const taskIds = (tasks ?? []).map((t) => t.id);
   const execIds = (execs ?? []).map((e) => e.id);
@@ -83,6 +84,10 @@ export default async function RunPage({ params, searchParams }: {
   const runnable = (tasks ?? []).filter((t) => t.status === "ready" && inScope(t)
     && (depRows ?? []).filter((d) => d.task_id === t.id).every((d) => taskStatus.get(d.depends_on_task_id) === "complete"));
   const canContinue = canControl && !active && !(activeRuns ?? []).length && runnable.length > 0;
+  // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
+  const online = new Set((workers ?? []).flatMap((w) => w.disciplines as string[]));
+  const uncovered = run.status === "running" && (workers ?? []).length > 0
+    ? [...new Set(runnable.map((t) => t.discipline).filter((d) => !online.has(d)))] : [];
   const noWorker = run.status === "running" && !(execs ?? []).length && Date.now() - new Date(run.created_at).getTime() > 20_000;
 
   const paths = [...new Set([...(versions ?? []).map((v) => v.storage_path), ...(report?.outputs ?? []).map((o) => o.storage_path)])];
@@ -107,6 +112,13 @@ export default async function RunPage({ params, searchParams }: {
       </div>
       <Banner error={error} notice={notice} />
       {run.stop_reason && <p className="banner banner-warn">Stopped: {run.stop_reason}</p>}
+      {uncovered.length > 0 && (
+        <p className="banner banner-warn" data-testid="uncovered">
+          No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
+          {uncovered.includes("schematic") ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}.
+          They stay ready and run as soon as one connects.
+        </p>
+      )}
       {noWorker && <p className="banner banner-warn">No worker has picked this run up yet. Workers run outside the web app; see services/orchestrator/README.md.</p>}
 
       <div className="grid2">
@@ -145,6 +157,11 @@ export default async function RunPage({ params, searchParams }: {
               <div key={t.id} className="card approval" data-task={t.key}>
                 <div className="row spread"><h3><span className="mono muted">{t.key}</span> {t.title}</h3><span className="pill pill-awaiting_approval">awaiting approval</span></div>
                 {appr && <p className="small">{appr.reason}</p>}
+                {(() => {
+                  const svg = outputsOf(t.id).find((v) => artifactName(v).endsWith("/schematic-svg"));
+                  const href = svg && urlOf.get(svg.storage_path);
+                  return href ? <Link href={`/projects/${projectId}/artifacts/${svg.id}`}><img className="schematic thumb" src={href} alt="Schematic preview" /></Link> : null;
+                })()}
                 <ul className="small">{outputsOf(t.id).map((v) => (
                   <li key={v.id}>
                     <Link href={`/projects/${projectId}/artifacts/${v.id}`}>{artifactName(v)} v{v.version}</Link>
@@ -181,9 +198,15 @@ export default async function RunPage({ params, searchParams }: {
                   <td>{t.attempts}</td>
                   <td className="small">
                     {exec ? <>{exec.worker_id}: {lastLog.get(exec.id) ?? "starting"}</> : t.blocker_reason ? <span className="warn-text">{t.blocker_reason}</span> : null}
-                    {outputsOf(t.id).filter((v) => v.status === "committed").map((v) => (
-                      <div key={v.id}><Link href={`/projects/${projectId}/artifacts/${v.id}`}>{artifactName(v)} v{v.version}</Link> <span className="pill pill-complete">committed</span></div>
-                    ))}
+                    {(() => {
+                      const done = outputsOf(t.id).filter((v) => v.status === "committed");
+                      const main = done.find((v) => /\/(kicad-project|brief)$/.test(artifactName(v))) ?? done[0];
+                      return main ? (
+                        <div><Link href={`/projects/${projectId}/artifacts/${main.id}`}>{artifactName(main)} v{main.version}</Link>{" "}
+                          <span className="pill pill-complete">committed</span>
+                          {done.length > 1 && <span className="muted"> +{done.length - 1} more</span>}</div>
+                      ) : null;
+                    })()}
                   </td>
                 </tr>
               );

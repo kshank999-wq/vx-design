@@ -37,7 +37,9 @@ function excerptAround(text: string, needle: string): string | null {
   const m = new RegExp(pattern, "i").exec(text);
   if (!m) return null;
   const start = Math.max(0, m.index - 80);
-  return text.slice(start, m.index + m[0].length + 80).replace(/\s+/g, " ").trim();
+  return text.slice(start, m.index + m[0].length + 80)
+    .replace(/[\u0000-\u001f\u007f-\u009f\ue000-\uf8ff\ufffd]/g, " ")   // control and private-use glyphs (PDF bullets)
+    .replace(/\s+/g, " ").trim();
 }
 
 export function matchText(text: string, mpn: string | null, claims: { parameter: string; value: string }[]): Pick<DatasheetEvidence, "mpn" | "claims"> {

@@ -21,7 +21,7 @@ export interface RunReport {
   next_steps: string[];
 }
 
-export async function buildRunReport(db: WorkerDb, run: RunRow): Promise<RunReport> {
+export async function buildRunReport(db: WorkerDb, run: RunRow, waitingFor: string[] = []): Promise<RunReport> {
   const c = db.client;
   const [{ data: tasks }, { data: execs }, { data: costs }] = await Promise.all([
     c.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, position")
@@ -70,6 +70,11 @@ export async function buildRunReport(db: WorkerDb, run: RunRow): Promise<RunRepo
     else if (t.status === "blocked") next.push(`${t.key} is blocked: ${t.blocker_reason ?? "see its execution log"}`);
     else if (t.status === "failed") next.push(`${t.key} failed: ${t.blocker_reason ?? "see its execution log"}. Retry it once the cause is fixed.`);
   }
+  if (waitingFor.length) {
+    const keys = scoped.filter((t) => t.status === "ready" && waitingFor.includes(t.discipline)).map((t) => t.key);
+    next.push(`${keys.join(", ")} ${keys.length === 1 ? "needs" : "need"} a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks` +
+      (waitingFor.includes("schematic") ? " (the KiCad engineering worker)" : "") + "; start one, then continue the run.");
+  }
   for (const t of (tasks ?? []).filter((x) => !inScope(x) && x.status === "ready")) {
     next.push(`${t.key} was outside this run's scope (risk ${t.risk_level}); include it in a future run if intended.`);
   }
@@ -87,7 +92,8 @@ export async function buildRunReport(db: WorkerDb, run: RunRow): Promise<RunRepo
     headline: parts.join("; ") + ".",
     final_status: finalStatus,
     stop_reason: run.stop_reason ?? (finalStatus === "stopped" && run.status === "running"
-      ? "Nothing more can run without your input." : null),
+      ? (waitingFor.length ? `Waiting for a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks.`
+                           : "Nothing more can run without your input.") : null),
     tasks: scoped.map((t) => ({
       id: t.id, key: t.key, title: t.title, discipline: t.discipline, status: t.status, attempts: t.attempts,
       blocker_reason: t.blocker_reason, executions: execCount(t.id),

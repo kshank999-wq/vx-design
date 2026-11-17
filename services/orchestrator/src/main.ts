@@ -52,6 +52,7 @@ const worker = new Worker(new WorkerDb(url, key), {
   pollMs: Number(env("WORKER_POLL_MS", "3000")),
   stepDelayMs: Number(env("VX_STEP_DELAY_MS", "0")),
   computeUsdPerHour: Number(env("VX_COMPUTE_USD_PER_HOUR", "0.10")),
+  uncoveredGraceMs: Number(env("VX_UNCOVERED_GRACE_MS", "30000")),
   tools: engineering ? { kicad: engineering.versions.kicad, vx_eng: engineering.versions.vx_eng } : {},
 }, executorsFor(engineering), model);
 

@@ -14,7 +14,10 @@
     "test:e2e": "NODE_PATH=$(npm root -g) node apps/web/e2e/g1-flow.mjs",
     "worker": "node services/orchestrator/src/main.ts",
     "test:worker": "./scripts/test-worker.sh",
-    "test:e2e:g2": "./scripts/test-e2e-g2.sh"
+    "test:e2e:g2": "./scripts/test-e2e-g2.sh",
+    "test:eng": "cd services/engineering && docker run --rm -v $PWD:/src -w /src --entrypoint python3 vx-engineering-worker -m unittest discover -s tests",
+    "test:g3": "./scripts/test-g3.sh",
+    "test:e2e:g3": "./scripts/test-e2e-g3.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

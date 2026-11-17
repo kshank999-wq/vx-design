@@ -104,6 +104,45 @@ pnpm test:worker                   # kills and freezes real worker processes aga
 pnpm test:e2e:g2                   # browser: authorize, close, kill worker, resume, approve, continue, report
 ```
 
+## G3: first circuit
+
+Schematic tasks run on the **KiCad engineering worker** (`services/engineering/Dockerfile.worker`: KiCad 10 +
+the orchestrator + `vx_eng`). Workers advertise the disciplines they can execute, so a worker without KiCad
+never claims a schematic task. The run page says when no online worker can run a task. If nothing else can
+progress, the run ends with a report saying what it is waiting for.
+
+1. **Design.** Claude proposes a circuit: KiCad library symbols and footprints, nets written as `REF.PIN`, and
+   for each part its MPN, manufacturer, datasheet URL and the ratings the design relies on.
+2. **Check and repair** (up to 3 repair rounds). `vx_eng` checks the design against the installed KiCad
+   libraries:
+   - symbols and footprints exist, with close matches suggested when they don't;
+   - every pin referenced exists, with the symbol's real pin list in the error;
+   - every symbol pin has a pad on its footprint;
+   - every pin is connected or explicitly marked unconnected.
+   
+   It then generates the native schematic and runs KiCad ERC. It also checks that KiCad's own netlist matches
+   the design. Every problem goes back to Claude with those library facts.
+3. **Component evidence.** Each datasheet is downloaded, and the part number and every claimed rating are
+   looked for in its text, with excerpts kept. This is a text match, and the UI says so.
+4. **Outputs** (all deterministic, so a resumed task re-uploads identical files):
+   - an editable KiCad 10 project (zip);
+   - schematic SVG and PDF;
+   - the ERC report (JSON);
+   - the netlist;
+   - a BOM (CSV);
+   - the component evidence;
+   - the design (JSON).
+   
+   The web app shows the drawing, the ERC table and the evidence table.
+
+```bash
+./services/engineering/build.sh                                        # KiCad engineering image (G0)
+docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker .
+pnpm test:eng                       # vx_eng: library checks, deterministic build, ERC negative controls
+pnpm test:g3                        # worker routing, schematic build, the stored project re-checked in a fresh KiCad
+pnpm test:e2e:g3                    # browser: waits for a KiCad worker, drawing, ERC report, evidence, approve
+```
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,

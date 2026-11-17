@@ -23,6 +23,9 @@ its current step and hand its tasks back to the queue at their latest checkpoint
 | `VX_PLANNING_MODEL` | claude-opus-5-5 | Claude model id |
 | `VX_COMPUTE_USD_PER_HOUR` | 0.10 | Worker time charged against compute budgets |
 | `VX_STEP_DELAY_MS` | 0 | Test hook: pause after each step |
+| `VX_ENGINEERING` | auto | `off` disables KiCad executors even when `vx_eng` and KiCad are present |
+| `VX_ENG_DIR` | /opt/vx | Directory containing the `vx_eng` package |
+| `VX_UNCOVERED_GRACE_MS` | 30000 | How long to wait for a capable worker before ending a run |
 
 ## How an execution works
 
@@ -45,7 +48,13 @@ Each run's report is written by `finish_run` once nothing more can run.
 | Executor | Disciplines | Evidence |
 | --- | --- | --- |
 | `design-brief` | architecture, components, power, thermal, mechanical, enclosure, documentation | unverified AI reasoning, checked for requirement and acceptance-test coverage |
-| `not-yet-available` | schematic, pcb_layout, simulation, verification, manufacturing, sourcing | blocks the task with the reason and the gate that adds it |
+| `kicad-schematic` | schematic (engineering worker only) | KiCad ERC, netlist match, library and pad checks (CAD check); datasheet text match per component |
+| `not-yet-available` | pcb_layout, simulation, verification, manufacturing, sourcing | blocks the task with the reason and the gate that adds it |
+
+A worker claims only the disciplines its executors declare, and it records them in `workers` (`worker_checkin`).
+When the only remaining work needs a discipline that no online worker offers (for example schematic with no
+KiCad worker running), the run ends after `VX_UNCOVERED_GRACE_MS` (default 30 s). Its report says what it is
+waiting for.
 
 ## Tests
 

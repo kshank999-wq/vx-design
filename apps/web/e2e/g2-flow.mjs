@@ -46,7 +46,7 @@ async function waitFor(what, fn, timeoutMs = 60_000) {
 function startWorker(id, env = {}) {
   const child = spawn(process.execPath, [WORKER], {
     env: { ...process.env, WORKER_ID: id, VX_LLM: "offline", WORKER_CONCURRENCY: "1", WORKER_POLL_MS: "300",
-           WORKER_LEASE_SECONDS: "5", ...env },
+           WORKER_LEASE_SECONDS: "5", VX_UNCOVERED_GRACE_MS: "3000", VX_ENGINEERING: "off", ...env },
     stdio: ["ignore", "pipe", "inherit"],
   });
   child.stdout.on("data", (d) => process.env.WORKER_VERBOSE && process.stdout.write(d));
@@ -183,14 +183,14 @@ try {
   await waitFor("run 3 report", async () => (await runStatus(run3))?.report, 90_000);
   await page.reload();
   await page.getByTestId("run-report").waitFor();
-  await page.getByText(/schematic is blocked: No executor yet: Schematic capture runs in the KiCad engineering worker/).waitFor();
-  await shot(page, "run3-report-blocked");
+  await page.getByText(/schematic needs a worker that can run schematic tasks \(the KiCad engineering worker\)/).waitFor();
+  await shot(page, "run3-report-waiting-for-kicad");
   const tasks = await taskStatus(planId);
   assert.deepEqual(tasks, {
     architecture: "complete", "power-budget": "complete", "enclosure-envelope": "complete",
-    schematic: "blocked", "pcb-layout": "ready", verification: "ready",
+    schematic: "ready", "pcb-layout": "ready", verification: "ready",
   });
-  console.log("✓ runs 2 and 3: briefs approved and committed; schematic blocked with a plain reason");
+  console.log("✓ runs 2 and 3: briefs approved and committed; schematic waits for a KiCad worker (report says so)");
 
   // --- No duplicate committed work, no repeated model calls -------------------------------
   const versions = await db(`artifact_versions?project_id=eq.${projectId}&select=id,status,produced_by_task_id,artifact_id`);
@@ -204,7 +204,7 @@ try {
     const logs = await db(`execution_logs?execution_id=eq.${e.id}&message=like.model%20call*&select=id`);
     calls[e.tasks.key] = (calls[e.tasks.key] ?? 0) + logs.length;
   }
-  assert.deepEqual(calls, { architecture: 1, "power-budget": 1, "enclosure-envelope": 1, schematic: 0 });
+  assert.deepEqual(calls, { architecture: 1, "power-budget": 1, "enclosure-envelope": 1 });
   console.log("✓ exactly one model call and one committed version per task");
 
   // --- Project overview lists the runs; outsiders see nothing -----------------------------

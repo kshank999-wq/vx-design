@@ -80,6 +80,7 @@ export interface RunProgress {
   total: number;
   live_executions: number;
   by_status: Record<string, number>;
+  claimable_disciplines: string[];
 }
 
 export const BUCKET = "project-files";
@@ -190,6 +191,14 @@ export class WorkerDb {
 
   async finishRun(runId: string, status: "completed" | "stopped" | "failed", report: unknown, reason: string | null): Promise<void> {
     await this.rpc("finish_run", { p_run_id: runId, p_status: status, p_report: report, p_reason: reason });
+  }
+
+  /** Disciplines offered by workers that checked in within the last `withinMs`. */
+  async onlineDisciplines(withinMs = 30_000): Promise<Set<string>> {
+    const { data, error } = await this.client.from("workers").select("disciplines")
+      .gte("last_seen_at", new Date(Date.now() - withinMs).toISOString());
+    if (error) throw new Error(`workers: ${error.message}`);
+    return new Set((data ?? []).flatMap((w) => w.disciplines as string[]));
   }
 
   async log(projectId: string, executionId: string, level: "debug" | "info" | "warn" | "error", message: string,

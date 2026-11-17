@@ -33,7 +33,7 @@ async function waitFor<T>(what: string, fn: () => Promise<T | null | undefined |
 function startWorker(id: string, env: Record<string, string> = {}): ChildProcess {
   const child = spawn(process.execPath, [MAIN], {
     env: { ...process.env, WORKER_ID: id, VX_LLM: "offline", WORKER_CONCURRENCY: "1", WORKER_POLL_MS: "300",
-           WORKER_LEASE_SECONDS: "5", ...env },
+           WORKER_LEASE_SECONDS: "5", VX_UNCOVERED_GRACE_MS: "2000", VX_ENGINEERING: "off", ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const tag = (s: Buffer) => s.toString().trimEnd().split("\n").map((l) => `    | ${l}`).join("\n");
@@ -149,10 +149,10 @@ test("a run survives its worker being killed mid-task, without duplicate work", 
     await assertNoDuplicateWork(runId, projectId);
 
     const report = run!.report as { headline: string; recoveries: unknown[]; next_steps: string[]; final_status: string };
-    assert.equal(run!.status, "stopped", "schematic has no executor yet, so the run stops short of complete");
+    assert.equal(run!.status, "stopped", "no KiCad worker is online, so the run stops short of complete");
     assert.equal(report.recoveries.length, 1, "report lists the recovery");
-    assert.match(report.headline, /3 of 4 task\(s\) in scope complete; 1 blocked/);
-    assert.ok(report.next_steps.some((s) => /schematic is blocked: No executor yet/.test(s)));
+    assert.match(report.headline, /3 of 4 task\(s\) in scope complete; 1 not started/);
+    assert.ok(report.next_steps.some((s) => /schematic needs a worker that can run schematic tasks/.test(s)));
   } finally {
     await stopWorker(a);
     if (b) await stopWorker(b);

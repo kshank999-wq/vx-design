@@ -43,3 +43,24 @@ Building behind a TLS-intercepting proxy: `EXTRA_CA_CERT=/path/to/ca.crt ./build
 No arbitrary model-generated shell commands; each adapter exposes fixed operations; record
 tool version and config with every output; cap CPU, memory and time; no outbound network
 from tool processes unless an adapter needs it.
+
+## vx_eng (G3)
+
+`vx_eng/` is the engineering library the worker calls as a subprocess. It prints one JSON document.
+
+```bash
+python3 -m vx_eng validate --spec circuit.json        # library checks only
+python3 -m vx_eng build --spec circuit.json --out dir  # project + ERC + netlist check + PDF/SVG/BOM + zip
+```
+
+- `library.py` holds a name index of every installed symbol and footprint, built at image build time. It
+  parses symbol definitions lazily, flattens `extends` inheritance and reads footprint pads.
+- `circuit.py` validates a design: references, symbols and footprints with suggestions, pins with the
+  symbol's real pin list, pin-to-pad coverage, unconnected pins, and undriven power inputs.
+- `schematic.py` generates a native KiCad 10 schematic. All units of multi-unit parts are placed; each pin
+  gets a wire stub and label; external supplies get PWR_FLAGs. UUIDs are derived from the design, so output
+  is byte-for-byte deterministic.
+- `kicad.py` wraps `kicad-cli`: ERC (JSON), netlist, PDF, SVG and BOM.
+
+Tests (`tests/test_vx_eng.py`) include negative controls. One removes the power source, and ERC must report
+`power_pin_not_driven`.
