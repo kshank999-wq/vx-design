@@ -17,7 +17,9 @@
     "test:e2e:g2": "./scripts/test-e2e-g2.sh",
     "test:eng": "cd services/engineering && docker run --rm -v $PWD:/src -w /src --entrypoint python3 vx-engineering-worker -m unittest discover -s tests",
     "test:g3": "./scripts/test-g3.sh",
-    "test:e2e:g3": "./scripts/test-e2e-g3.sh"
+    "test:e2e:g3": "./scripts/test-e2e-g3.sh",
+    "test:g4": "./scripts/test-g4.sh",
+    "test:e2e:g4": "./scripts/test-e2e-g4.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

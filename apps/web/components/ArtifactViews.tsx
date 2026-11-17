@@ -33,6 +33,114 @@ export function ErcView({ report }: { report: ErcReport }) {
   );
 }
 
+interface DrcItem { description: string; pos?: { x: number; y: number } }
+interface DrcEntry { severity: string; type: string; description: string; excluded?: boolean; items?: DrcItem[] }
+interface DrcReport {
+  kicad_version?: string; date?: string;
+  violations?: DrcEntry[]; unconnected_items?: DrcEntry[]; schematic_parity?: DrcEntry[];
+}
+
+function DrcTable({ rows }: { rows: DrcEntry[] }) {
+  return (
+    <table>
+      <thead><tr><th>Severity</th><th>Rule</th><th>Description</th><th>Where</th></tr></thead>
+      <tbody>{rows.map((v, i) => (
+        <tr key={i}>
+          <td><span className={`pill pill-check-${v.excluded ? "pass" : v.severity === "error" ? "fail" : "warning"}`}>{v.excluded ? "waived" : v.severity}</span></td>
+          <td className="mono">{v.type}</td><td>{v.description}</td>
+          <td className="small">{(v.items ?? []).map((it, j) => <div key={j}>{it.description}{it.pos ? ` @ (${it.pos.x}, ${it.pos.y}) mm` : ""}</div>)}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  );
+}
+
+export function DrcView({ report }: { report: DrcReport }) {
+  const all = [...(report.violations ?? []), ...(report.unconnected_items ?? []), ...(report.schematic_parity ?? [])];
+  const live = all.filter((v) => !v.excluded);
+  const errors = live.filter((v) => v.severity === "error").length;
+  const unrouted = (report.unconnected_items ?? []).filter((v) => !v.excluded).length;
+  const parity = (report.schematic_parity ?? []).filter((v) => !v.excluded).length;
+  const waived = all.length - live.length;
+  return (
+    <section>
+      <h2>Design rules check</h2>
+      <p className={errors ? "banner banner-error" : "banner banner-notice"} data-testid="drc-summary">
+        KiCad {report.kicad_version ?? ""} DRC with schematic parity: {errors} error(s), {live.length - errors} warning(s),{" "}
+        {unrouted} unrouted connection(s), {parity} schematic difference(s), {waived} waived.
+        {live.length === 0 && " No violations."}
+      </p>
+      {(report.violations ?? []).length > 0 && <><h3>Rule violations</h3><DrcTable rows={report.violations!} /></>}
+      {(report.unconnected_items ?? []).length > 0 && <><h3>Unrouted connections</h3><DrcTable rows={report.unconnected_items!} /></>}
+      {(report.schematic_parity ?? []).length > 0 && <><h3>Differences from the schematic</h3><DrcTable rows={report.schematic_parity!} /></>}
+    </section>
+  );
+}
+
+interface ModelEntry { ref: string; footprint: string; model: string | null; status: string; source?: string; sha256?: string; error?: string }
+
+export function ModelReportView({ models }: { models: ModelEntry[] }) {
+  const parts = models.filter((m) => !(m.status === "none" && /^MountingHole:/.test(m.footprint)));
+  const found = parts.filter((m) => m.status === "found").length;
+  return (
+    <section>
+      <h2>3D models</h2>
+      <p className="small muted">
+        Each footprint&apos;s 3D model comes from KiCad&apos;s official 3D library (kicad-packages3D) at the KiCad version&apos;s tag. These are
+        generic package shapes for fit and visual checks, not manufacturer CAD: confirm heights and connector bodies against the datasheet.
+      </p>
+      <p className="small" data-testid="model-counts">{found} of {parts.length} parts have a model.</p>
+      <table>
+        <thead><tr><th>Ref</th><th>Footprint</th><th>Model</th><th>Status</th></tr></thead>
+        <tbody>{models.map((m, i) => (
+          <tr key={i} data-ref={m.ref}>
+            <td className="mono">{m.ref}</td><td className="mono small">{m.footprint}</td>
+            <td className="mono small">{m.source ? <a href={m.source} target="_blank" rel="noreferrer">{m.model}</a> : (m.model ?? "—")}</td>
+            <td>{m.status === "found" ? <span className="pill pill-check-pass">found</span>
+              : m.status === "none" ? <span className="muted small">no model (mounting hole)</span>
+              : <span className="pill pill-check-warning" title={m.error}>{m.status}</span>}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </section>
+  );
+}
+
+interface LayoutDoc {
+  board: { width_mm: number; height_mm: number; corner_radius_mm: number; mounting_holes: { x_mm: number; y_mm: number; size: string }[] };
+  fab_profile: string; ground_pour: string | null; rationale: string;
+  placements: { ref: string; x_mm: number; y_mm: number; rotation_deg: number; side: string }[];
+  assumptions: string[]; open_questions: string[];
+  history?: { round: number; stage: string; problems: number }[];
+}
+
+export function LayoutView({ layout }: { layout: LayoutDoc }) {
+  return (
+    <section>
+      <h2>Board layout</h2>
+      <p>{layout.rationale}</p>
+      <dl className="facts small card">
+        <dt>Outline</dt><dd>{layout.board.width_mm} x {layout.board.height_mm} mm{layout.board.corner_radius_mm ? `, ${layout.board.corner_radius_mm} mm corners` : ""}</dd>
+        <dt>Mounting holes</dt><dd>{layout.board.mounting_holes.map((h) => `${h.size} @ (${h.x_mm}, ${h.y_mm})`).join(", ") || "none"}</dd>
+        <dt>Design rules</dt><dd className="mono">{layout.fab_profile}</dd>
+        <dt>Ground pour</dt><dd>{layout.ground_pour ? `${layout.ground_pour}, both layers` : "none"}</dd>
+        {layout.history && <><dt>Layout rounds</dt><dd>{layout.history.map((h) => `${h.round}: ${h.stage}${h.problems ? ` (${h.problems} problems)` : ""}`).join(" → ")}</dd></>}
+      </dl>
+      <div className="grid2">
+        {layout.assumptions.length > 0 && <div className="card"><h3>Assumptions</h3><ul>{layout.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
+        {layout.open_questions.length > 0 && <div className="card"><h3>Open questions</h3><ul>{layout.open_questions.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
+      </div>
+      <h3>Placements</h3>
+      <table className="small">
+        <thead><tr><th>Ref</th><th>x (mm)</th><th>y (mm)</th><th>Rotation</th><th>Side</th></tr></thead>
+        <tbody>{layout.placements.map((p) => (
+          <tr key={p.ref}><td className="mono">{p.ref}</td><td>{p.x_mm}</td><td>{p.y_mm}</td><td>{p.rotation_deg}°</td><td>{p.side}</td></tr>
+        ))}</tbody>
+      </table>
+    </section>
+  );
+}
+
 interface Evidence {
   method: string;
   counts: Record<string, number>;

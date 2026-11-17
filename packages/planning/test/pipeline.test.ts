@@ -189,3 +189,43 @@ test("circuit: check problems go back to the model until the design passes", asy
   await assert.rejects(generateCircuit(input, never, async () => ({ ok: false, stage: "erc", problems: ["x"], warnings: [] })),
     (e: unknown) => e instanceof CircuitDesignError && e.rounds === 4);
 });
+
+test("layout: placement and DRC problems go back to the model until the board passes", async () => {
+  const { generateLayout, LayoutDesignError, ScriptedModel, OFFLINE_FIXTURE_CIRCUIT, OFFLINE_FIXTURE_LAYOUT, renderLayoutPrompt } =
+    await import("../src/index.ts");
+  const input = {
+    projectContext: "Test", task: { key: "pcb-layout", title: "Layout", description: null },
+    requirements: [{ refCode: "REQ-MEC-001", kind: "mechanical", priority: "must", text: "Fit a 40 x 30 mm outline" }],
+    acceptanceTests: [{ id: "AT1", description: "DRC passes", method: "validation" }], upstream: [], reviewNotes: [],
+    circuit: OFFLINE_FIXTURE_CIRCUIT,
+    footprints: [{ ref: "U1", footprint: "Package_TO_SOT_SMD:SOT-23-5", value: "AP2112K-3.3", mount: "smd" as const, pads: 5,
+                   courtyard_mm: { width: 4.19, height: 3.49, left: -2.1, top: -1.75, right: 2.1, bottom: 1.75 } }],
+    fabProfiles: [{ name: "jlcpcb-2layer-standard", description: "JLCPCB" }],
+  };
+  const prompt = renderLayoutPrompt(input);
+  assert.match(prompt, /U1 \(AP2112K-3.3\) Package_TO_SOT_SMD:SOT-23-5: smd, 5 pads, courtyard 4.19 x 3.49 mm/);
+  assert.match(prompt, /- VIN: J1.1, C1.1, U1.1, U1.3/);
+  const cramped = { ...OFFLINE_FIXTURE_LAYOUT, board: { ...OFFLINE_FIXTURE_LAYOUT.board, width_mm: 20 } };
+  const checks = [
+    { ok: false, stage: "placement" as const, problems: ["D1 courtyard spans x 28.2..29.8 mm, outside the 20 x 22 mm board"], warnings: [] },
+    { ok: false, stage: "routing" as const, problems: ["the autorouter left 2 connection(s) unrouted"], warnings: [] },
+    { ok: true, stage: "built" as const, problems: [], warnings: [] },
+  ];
+  const model = new ScriptedModel([() => cramped, () => cramped, () => OFFLINE_FIXTURE_LAYOUT]);
+  const r = await generateLayout(input, model, async () => checks.shift()!);
+  assert.equal(r.rounds, 3);
+  assert.equal(r.layout.board.width_mm, 34);
+  assert.deepEqual(r.history.map((h) => h.stage), ["placement", "routing", "built"]);
+  assert.match(String(model.calls[2]!.messages[2]!.content), /outside the 20 x 22 mm board/);
+  const never = new ScriptedModel(Array.from({ length: 4 }, () => () => cramped));
+  await assert.rejects(generateLayout(input, never, async () => ({ ok: false, stage: "drc", problems: ["x"], warnings: [] })),
+    (e: unknown) => e instanceof LayoutDesignError && e.rounds === 4);
+});
+
+test("layout: the offline fixture layout matches the engineering fixture", async () => {
+  const { OFFLINE_FIXTURE_LAYOUT, BoardLayout } = await import("../src/index.ts");
+  const py = JSON.parse(readFileSync(join(import.meta.dirname, "../../../services/engineering/vx_eng/fixtures/ldo_led_layout.json"), "utf8"));
+  const parsed = BoardLayout.parse({ ...py, assumptions: [], open_questions: [] });
+  assert.deepEqual(parsed.board, OFFLINE_FIXTURE_LAYOUT.board);
+  assert.deepEqual(parsed.placements, OFFLINE_FIXTURE_LAYOUT.placements);
+});

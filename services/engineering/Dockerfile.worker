@@ -24,7 +24,11 @@ COPY --from=deps /app /app
 COPY services/engineering/vx_eng /opt/vx/vx_eng
 ENV VX_ENG_DIR=/opt/vx \
     VX_LIB_INDEX=/opt/vx/kicad-lib-index.json \
+    VX_3DMODEL_CACHE=/var/cache/vx-3dmodels \
     PYTHONDONTWRITEBYTECODE=1
+# KiCad library 3D models are fetched per footprint on first use (kicad-packages3D at the KiCad
+# version's tag) and kept here; mount a volume to keep them across container restarts.
+RUN mkdir -p /var/cache/vx-3dmodels && chown kicad:kicad /var/cache/vx-3dmodels
 # Pre-build the symbol/footprint name index so the first design check is fast.
 RUN PYTHONPATH=/opt/vx python3 -c "from vx_eng.library import Library; i = Library().index; print(sum(map(len, i['symbols'].values())), 'symbols')"
 WORKDIR /app

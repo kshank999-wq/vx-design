@@ -1,0 +1,20 @@
+{
+  "board": {
+    "width_mm": 34, "height_mm": 22, "corner_radius_mm": 1.5,
+    "mounting_holes": [
+      {"x_mm": 3.5, "y_mm": 3.5, "size": "M3"}, {"x_mm": 30.5, "y_mm": 3.5, "size": "M3"},
+      {"x_mm": 3.5, "y_mm": 18.5, "size": "M3"}, {"x_mm": 30.5, "y_mm": 18.5, "size": "M3"}
+    ]
+  },
+  "fab_profile": "jlcpcb-2layer-standard",
+  "ground_pour": "GND",
+  "placements": [
+    {"ref": "J1", "x_mm": 4, "y_mm": 9.7, "rotation_deg": 0, "side": "top"},
+    {"ref": "C1", "x_mm": 10, "y_mm": 11, "rotation_deg": 90, "side": "top"},
+    {"ref": "U1", "x_mm": 15.5, "y_mm": 11, "rotation_deg": 0, "side": "top"},
+    {"ref": "C2", "x_mm": 21, "y_mm": 11, "rotation_deg": 90, "side": "top"},
+    {"ref": "R1", "x_mm": 25, "y_mm": 11, "rotation_deg": 90, "side": "top"},
+    {"ref": "D1", "x_mm": 29, "y_mm": 11, "rotation_deg": 90, "side": "top"}
+  ],
+  "rationale": "Offline fixture layout: input on the left, regulator in the middle, LED on the right, M3 holes in the corners."
+}

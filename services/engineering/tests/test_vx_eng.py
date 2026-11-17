@@ -134,3 +134,140 @@ class BuildTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LAYOUT = json.loads((Path(__file__).parent.parent / "vx_eng/fixtures/ldo_led_layout.json").read_text())
+
+
+def _layout(**changes) -> dict:
+    lay = copy.deepcopy(LAYOUT)
+    for ref, fields in changes.items():
+        p = next(p for p in lay["placements"] if p["ref"] == ref)
+        p.update(fields)
+    return lay
+
+
+class LayoutCheckTests(unittest.TestCase):
+    def test_fixture_layout_passes(self):
+        from vx_eng.cli import cmd_layout_check
+        r = cmd_layout_check(FIXTURE, LAYOUT)
+        self.assertTrue(r["ok"], r["problems"])
+        self.assertEqual(sorted(r["courtyards"]), ["C1", "C2", "D1", "H1", "H2", "H3", "H4", "J1", "R1", "U1"])
+        self.assertEqual(r["courtyards"]["J1"]["sides"], ["bottom", "top"], "through-hole parts occupy both sides")
+
+    def test_overlap_names_both_parts(self):
+        from vx_eng.cli import cmd_layout_check
+        r = cmd_layout_check(FIXTURE, _layout(C1={"x_mm": 14, "y_mm": 11}))
+        overlap = next(p for p in r["problems"] if p["code"] == "courtyard_overlap")
+        self.assertEqual(sorted(overlap["refs"]), ["C1", "U1"])
+
+    def test_bottom_side_part_may_sit_under_a_top_part(self):
+        from vx_eng.cli import cmd_layout_check
+        r = cmd_layout_check(FIXTURE, _layout(C1={"x_mm": 15.5, "y_mm": 11, "side": "bottom"}))
+        self.assertTrue(r["ok"], r["problems"])
+
+    def test_outside_board_gives_allowed_range(self):
+        from vx_eng.cli import cmd_layout_check
+        r = cmd_layout_check(FIXTURE, _layout(D1={"x_mm": 33.5}))
+        p = next(p for p in r["problems"] if p["code"] == "outside_board" and p.get("ref") == "D1")
+        lo, hi = p["allowed"]["x"]
+        self.assertAlmostEqual(hi, 34 - 0.78, delta=0.05)   # 0603 rotated 90: courtyard half-width 0.78 mm
+        self.assertLess(lo, 1)
+
+    def test_structural_problems(self):
+        from vx_eng.cli import cmd_layout_check
+        lay = _layout(U1={"rotation_deg": 45})
+        lay["placements"] = [p for p in lay["placements"] if p["ref"] != "R1"] + [{"ref": "Q9", "x_mm": 1, "y_mm": 1}]
+        lay["board"]["mounting_holes"][0]["size"] = "M4"
+        r = cmd_layout_check(FIXTURE, lay)
+        self.assertEqual(sorted({p["code"] for p in r["problems"]}),
+                         ["bad_hole", "bad_rotation", "missing_placement", "unknown_ref"])
+
+
+class BoardBuildTests(unittest.TestCase):
+    """Builds the fixture board (Freerouting + KiCad DRC). Slow: about a minute."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        from vx_eng.cli import cmd_layout_build
+        cls.tmp = tempfile.TemporaryDirectory()
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")   # models are reported, not required, in unit tests
+        cls.out = Path(cls.tmp.name) / "board"
+        cls.result = cmd_layout_build(FIXTURE, LAYOUT, cls.out)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_routed_board_passes_drc_with_schematic_parity(self):
+        r = self.result
+        self.assertTrue(r["ok"], r.get("problems"))
+        self.assertEqual((r["drc"]["errors"], r["drc"]["unconnected"], r["drc"]["parity"]), (0, 0, 0))
+        self.assertGreater(r["routing"]["segments"], 0)
+        self.assertEqual(r["routing"]["ground_pour"]["layers"], ["F.Cu", "B.Cu"])
+        self.assertEqual(r["board"]["footprints"], 10)
+
+    def test_board_is_linked_to_schematic_symbols(self):
+        import pcbnew
+        from vx_eng.pcb import _read_netlist
+        paths, _, _ = _read_netlist(self.out / "netlist.net")
+        board = pcbnew.LoadBoard(str(self.out / "ldo_led_fixture.kicad_pcb"))
+        for fp in board.GetFootprints():
+            if fp.GetReference().startswith("H"):
+                self.assertTrue(fp.IsBoardOnly())
+            else:
+                self.assertEqual(fp.GetPath().AsString().strip("/"), paths[fp.GetReference()])
+        pads = {(fp.GetReference(), p.GetNumber()): p.GetNetname() for fp in board.GetFootprints() for p in fp.Pads()}
+        self.assertEqual(pads[("U1", "5")], "/+3V3")
+        self.assertEqual(pads[("U1", "2")], "/GND")
+
+    def test_project_zip_and_exports(self):
+        import zipfile
+        r = self.result
+        with zipfile.ZipFile(self.out / r["files"]["project_zip"]) as z:
+            names = sorted(z.namelist())
+        self.assertIn("ldo_led_fixture/ldo_led_fixture.kicad_pcb", names)
+        self.assertIn("ldo_led_fixture/ldo_led_fixture.kicad_sch", names)
+        for key in ("pcb_svg_top", "pcb_svg_bottom", "step", "glb", "render_top", "render_iso"):
+            self.assertIn(key, r["files"], r.get("export_errors"))
+            self.assertGreater((self.out / r["files"][key]).stat().st_size, 1000)
+        self.assertTrue((self.out / r["files"]["step"]).read_bytes().startswith(b"ISO-10303-21"))
+
+    def test_models_are_reported_per_part(self):
+        m = self.result["models"]
+        self.assertEqual(m["total"], 6)
+        for miss in m["missing"]:
+            self.assertIn(miss["status"], ("missing",))
+            self.assertTrue(miss["source"].startswith("https://gitlab.com/kicad/libraries/kicad-packages3D/"))
+
+    def test_unrouted_board_fails_drc(self):
+        """Negative control: the same board without routing reports unconnected items."""
+        from vx_eng import pcb
+        from vx_eng.cli import cmd_build
+        out = Path(self.tmp.name) / "unrouted"
+        cmd_build(FIXTURE, out)
+        pcb.build_board(Circuit.from_json(FIXTURE), pcb.Layout.from_json({**LAYOUT, "ground_pour": None}), out,
+                        "ldo_led_fixture", "x", route=False)
+        report = pcb.drc(out, "ldo_led_fixture.kicad_pcb")
+        self.assertGreater(report["unconnected"], 0)
+        self.assertEqual(report["parity"], 0)
+
+    def test_parity_catches_a_board_that_drifted_from_the_schematic(self):
+        """Negative control: a footprint whose link to its schematic symbol is lost is reported."""
+        import pcbnew
+        from vx_eng import pcb
+        src = self.out / "ldo_led_fixture.kicad_pcb"
+        work = Path(self.tmp.name) / "drift"
+        work.mkdir()
+        for f in self.out.iterdir():
+            if f.is_file():
+                (work / f.name).write_bytes(f.read_bytes())
+        board = pcbnew.LoadBoard(str(work / src.name))
+        r1 = next(fp for fp in board.GetFootprints() if fp.GetReference() == "R1")
+        r1.SetValue("10k")
+        pcbnew.SaveBoard(str(work / src.name), board)
+        report = pcb.drc(work, src.name, refill=False)
+        self.assertGreater(report["parity"], 0)
+        self.assertTrue(any("10k" in v["description"] or "Value" in v["description"] for v in report["schematic_parity"]),
+                        report["schematic_parity"])

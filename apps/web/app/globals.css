@@ -103,6 +103,8 @@ pre.doc { white-space: pre-wrap; background: var(--surface); border: 1px solid v
 fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 legend { font-size: 13px; color: var(--muted); }
 img.schematic { width: 100%; height: auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+img.render { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+model-viewer.board3d { display: block; width: 100%; height: 420px; background: #eef0f4; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
 iframe.pdf { width: 100%; height: 720px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .evidence .claims { list-style: none; padding: 0; margin: 4px 0 0; }
 .evidence .excerpt { font-size: 12px; margin: 2px 0 4px 14px; }

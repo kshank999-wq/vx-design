@@ -44,13 +44,16 @@ No arbitrary model-generated shell commands; each adapter exposes fixed operatio
 tool version and config with every output; cap CPU, memory and time; no outbound network
 from tool processes unless an adapter needs it.
 
-## vx_eng (G3)
+## vx_eng (G3, G4)
 
 `vx_eng/` is the engineering library the worker calls as a subprocess. It prints one JSON document.
 
 ```bash
 python3 -m vx_eng validate --spec circuit.json        # library checks only
 python3 -m vx_eng build --spec circuit.json --out dir  # project + ERC + netlist check + PDF/SVG/BOM + zip
+python3 -m vx_eng footprints --spec circuit.json      # courtyard extents per footprint, fab profiles (for the layout prompt)
+python3 -m vx_eng layout-check --spec circuit.json --layout layout.json
+python3 -m vx_eng layout-build --spec circuit.json --layout layout.json --out dir   # board + route + DRC + 3D + exports
 ```
 
 - `library.py` holds a name index of every installed symbol and footprint, built at image build time. It
@@ -61,6 +64,19 @@ python3 -m vx_eng build --spec circuit.json --out dir  # project + ERC + netlist
   gets a wire stub and label; external supplies get PWR_FLAGs. UUIDs are derived from the design, so output
   is byte-for-byte deterministic.
 - `kicad.py` wraps `kicad-cli`: ERC (JSON), netlist, PDF, SVG and BOM.
+- `pcb.py` (G4) handles the board:
+  - checks placements against courtyards (via pcbnew);
+  - builds the `.kicad_pcb` from KiCad's netlist of the generated schematic, with symbol UUIDs, fields and
+    full net names, so schematic parity holds;
+  - routes with Freerouting (`-mt 1`, analytics off);
+  - adds GND pours;
+  - runs DRC with `--schematic-parity --refill-zones`;
+  - fetches 3D models per footprint;
+  - renders and exports (`pcb render`, SVG, PDF, STEP, GLB).
+- `fab.py` holds the fab design-rule profiles. They are written into the `.kicad_pro` and applied to the board
+  for the router.
 
 Tests (`tests/test_vx_eng.py`) include negative controls. One removes the power source, and ERC must report
-`power_pin_not_driven`.
+`power_pin_not_driven`. The G4 tests have two more:
+- the same board unrouted must report unconnected items;
+- a footprint value changed on the board must show up as a parity difference.

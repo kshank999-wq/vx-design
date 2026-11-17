@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CsvTable, DesignView, ErcView, EvidenceView } from "@/components/ArtifactViews";
+import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, LayoutView, ModelReportView } from "@/components/ArtifactViews";
+import { BoardViewer } from "@/components/BoardViewer";
 import { requireUser } from "@/lib/auth";
 
 const MAX_INLINE = 2 * 1024 * 1024;
@@ -45,9 +46,18 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
 
   // Same-attempt outputs of the task (e.g. the schematic drawing next to its ERC report).
   const others = (siblings ?? []).filter((s) => s.id !== v.id && (s.status === "committed" || s.validated_at));
-  const svg = (siblings ?? []).find((s) => (s.artifacts as unknown as { name: string }).name.endsWith("/schematic-svg"));
-  const { data: svgUrl } = svg && suffix !== "schematic-svg" && suffix === "kicad-project"
-    ? await supabase.storage.from("project-files").createSignedUrl(svg.storage_path, 3600) : { data: null };
+  const sibling = (end: string) => (siblings ?? []).find((s) => (s.artifacts as unknown as { name: string }).name.endsWith(`/${end}`));
+  const signedOf = async (end: string) => {
+    const s = sibling(end);
+    return s ? (await supabase.storage.from("project-files").createSignedUrl(s.storage_path, 3600)).data?.signedUrl ?? null : null;
+  };
+  const isProject = suffix === "kicad-project";
+  const hasBoard = !!sibling("board-glb");
+  const [svgUrl, renderUrl, glbUrl] = await Promise.all([
+    isProject && !hasBoard ? signedOf("schematic-svg") : null,
+    (isProject || suffix === "board-glb") && hasBoard ? signedOf("render-3d") : null,
+    isProject && hasBoard ? signedOf("board-glb") : null,
+  ]);
 
   return (
     <main>
@@ -72,13 +82,30 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
         <ul className="small" data-testid="checks">{checks.map((c) => <li key={c.id}><span className={`pill pill-check-${c.result}`}>{c.result}</span> {c.kind.replace("_", " ")}: {c.summary} <span className="muted">({c.evidence_category.replace(/_/g, " ")})</span></li>)}</ul>
       )}
 
-      {suffix === "kicad-project" && (
+      {isProject && (
         <div className="card">
           <h3>Open in KiCad</h3>
-          <p className="small">Download and unzip, then open the <span className="mono">.kicad_pro</span> file in KiCad 10. Symbols are embedded in the
-            schematic; footprints come from KiCad&apos;s standard libraries. The drawing is laid out automatically, so tidy it before sharing.</p>
-          {svgUrl?.signedUrl && <img className="schematic" src={svgUrl.signedUrl} alt="Schematic drawing" />}
+          {hasBoard ? (
+            <p className="small">Download and unzip, then open the <span className="mono">.kicad_pro</span> file in KiCad 10. The project holds the
+              schematic and the routed board, linked to each other (Tools → Update PCB from Schematic reports no changes). Footprints and
+              3D models come from KiCad&apos;s standard libraries. Placement was proposed by the model and routing done by Freerouting:
+              review both before ordering.</p>
+          ) : (
+            <p className="small">Download and unzip, then open the <span className="mono">.kicad_pro</span> file in KiCad 10. Symbols are embedded in the
+              schematic; footprints come from KiCad&apos;s standard libraries. The drawing is laid out automatically, so tidy it before sharing.</p>
+          )}
+          {svgUrl && <img className="schematic" src={svgUrl} alt="Schematic drawing" />}
+          {glbUrl && <BoardViewer src={glbUrl} poster={renderUrl ?? undefined} />}
         </div>
+      )}
+      {type === "image/png" && signed?.signedUrl && <img className="render" src={signed.signedUrl} alt={`${artifact.name} render`} />}
+      {type === "model/gltf-binary" && signed?.signedUrl && (
+        <div className="card"><p className="small muted">Drag to orbit, scroll to zoom. Exported by KiCad with tracks, pads, pours, silkscreen and the
+          library 3D models.</p><BoardViewer src={signed.signedUrl} poster={renderUrl ?? undefined} /></div>
+      )}
+      {type === "model/step" && (
+        <p className="small card">STEP AP214 of the assembled board (board body, copper and the KiCad library 3D models), for enclosure work in
+          FreeCAD, Fusion, SolidWorks or CadQuery. Download it above.</p>
       )}
       {type === "image/svg+xml" && signed?.signedUrl && (
         <a href={signed.signedUrl} target="_blank" rel="noreferrer"><img className="schematic" src={signed.signedUrl} alt={`${artifact.name} drawing`} /></a>
@@ -87,7 +114,11 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       {json && suffix === "erc-report" && <ErcView report={json} />}
       {json && suffix === "component-evidence" && <EvidenceView evidence={json} />}
       {json && suffix === "design" && <DesignView design={json} />}
-      {json && !["erc-report", "component-evidence", "design"].includes(suffix) && <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
+      {json && suffix === "drc-report" && <DrcView report={json} />}
+      {json && suffix === "model-report" && <ModelReportView models={json} />}
+      {json && suffix === "layout" && <LayoutView layout={json} />}
+      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout"].includes(suffix) &&
+        <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
       {text !== null && type.startsWith("text/csv") && <CsvTable csv={text} />}
       {text !== null && !json && !type.startsWith("text/csv") && <pre className="doc">{text}</pre>}
 

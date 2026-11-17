@@ -95,8 +95,9 @@ authorized, the browser can be closed.
 Executors so far:
 - **Design briefs** cover architecture, components, power, thermal, mechanical, enclosure and documentation
   tasks. They are Claude-drafted and checked against the task's requirements and acceptance tests.
-- **CAD, simulation, sourcing and fabrication tasks** are blocked with a plain reason until their executors
-  land in G3–G4.5. Nothing is simulated.
+- **Simulation, sourcing, verification and fabrication tasks** are blocked with a plain reason until their
+  executors land. Nothing is simulated. Schematic (G3) and PCB layout (G4) tasks wait for the KiCad
+  engineering worker.
 
 ```bash
 pnpm worker                        # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY (or VX_LLM=offline)
@@ -141,6 +142,66 @@ docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker 
 pnpm test:eng                       # vx_eng: library checks, deterministic build, ERC negative controls
 pnpm test:g3                        # worker routing, schematic build, the stored project re-checked in a fresh KiCad
 pnpm test:e2e:g3                    # browser: waits for a KiCad worker, drawing, ERC report, evidence, approve
+```
+
+## G4: first board
+
+PCB layout tasks also run on the KiCad engineering worker. They take the **committed circuit design** of their
+upstream schematic task, so the schematic must be approved first.
+
+1. **Placement.** Claude proposes:
+   - the outline, corner radius and mounting holes (M2, M2.5 or M3);
+   - a fab design-rule profile (`jlcpcb-2layer-standard` or `oshpark-2layer`);
+   - a ground pour net;
+   - a position, rotation and side for every component.
+   
+   It is given each footprint's courtyard extents from the KiCad library.
+2. **Check and repair** (up to 3 repair rounds). Each problem goes back to Claude with exact geometry:
+   - `vx_eng` checks the placement with KiCad's own footprints: courtyards must be inside the outline and must
+     not overlap on the same side. Through-hole parts and holes block both sides. Problems give the allowed
+     position range or the overlap size.
+   - It builds a native `.kicad_pcb` linked to the schematic: footprints carry the symbol UUIDs and fields, and
+     pads carry KiCad's net names.
+   - **Freerouting** routes it. Supply nets get the wider "Power" net class. A ground pour is added on both
+     layers.
+   - **KiCad DRC** runs with `--schematic-parity` and zone refill. Pads whose thermal spokes can't all reach
+     the pour get a solid connection, and DRC runs again.
+   - Unrouted connections, DRC errors and parity differences go back to Claude.
+3. **3D.** The KiCad library model of each footprint comes from
+   [kicad-packages3D](https://gitlab.com/kicad/libraries/kicad-packages3D) at the KiCad version's tag. Models
+   are fetched once and cached (`VX_3DMODEL_CACHE`). These are generic package shapes, not manufacturer CAD,
+   and the model report says so.
+4. **Outputs** (12 per task):
+   - the KiCad 10 project (schematic + routed board);
+   - 3D renders (iso, top, bottom);
+   - copper/silk drawings (SVG, PDF);
+   - board STEP and GLB;
+   - the DRC report;
+   - the 3D model report;
+   - the placement.
+   
+   Routing is not bit-for-bit reproducible, so the files that passed DRC are stashed in storage in the same
+   checkpointed step. A resumed task registers those exact files instead of routing again.
+
+The web app shows:
+- the 3D render in the approval panel;
+- an interactive 3D board (the GLB in `<model-viewer>`);
+- the DRC table, split into rule violations, unrouted connections and differences from the schematic;
+- the 3D model report and the placement.
+
+Excluded DRC items count as waivers and are reported separately; generated boards have none.
+
+Limits:
+- Two-layer, low-speed boards only. Freerouting has no impedance control and no length matching.
+- Placement quality depends on the model. The checks guarantee a clean, routed, schematic-matched board, not a
+  good one, so review it in KiCad.
+- Gerbers, drill, pick-and-place and panelization are G4.5.
+
+```bash
+docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker .   # now includes the PCB pipeline
+pnpm test:eng                       # placement checks, routed fixture board: DRC + parity clean; unrouted and drifted negative controls
+pnpm test:g4                        # schematic -> approve -> layout; worker killed after layout; fresh-KiCad DRC/parity/ERC of the stored project
+pnpm test:e2e:g4                    # browser: approve schematic, continue, 3D board, DRC report, models, placement, approve
 ```
 
 ## Database overview

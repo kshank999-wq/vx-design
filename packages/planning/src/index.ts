@@ -6,3 +6,4 @@ export * from "./plan.ts";
 export * from "./llm/offline.ts";
 export * from "./brief.ts";
 export * from "./circuit.ts";
+export * from "./layout.ts";
