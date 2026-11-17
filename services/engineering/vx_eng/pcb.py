@@ -187,7 +187,8 @@ def _place_reference(fp, layout: Layout) -> None:
 
 def _place(board, circuit: Circuit, layout: Layout, paths: dict[str, str] | None = None,
            pin_nets: dict[tuple[str, str], Any] | None = None,
-           fields: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
+           fields: dict[str, dict[str, str]] | None = None,
+           models: dict[str, str] | None = None) -> dict[str, Any]:
     """Adds every placed component and mounting hole to the board. Returns ref -> footprint."""
     pcbnew = _pcbnew()
     mm = pcbnew.FromMM
@@ -201,6 +202,12 @@ def _place(board, circuit: Circuit, layout: Layout, paths: dict[str, str] | None
         fp = load_footprint(c.footprint)
         fp.SetReference(c.ref)
         fp.SetValue(c.value)
+        if models and c.ref in models:
+            # A verified manufacturer model, already aligned to this footprint (no extra transform).
+            m = pcbnew.FP_3DMODEL()
+            m.m_Filename = models[c.ref]
+            fp.Models().clear()
+            fp.Models().push_back(m)
         for name, val in (fields or {}).get(c.ref, {}).items():
             _set_field(fp, name, val)
         if paths and c.ref in paths:
@@ -511,6 +518,10 @@ def fetch_models(board) -> list[dict[str, Any]]:
             results.append({"ref": ref, "footprint": str(fp.GetFPID().GetUniStringLibId()), "status": "none", "model": None})
             continue
         for model in models:
+            if model.startswith("${KIPRJMOD}/"):
+                results.append({"ref": ref, "footprint": str(fp.GetFPID().GetUniStringLibId()), "model": model[len("${KIPRJMOD}/"):],
+                                "status": "found", "source": "manufacturer model (verified library entry)"})
+                continue
             m = re.match(r"^\$\{KICAD\d*_3DMODEL_DIR\}/(.+)$", model)
             if not m:
                 results.append({"ref": ref, "footprint": str(fp.GetFPID().GetUniStringLibId()), "status": "unsupported_path", "model": model})
@@ -555,8 +566,21 @@ def _ensure_model(rel: str, tag: str, allow_fetch: bool) -> dict[str, Any]:
 
 # --- Build --------------------------------------------------------------------------------
 
+def install_models(project_dir: Path, models: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Copies verified manufacturer models into the project (3dmodels/) and returns ref -> ${KIPRJMOD} path."""
+    out = {}
+    if not models:
+        return out
+    (project_dir / "3dmodels").mkdir(exist_ok=True)
+    for ref, m in models.items():
+        name = f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', m.get('name') or ref)}.step"
+        (project_dir / "3dmodels" / name).write_bytes(Path(m["path"]).read_bytes())
+        out[ref] = f"${{KIPRJMOD}}/3dmodels/{name}"
+    return out
+
+
 def build_board(circuit: Circuit, layout: Layout, project_dir: Path, name: str, title: str,
-                route: bool = True) -> dict[str, Any]:
+                route: bool = True, models: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Creates <name>.kicad_pcb in a project directory that already holds the generated schematic and netlist."""
     pcbnew = _pcbnew()
     profile = PROFILES[layout.fab_profile]
@@ -569,7 +593,7 @@ def build_board(circuit: Circuit, layout: Layout, project_dir: Path, name: str, 
         board.Add(item)
         nets[net_name] = item
     pin_nets = {k: nets[v] for k, v in pin_net_names.items()}
-    _place(board, circuit, layout, paths, pin_nets, fields)
+    _place(board, circuit, layout, paths, pin_nets, fields, install_models(project_dir, models or {}))
     _outline(board, layout)
     tb = board.GetTitleBlock()
     tb.SetTitle(title[:60])

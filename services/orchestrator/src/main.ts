@@ -25,6 +25,7 @@ import { WorkerDb } from "./db.ts";
 import { detectEngineering } from "./engineering.ts";
 import { executorsFor } from "./executors/index.ts";
 import { Worker } from "./worker.ts";
+import { processModelCheck } from "./models.ts";
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -65,6 +66,11 @@ const worker = new Worker(new WorkerDb(url, key), {
   uncoveredGraceMs: Number(env("VX_UNCOVERED_GRACE_MS", "30000")),
   tools: engineering ? { kicad: engineering.versions.kicad, vx_eng: engineering.versions.vx_eng } : {},
 }, executorsFor(engineering, sourcing), model);
+if (engineering) {
+  const db3d = new WorkerDb(url, key);
+  const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
+  worker.addJob("3D model check", () => processModelCheck(db3d, engineering, id));
+}
 
 let signals = 0;
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

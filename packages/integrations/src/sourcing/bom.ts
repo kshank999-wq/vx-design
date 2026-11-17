@@ -44,6 +44,7 @@ export interface SelectedPart {
   productUrl: string | null;
   identity: IdentityMatch | "rule_selected";
   providers: ProviderId[];
+  cad: { has3dModel: boolean; downloadUrl: string | null; source: string } | null;
 }
 
 export interface PricePoint {
@@ -248,6 +249,7 @@ export async function resolveBom(input: BomInput, providers: SourcingProvider[])
           mpn: first.rec.mpn, manufacturer: first.rec.manufacturer, description: records.find((r) => r.description)?.description ?? null,
           lifecycle: lifecycles[0] ?? "unknown", datasheetUrl: records.find((r) => r.datasheetUrl)?.datasheetUrl ?? null,
           productUrl: first.rec.productUrl, identity: first.id, providers: [...new Set(records.map((r) => r.provider))],
+          cad: records.find((r) => r.cad?.has3dModel)?.cad ?? null,
         };
         if (first.id === "packaging_variant") {
           flags.push({ code: "packaging_variant", severity: "info",
@@ -300,6 +302,7 @@ export async function resolveBom(input: BomInput, providers: SourcingProvider[])
           mpn: r0.mpn, manufacturer: r0.manufacturer, description: r0.description, lifecycle: r0.lifecycle,
           datasheetUrl: top.recs.find((r) => r.datasheetUrl)?.datasheetUrl ?? null, productUrl: r0.productUrl,
           identity: "rule_selected", providers: [...new Set(top.recs.map((r) => r.provider))],
+          cad: top.recs.find((r) => r.cad?.has3dModel)?.cad ?? null,
         };
         alternates = ranked.slice(1, 4).map((x) => ({ mpn: x.recs[0]!.mpn, manufacturer: x.recs[0]!.manufacturer,
           description: x.recs[0]!.description, lcsc: x.lcsc, stock: x.stock || null }));

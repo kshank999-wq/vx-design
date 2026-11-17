@@ -40,6 +40,8 @@ export interface PartRecord {
   package: string | null;
   specs: Record<string, string>;
   offers: Offer[];
+  /** CAD availability reported by the provider (Nexar: Octopart's CAD partners). */
+  cad?: { has3dModel: boolean; downloadUrl: string | null; source: string } | null;
 }
 
 export class ProviderError extends Error {

@@ -33,6 +33,7 @@ test("nexar: client-credentials token with supply.domain, Bearer GraphQL, offers
   assert.equal((calls[1]!.init.headers as Record<string, string>).authorization, "Bearer tok");
   const gql = JSON.parse(String(calls[1]!.init.body));
   assert.match(gql.query, /supSearchMpn\(q: \$q/);
+  assert.match(gql.query, /cad \{ has3dModel downloadUrlKicad \}/);
   assert.deepEqual(gql.variables, { q: "LM358DR", country: "US", currency: "USD", limit: 3 });
   assert.equal(part!.mpn, "LM358DR");
   assert.equal(part!.manufacturer, "Texas Instruments");
@@ -42,6 +43,12 @@ test("nexar: client-credentials token with supply.domain, Bearer GraphQL, offers
   const o = part!.offers[0]!;
   assert.deepEqual([o.seller, o.sku, o.stock, o.moq, o.currency, o.status], ["DigiKey", "296-1014-1-ND", 125430, 1, "USD", "live"]);
   assert.deepEqual(o.prices[2], { quantity: 100, unitPrice: 0.2316 });
+  assert.equal(part!.cad, null, "no cad block in this fixture");
+  const withCad = structuredClone(fx("nexar-supSearchMpn.json"));
+  withCad.data.supSearchMpn.results[0].part.cad = { has3dModel: true, downloadUrlKicad: "https://example.test/cad.zip" };
+  const { fn: fn2 } = fakeFetch((url) => url.includes("identity") ? { body: { access_token: "t", expires_in: 100 } } : { body: withCad });
+  const [p2] = await new NexarProvider("id", "secret", { fetch: fn2 }).searchMpn("LM358DR");
+  assert.deepEqual(p2!.cad, { has3dModel: true, downloadUrl: "https://example.test/cad.zip", source: "Octopart CAD (via Nexar)" });
 });
 
 test("nexar: an invalid token is an auth error, not an empty result", async () => {

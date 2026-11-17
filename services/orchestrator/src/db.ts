@@ -321,6 +321,50 @@ export class WorkerDb {
     return this.rpc<string>("record_part", { p_part: part, p_offers: offers });
   }
 
+  /** Registers a 3D model candidate as the worker (service role). Returns the model id. */
+  async registerPartModel(a: { projectId: string; mpn: string; manufacturer: string; normalizedMpn: string; normalizedMfr: string;
+                               footprint: string; sourceKind: "upload" | "url" | "nexar"; source: string; sourceUrl: string | null;
+                               license: string | null; shared: boolean }): Promise<string> {
+    return this.rpc<string>("register_part_model", {
+      p_project_id: a.projectId, p_mpn: a.mpn, p_manufacturer: a.manufacturer, p_normalized_mpn: a.normalizedMpn,
+      p_normalized_mfr: a.normalizedMfr, p_footprint: a.footprint, p_source_kind: a.sourceKind, p_source: a.source,
+      p_source_url: a.sourceUrl, p_license: a.license, p_original_path: null, p_shared: a.shared, p_mechanical: {},
+    });
+  }
+
+  async claimModelCheck(workerId: string): Promise<Record<string, unknown> | null> {
+    const r = await this.rpc<Record<string, unknown> | null>("claim_model_check", { p_worker_id: workerId });
+    return r && (r as { id?: string }).id ? r : null;
+  }
+
+  async completeModelCheck(id: string, workerId: string, status: string, check: unknown, error: string | null,
+                           f: { originalPath?: string | null; originalSha?: string; storagePath?: string | null; sha256?: string | null;
+                                overlayPath?: string | null; mechanical?: unknown }): Promise<void> {
+    await this.rpc("complete_model_check", {
+      p_id: id, p_worker_id: workerId, p_status: status, p_check: check, p_error: error,
+      p_original_path: f.originalPath ?? null, p_original_sha256: f.originalSha ?? null, p_storage_path: f.storagePath ?? null,
+      p_sha256: f.sha256 ?? null, p_overlay_path: f.overlayPath ?? null, p_mechanical: f.mechanical ?? null,
+    });
+  }
+
+  /** Verified models usable by a project (its own, plus shared ones) for the given parts. */
+  async verifiedModels(projectId: string, parts: { normalizedMpn: string; normalizedMfr: string }[]):
+      Promise<{ id: string; normalized_mpn: string; normalized_mfr: string; footprint: string; storage_path: string; sha256: string;
+                source: string; license: string | null; shared: boolean }[]> {
+    if (!parts.length) return [];
+    const { data, error } = await this.client.from("part_models")
+      .select("id, footprint, storage_path, sha256, source, license, shared, project_id, verified_at, parts!inner(normalized_mpn, normalized_mfr)")
+      .eq("status", "verified").in("parts.normalized_mpn", parts.map((p) => p.normalizedMpn))
+      .order("verified_at", { ascending: false });
+    if (error) throw new Error(`verified models: ${error.message}`);
+    return (data ?? [])
+      .filter((m) => m.shared || m.project_id === projectId)
+      .map((m) => { const p = m.parts as unknown as { normalized_mpn: string; normalized_mfr: string };
+                    return { id: m.id, normalized_mpn: p.normalized_mpn, normalized_mfr: p.normalized_mfr, footprint: m.footprint,
+                             storage_path: m.storage_path!, sha256: m.sha256!, source: m.source, license: m.license, shared: m.shared }; })
+      .filter((m) => parts.some((p) => p.normalizedMpn === m.normalized_mpn && p.normalizedMfr === m.normalized_mfr));
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);

@@ -81,7 +81,7 @@ def cmd_layout_check(spec: dict, layout_spec: dict) -> dict:
     return check_placement(Circuit.from_json(spec), Layout.from_json(layout_spec))
 
 
-def cmd_layout_build(spec: dict, layout_spec: dict, out: Path) -> dict:
+def cmd_layout_build(spec: dict, layout_spec: dict, out: Path, models: dict | None = None) -> dict:
     """Schematic (deterministic rebuild) + board: placement, routing, pours, DRC with parity, 3D models, exports."""
     from . import pcb
     circuit = Circuit.from_json(spec)
@@ -96,7 +96,7 @@ def cmd_layout_build(spec: dict, layout_spec: dict, out: Path) -> dict:
         result.update({"stage": "schematic", "schematic": {k: sch.get(k) for k in ("stage", "validation", "erc", "netlist")}})
         return result
     name = sch["project"]
-    built = pcb.build_board(circuit, layout, out, name, circuit.title)
+    built = pcb.build_board(circuit, layout, out, name, circuit.title, models=models)
     pcb_file = f"{name}.kicad_pcb"
     report = pcb.drc(out, pcb_file)
     solid = pcb.fix_starved_thermals(out, pcb_file, report)
@@ -111,6 +111,7 @@ def cmd_layout_build(spec: dict, layout_spec: dict, out: Path) -> dict:
     exported = pcb.exports(out, pcb_file)
     export_errors = exported.pop("_errors", None)
     project_files = [f"{name}.kicad_pro", f"{name}.kicad_sch", pcb_file, "sym-lib-table", "fp-lib-table"]
+    project_files += sorted(f"3dmodels/{p.name}" for p in (out / "3dmodels").glob("*.step")) if (out / "3dmodels").exists() else []
     zip_name = _zip(out, name, project_files)
     (out / "models.json").write_text(json.dumps(models, indent=2))
     parts = [m for m in models if not m["ref"].startswith("H") or m["status"] != "none"]
@@ -179,16 +180,33 @@ def main(argv: list[str] | None = None) -> int:
     lb.add_argument("--spec", required=True)
     lb.add_argument("--layout", required=True)
     lb.add_argument("--out", required=True)
+    lb.add_argument("--models", help="JSON file: ref -> {path, name} of verified manufacturer models (aligned STEP)")
     fp = sub.add_parser("fab-package", help="board house package from a routed KiCad project, with independent checks")
     fp.add_argument("--project", required=True, help="KiCad project zip from layout-build, or its directory")
     fp.add_argument("--out", required=True)
     fp.add_argument("--profile", choices=sorted(PROFILES), help="override the project's fab profile")
     fp.add_argument("--no-panel", action="store_true")
     fp.add_argument("--lcsc", help="JSON file mapping references to LCSC part numbers (from sourcing)")
+    mc = sub.add_parser("model-check", help="align a manufacturer STEP model to a KiCad footprint and check it")
+    mc.add_argument("--step", required=True, help="STEP file, or ZIP containing one")
+    mc.add_argument("--footprint", required=True, help="KiCad footprint Library:Name")
+    mc.add_argument("--out", required=True)
+    mc.add_argument("--mechanical", help="JSON with datasheet mechanical data, e.g. {\"height_mm\": 1.1}")
     sub.add_parser("version")
     args = ap.parse_args(argv)
     if args.cmd == "version":
         print(json.dumps({"vx_eng": __version__, "kicad": kicad.version()}))
+        return 0
+    if args.cmd == "model-check":
+        from . import modelcheck
+        try:
+            mech = json.loads(args.mechanical) if args.mechanical else None
+            result = modelcheck.check(Path(args.step), args.footprint, Path(args.out), mech)
+        except (ValueError, kicad.KicadError) as e:
+            result = {"status": "check_failed", "problems": [str(e)], "warnings": []}
+        except Exception as e:  # noqa: BLE001 - unreadable STEP files raise OCCT errors of many kinds
+            result = {"status": "check_failed", "problems": [f"could not read the model: {type(e).__name__}: {e}"], "warnings": []}
+        print(json.dumps(result))
         return 0
     if args.cmd == "fab-package":
         try:
@@ -208,8 +226,9 @@ def main(argv: list[str] | None = None) -> int:
             result = cmd_footprints(spec)
         else:
             layout_spec = json.load(open(args.layout))
+            models = json.load(open(args.models)) if getattr(args, "models", None) else None
             result = (cmd_layout_check(spec, layout_spec) if args.cmd == "layout-check"
-                      else cmd_layout_build(spec, layout_spec, Path(args.out)))
+                      else cmd_layout_build(spec, layout_spec, Path(args.out), models))
     except kicad.KicadError as e:
         result = {"ok": False, "stage": "kicad", "error": str(e)}
     print(json.dumps(result))

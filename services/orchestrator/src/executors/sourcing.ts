@@ -74,6 +74,26 @@ export function sourcingExecutor(providers: SourcingProvider[]): Executor {
             })));
           }
         }
+        // Manufacturer CAD offered by a live provider becomes a 3D model library candidate (checked, then verified by a person).
+        let candidates = 0;
+        if (r.dataStatus === "live") {
+          for (const l of r.lines) {
+            const cad = l.selected?.cad;
+            if (!cad?.has3dModel || !cad.downloadUrl?.startsWith("https://")) continue;
+            try {
+              await db.registerPartModel({
+                projectId: task.project_id, mpn: l.selected!.mpn, manufacturer: l.selected!.manufacturer,
+                normalizedMpn: normalizeMpn(l.selected!.mpn), normalizedMfr: normalizeManufacturer(l.selected!.manufacturer),
+                footprint: l.wanted.footprint, sourceKind: "nexar", source: cad.source, sourceUrl: cad.downloadUrl,
+                license: "Octopart CAD partner terms (e.g. SnapEDA); check before redistributing", shared: true,
+              });
+              candidates++;
+            } catch (e) {
+              await ctx.log(`could not register the 3D model offered for ${l.selected!.mpn}: ${(e as Error).message}`, {}, "warn");
+            }
+          }
+        }
+        if (candidates) await ctx.log(`${candidates} manufacturer 3D model(s) sent to the model library for checking`);
         await ctx.log(`sourced ${r.counts.sourced} of ${r.counts.lines} line(s) (${r.dataStatus} data): ${r.counts.errors} error(s), ` +
                       `${r.counts.warnings} warning(s), ${r.counts.withLcsc} with an LCSC number`,
                       { counts: r.counts, providers: r.providers.map((p) => `${p.id}:${p.configured ? "on" : "off"}`) });

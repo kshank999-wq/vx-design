@@ -129,9 +129,9 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | G1 — Plan engine | Upload → cited requirements → task DAG → approvals | Smart Slate spec produces a stable, editable plan with cited requirements | **Built**, tested with a sample spec. The formal pass needs the real Smart Slate spec and an API key. |
 | G2 — Worker backbone | Durable queue, logs, checkpoints, budgets, locks | Browser may close; an authorized run resumes with no duplicate committed work | **Built** |
 | G3 — First circuit | Component evidence, editable schematic, ERC report | A simple test sub-board opens and checks in KiCad | **Built**: KiCad CLI checks pass; the desktop app is untested. Tested with a fixture circuit; a real design needs an API key. |
-| G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**, with two carried items: manufacturer STEP per part (M-SRC) and fit results (M-ENC) |
+| G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**. Manufacturer STEP per part now comes from the verified model library (§10.1); fit results remain with M-ENC |
 | G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | **Built**: package checked independently of KiCad. The physical order needs a real design (API key) and LCSC numbers for assembly (M-SRC). |
-| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Power calculator built (model-proposed tree, deterministic checks, repair loop). Remaining: manufacturer 3D model library fetch. |
+| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Power calculator built (model-proposed tree, deterministic checks, repair loop). Manufacturer 3D model library built (upload, URL, Nexar CAD candidates; automatic alignment check; human verification; used by layouts). Remaining: live keys. |
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | Planned |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
@@ -355,6 +355,12 @@ A database of manufacturer 3D models, filled per project:
   KiCad's generic model; until then the generic model stays and the 3D model report says which is used.
 
 This closes G4's carried item (manufacturer geometry) and feeds the enclosure fit work (M-ENC).
+
+**Status (built):** models are added by upload, URL or Nexar CAD link. They are private per project unless
+shared. The KiCad worker checks each one by matching terminals to pads in all 24 orientations (aligned STEP,
+overlay, measured body, datasheet height), and a person verifies the result. Verified models replace generic
+ones in layouts and ship inside the KiCad project. The pad-to-model alignment convention is tested through
+KiCad's own STEP export.
 
 **Power planning** (assessment §3.4) ships with M-SRC as deterministic math, not model guesswork:
 - power tree, per-rail budgets, regulator dissipation, thermal estimate, battery runtime, inrush and sequencing;

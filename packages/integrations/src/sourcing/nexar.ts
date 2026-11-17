@@ -15,6 +15,7 @@ const PART_FIELDS = `
   shortDescription
   bestDatasheet { url }
   octopartUrl
+  cad { has3dModel downloadUrlKicad }
   specs { attribute { shortname name } value displayValue }
   sellers(authorizedOnly: false, includeBrokers: false) {
     company { name }
@@ -32,6 +33,7 @@ export const NEXAR_SEARCH_QUERY = `query PartSearch($q: String!, $country: Strin
 
 interface NexarPart {
   mpn: string; manufacturer: { name: string }; shortDescription: string; bestDatasheet: { url: string } | null; octopartUrl: string;
+  cad?: { has3dModel: boolean | null; downloadUrlKicad: string | null } | null;
   specs: { attribute: { shortname: string; name: string }; value: string; displayValue: string }[];
   sellers: { company: { name: string }; isAuthorized: boolean;
              offers: { sku: string; inventoryLevel: number; moq: number | null; orderMultiple: number | null; packaging: string | null;
@@ -57,6 +59,7 @@ export function mapNexarPart(p: NexarPart, currency: string, observedAt: string)
     provider: "nexar", mpn: p.mpn, manufacturer: p.manufacturer.name, description: p.shortDescription || null,
     lifecycle: nexarLifecycle(lifecycleRaw), lifecycleRaw, datasheetUrl: p.bestDatasheet?.url ?? null, productUrl: p.octopartUrl,
     package: spec("case_package"),
+    cad: p.cad ? { has3dModel: !!p.cad.has3dModel, downloadUrl: p.cad.downloadUrlKicad ?? null, source: "Octopart CAD (via Nexar)" } : null,
     specs: Object.fromEntries(p.specs.map((s) => [s.attribute.name, s.displayValue])),
     offers: p.sellers.flatMap((s) => s.offers.map((o) => ({
       provider: "nexar" as const, seller: s.company.name, sku: o.sku || null,

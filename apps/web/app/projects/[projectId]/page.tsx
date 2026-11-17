@@ -182,6 +182,12 @@ export default async function ProjectPage({ params, searchParams }: {
           {!runs?.length && <li className="muted">No runs yet. Approve a plan, then authorize a run from the plan page.</li>}
         </ul>
       </section>
+
+      <section>
+        <h2>5. 3D model library</h2>
+        <p className="small">Manufacturer STEP models for this project&apos;s parts, checked against their footprints and verified before layouts
+          use them. <Link href={`/projects/${projectId}/models`}>Open the model library</Link></p>
+      </section>
     </main>
   );
 }

@@ -157,12 +157,18 @@ export async function footprints(tools: EngineeringTools, design: CircuitDesign)
 }
 
 /** Builds, routes and checks the board in outDir (also rebuilds the schematic there). */
-export async function buildLayout(tools: EngineeringTools, design: CircuitDesign, layout: BoardLayout, outDir: string): Promise<LayoutBuildResult> {
+export async function buildLayout(tools: EngineeringTools, design: CircuitDesign, layout: BoardLayout, outDir: string,
+                                  models?: Record<string, { path: string; name: string }>): Promise<LayoutBuildResult> {
   const { mkdir, writeFile } = await import("node:fs/promises");
   await mkdir(outDir, { recursive: true });
   const layoutPath = `${outDir}.layout.json`;
   await writeFile(layoutPath, JSON.stringify(layout));
-  return call(tools, ["layout-build", "--spec", "-", "--layout", layoutPath, "--out", outDir], JSON.stringify(design), 1_800_000) as
+  const extra: string[] = [];
+  if (models && Object.keys(models).length) {
+    await writeFile(`${outDir}.models.json`, JSON.stringify(models));
+    extra.push("--models", `${outDir}.models.json`);
+  }
+  return call(tools, ["layout-build", "--spec", "-", "--layout", layoutPath, "--out", outDir, ...extra], JSON.stringify(design), 1_800_000) as
     Promise<LayoutBuildResult>;
 }
 
@@ -224,4 +230,27 @@ export async function buildFabPackage(tools: EngineeringTools, projectZip: strin
                                       lcscMapPath?: string): Promise<FabPackageResult> {
   return call(tools, ["fab-package", "--project", projectZip, "--out", outDir, ...(lcscMapPath ? ["--lcsc", lcscMapPath] : [])],
               undefined, 1_800_000) as Promise<FabPackageResult>;
+}
+
+// --- 3D model check -----------------------------------------------------------------------
+
+export interface ModelCheckResult {
+  status: "checked" | "inconclusive" | "check_failed";
+  problems: string[];
+  warnings: string[];
+  orientation?: string;
+  translation_mm?: [number, number, number];
+  terminals?: number;
+  pads?: number;
+  worst_offset_mm?: number | null;
+  body_mm?: { x: number; y: number; z: number };
+  mechanical?: Record<string, number>;
+  files?: { aligned_step: string; overlay_svg: string };
+}
+
+export async function modelCheck(tools: EngineeringTools, step: string, footprint: string, outDir: string,
+                                 mechanical: Record<string, unknown>): Promise<ModelCheckResult> {
+  return call(tools, ["model-check", "--step", step, "--footprint", footprint, "--out", outDir,
+                      ...(Object.keys(mechanical ?? {}).length ? ["--mechanical", JSON.stringify(mechanical)] : [])],
+              undefined, 600_000) as Promise<ModelCheckResult>;
 }

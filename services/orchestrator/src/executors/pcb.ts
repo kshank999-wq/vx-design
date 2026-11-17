@@ -11,7 +11,7 @@
  * step that checked them; a resumed attempt registers those exact files instead of rebuilding.
  */
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,6 +19,7 @@ import {
   type BoardLayout, type LayoutCheck, type LayoutInput,
 } from "@vx/planning";
 import type { Validation } from "../db.ts";
+import { normalizeManufacturer, normalizeMpn } from "@vx/integrations";
 import { buildLayout, footprints, toLayoutCheck, type EngineeringTools, type LayoutBuildResult } from "../engineering.ts";
 import type { Executor, ExecutorContext, ExecutorResult } from "../execution.ts";
 
@@ -83,23 +84,42 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
             footprints: fp.footprints,
             fabProfiles: Object.values(fp.fab_profiles).map((p) => ({ name: p.name, description: p.description })),
           };
-          return { input, source: { taskKey: source.taskKey, versionId: source.versionId } };
+          // Verified manufacturer models from the library (this project's, or shared), matched by part and footprint.
+          const wanted = circuit.components.filter((c) => c.mpn && c.manufacturer)
+            .map((c) => ({ ref: c.ref, footprint: c.footprint, normalizedMpn: normalizeMpn(c.mpn!), normalizedMfr: normalizeManufacturer(c.manufacturer) }));
+          const verified = await db.verifiedModels(task.project_id, wanted);
+          const models: Record<string, { id: string; storage_path: string; sha256: string; source: string; mpn: string }> = {};
+          for (const w of wanted) {
+            const m = verified.find((v) => v.normalized_mpn === w.normalizedMpn && v.normalized_mfr === w.normalizedMfr && v.footprint === w.footprint);
+            if (m) models[w.ref] = { id: m.id, storage_path: m.storage_path, sha256: m.sha256, source: m.source, mpn: w.normalizedMpn };
+          }
+          return { input, source: { taskKey: source.taskKey, versionId: source.versionId }, models };
         });
         if (!context) {
           return { status: "blocked", reason: "PCB layout needs the committed circuit design of an upstream schematic task " +
                                               "(artifact '<schematic task>/design'). Run and approve the schematic first." };
         }
-        const { input, source } = context;
-        await ctx.log(`laying out ${input.circuit.components.length} components from ${source.taskKey}/design`);
+        const { input, source, models: libraryModels } = context;
+        await ctx.log(`laying out ${input.circuit.components.length} components from ${source.taskKey}/design` +
+                      (Object.keys(libraryModels).length ? `; verified manufacturer models for ${Object.keys(libraryModels).join(", ")}` : ""));
 
         let outcome: LayoutOutcome;
         try {
           outcome = await ctx.step("layout", async (): Promise<LayoutOutcome> => {
             const builds = new Map<number, { dir: string; result: LayoutBuildResult }>();
+            const local: Record<string, { path: string; name: string }> = {};
+            if (Object.keys(libraryModels).length) {
+              await mkdir(join(work, "models"), { recursive: true });
+              for (const [ref, m] of Object.entries(libraryModels)) {
+                const path = join(work, "models", `${m.id}.step`);
+                await writeFile(path, await db.downloadBytes(m.storage_path));
+                local[ref] = { path, name: `${m.mpn}-${m.sha256.slice(0, 8)}` };
+              }
+            }
             const r = await generateLayout(input, ctx.model,
               async (layout, round): Promise<LayoutCheck> => {
                 const dir = join(work, `round-${round}`);
-                const result = await buildLayout(tools, input.circuit, layout, dir);
+                const result = await buildLayout(tools, input.circuit, layout, dir, local);
                 builds.set(round, { dir, result });
                 return toLayoutCheck(result);
               },
@@ -179,10 +199,12 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
                                 : `Schematic parity: the board matches the schematic (${board.footprints} footprints, ${board.nets} nets)`,
             artifact_version_id: stored.drc_report, tool_name: "kicad", tool_version: tools.versions.kicad },
           { kind: "footprint_check", result: allModels ? "pass" : "warning", evidence_category: "cad_check",
-            summary: `3D models: ${models.found} of ${models.total} parts have a KiCad library model (generic package shapes, ` +
-                     `not manufacturer CAD)` + (allModels ? "" : `; missing: ${models.missing.map((m) => m.ref).join(", ")}`),
+            summary: `3D models: ${models.found} of ${models.total} parts have a model; ` +
+                     (Object.keys(context.models).length ? `verified manufacturer CAD for ${Object.keys(context.models).join(", ")}, ` : "") +
+                     `the rest are KiCad library package shapes (generic, not manufacturer CAD)` +
+                     (allModels ? "" : `; missing: ${models.missing.map((m) => m.ref).join(", ")}`),
             artifact_version_id: stored.models, tool_name: "vx_eng", tool_version: tools.versions.vx_eng,
-            details: { tag: models.tag, missing: models.missing } },
+            details: { tag: models.tag, missing: models.missing, manufacturer: context.models } },
         ];
         if (drc.errors || drc.unconnected || drc.parity) {
           return { status: "failed", retryable: true, error: "the stored board does not pass DRC", validations };

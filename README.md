@@ -282,11 +282,10 @@ and the run page names the keys that are missing.
     is filled in.
   - Fixture numbers are never applied.
 - **Catalog.** Live results go into the shared `parts` and `offers` tables, with each offer's observation
-  time; fixture results never do. `part_models` is the manufacturer 3D model library (schema only so far).
+  time; fixture results never do. `part_models` is the manufacturer 3D model library (see below).
   Provider calls are metered in `cost_events`.
 
-Not done yet in M-SRC: the manufacturer 3D model library fetch, and LCSC/JLCPCB's own APIs (both need an
-application). The power calculator is below. No live distributor call has been made yet, because there are no keys.
+Not done yet in M-SRC: LCSC/JLCPCB's own APIs (both need an application). The 3D model library is below. The power calculator is below. No live distributor call has been made yet, because there are no keys.
 
 ```bash
 pnpm --filter @vx/integrations test        # identity, pricing, BOM resolution, adapter contracts (fake HTTP)
@@ -339,6 +338,45 @@ repair rounds.
 ```bash
 pnpm --filter @vx/power test        # calculator against hand calculations and every check
 pnpm test:e2e:power                 # browser: power task on a plain worker, report page, approve
+```
+
+## 3D model library
+
+Manufacturer STEP models for a project's parts, so boards and enclosures use real geometry instead of
+KiCad's generic package shapes. Open it from the project page.
+
+1. **Add.** There are three ways in:
+   - an engineer uploads a STEP or ZIP (for example an OEM's CAD under NDA);
+   - an engineer gives an https link to one;
+   - sourcing registers the CAD that Nexar (Octopart's CAD partners) reports for a sourced part.
+   
+   Models are private to the project unless marked shared (public manufacturer CAD only).
+2. **Check** (KiCad worker, `vx_eng model-check`):
+   - it tries all 24 axis-aligned orientations;
+   - in each, it cuts the model just above its lowest point to find the terminals, and matches them one
+     to one to the footprint's pads;
+   - each terminal must land inside its pad and cover at least 15% of it, which rejects a model lying on
+     its side;
+   - it writes an aligned STEP (footprint origin, seating plane at Z = 0, so KiCad needs no transform) and
+     a top-view overlay;
+   - it measures the body and compares the height with the datasheet value when one is given.
+   
+   A symmetric terminal pattern is flagged, because pin 1 or polarity then has to be read from the body
+   marking. A file that is not a STEP, or a model that does not fit, fails with the reason.
+3. **Verify.** A person looks at the overlay and verifies or rejects the model. An inconclusive check, such
+   as a QFN whose terminals and body meet at the bottom, needs a note saying what was confirmed by eye.
+4. **Use.** Layouts use verified models for parts with a matching MPN, manufacturer and footprint. Each
+   model is copied into the KiCad project (`3dmodels/`, referenced with `${KIPRJMOD}`), so the downloaded
+   project shows it. It also appears in the board STEP/GLB, and the 3D model check names which parts have
+   manufacturer CAD.
+
+The alignment convention is tested end to end: an aligned model is placed on a board in KiCad, the board is
+exported to STEP, and every foot is found on its pad.
+
+```bash
+pnpm test:eng              # model check: re-oriented vendor model, ZIP, wrong part/footprint/height, pin-1 symmetry, KiCad round trip
+pnpm test:models           # upload -> worker check -> verify -> layout ships the model; a non-STEP URL fails cleanly
+pnpm test:e2e:models       # browser: upload, overlay, verify
 ```
 
 ## Database overview

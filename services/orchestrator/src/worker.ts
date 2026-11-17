@@ -34,6 +34,8 @@ export class Worker {
   readonly disciplines: string[];
   private readonly tools: Record<string, string>;
   private wake: (() => void) | null = null;
+  /** Background jobs outside runs (e.g. 3D model checks); at most one of each at a time. */
+  private readonly jobs: { name: string; run: () => Promise<number>; busy: boolean }[] = [];
 
   constructor(db: WorkerDb, cfg: WorkerConfig, executors: Executor[], model: { model: LanguageModel; label: string; offline: boolean }) {
     this.db = db;
@@ -42,6 +44,21 @@ export class Worker {
     this.model = model;
     this.disciplines = [...new Set(executors.flatMap((e) => e.disciplines))].sort();
     this.tools = { node: process.versions.node, model: model.label, ...(cfg.tools ?? {}) };
+  }
+
+  /** Registers a background job: run() handles one item and returns how many it handled. */
+  addJob(name: string, run: () => Promise<number>): void {
+    this.jobs.push({ name, run, busy: false });
+  }
+
+  private startJobs(): void {
+    for (const job of this.jobs) {
+      if (job.busy || this.stopping) continue;
+      job.busy = true;
+      job.run().then((n) => { if (n) this.wake?.(); })
+        .catch((e) => console.error(`[${this.cfg.workerId}] ${job.name} failed: ${(e as Error).message}`))
+        .finally(() => { job.busy = false; });
+    }
   }
 
   /** Stop claiming; ask in-flight executions to yield at their next checkpoint. */
@@ -85,6 +102,7 @@ export class Worker {
       }
     }
     await this.finishIdleRuns();
+    this.startJobs();
   }
 
   private launch(exec: ExecutionRow): void {

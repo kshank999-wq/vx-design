@@ -116,3 +116,4 @@ ul.checks { list-style: none; padding: 0; } ul.checks li { margin: 6px 0; }
 .tree-conv { font-weight: 600; }
 .tree-rail { margin: 2px 0 0 4px; }
 .tree-load::before { content: "▸ "; color: var(--muted); }
+img.overlay { display: block; max-width: 420px; width: 100%; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; background: #fff; }

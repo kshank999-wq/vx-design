@@ -396,3 +396,141 @@ class FabPackageTests(unittest.TestCase):
             z.writestr("../escape.txt", "x")
         with self.assertRaises(kicad.KicadError):
             unzip_project(bad, Path(self.tmp.name) / "bad")
+
+
+class ModelCheckTests(unittest.TestCase):
+    """Manufacturer 3D model alignment: synthetic vendor-style models, plus a round trip through KiCad's STEP export."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_reoriented_model_is_aligned_to_the_pads(self):
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        r = modelcheck.check(sot23_5(self.dir / "vendor.step"), "Package_TO_SOT_SMD:SOT-23-5", self.dir / "out", {"height_mm": 1.2})
+        self.assertEqual(r["status"], "checked", r)
+        self.assertEqual((r["terminals"], r["pads"]), (5, 5))
+        self.assertLessEqual(r["worst_offset_mm"], 0.25)
+        self.assertAlmostEqual(r["body_mm"]["z"], 1.2, places=2)
+        self.assertEqual(r["warnings"], [], "3 + 2 leads fix the orientation")
+        self.assertTrue((self.dir / "out" / "aligned.step").read_bytes().startswith(b"ISO-10303-21"))
+        self.assertIn("<svg", (self.dir / "out" / "overlay.svg").read_text())
+
+    def test_zip_download_is_unpacked(self):
+        import zipfile
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        step = sot23_5(self.dir / "part.step")
+        z = self.dir / "cad.zip"
+        with zipfile.ZipFile(z, "w") as f:
+            f.writestr("readme.txt", "x")
+            f.write(step, "KiCad/3D/part.step")
+        self.assertEqual(modelcheck.check(z, "Package_TO_SOT_SMD:SOT-23-5", self.dir / "out")["status"], "checked")
+
+    def test_wrong_model_or_wrong_footprint_fails(self):
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        four = sot23_5(self.dir / "four.step", leads=((-1.25, -0.95), (-1.25, 0.95), (1.25, 0.95), (1.25, -0.95)))
+        r = modelcheck.check(four, "Package_TO_SOT_SMD:SOT-23-5", self.dir / "o1")
+        self.assertNotEqual(r["status"], "checked")
+        self.assertTrue(any("4 terminal(s)" in p for p in r["problems"]), r["problems"])
+        r = modelcheck.check(sot23_5(self.dir / "ok.step"), "Capacitor_SMD:C_0603_1608Metric", self.dir / "o2")
+        self.assertNotEqual(r["status"], "checked")
+        r = modelcheck.check(sot23_5(self.dir / "tall.step"), "Package_TO_SOT_SMD:SOT-23-5", self.dir / "o3", {"height_mm": 2.5})
+        self.assertEqual(r["status"], "check_failed")
+        self.assertTrue(any("height" in p for p in r["problems"]))
+
+    def test_symmetric_package_is_flagged_for_pin_1(self):
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        # Six leads, three a side, on SOT-23-6: 0 and 180 degrees fit equally, so pin 1 needs a human look.
+        six = ((-1.25, -0.95), (-1.25, 0.0), (-1.25, 0.95), (1.25, 0.95), (1.25, 0.0), (1.25, -0.95))
+        r = modelcheck.check(sot23_5(self.dir / "sym.step", leads=six), "Package_TO_SOT_SMD:SOT-23-6", self.dir / "o")
+        self.assertEqual(r["status"], "checked", r["problems"])
+        self.assertTrue(any("pin 1 / polarity cannot be confirmed" in w for w in r["warnings"]), r["warnings"])
+
+    def test_not_a_step_file(self):
+        from vx_eng import modelcheck
+        bad = self.dir / "x.step"
+        bad.write_text("hello")
+        with self.assertRaises(ValueError):
+            modelcheck.check(bad, "Package_TO_SOT_SMD:SOT-23-5", self.dir / "o")
+
+    def test_aligned_model_lands_on_the_pads_in_kicads_board_step(self):
+        """Round trip: place the aligned model on a board in KiCad, export the board STEP, find the leads on the pads."""
+        import cadquery as cq
+        import pcbnew
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        r = modelcheck.check(sot23_5(self.dir / "vendor.step"), "Package_TO_SOT_SMD:SOT-23-5", self.dir / "out")
+        aligned = self.dir / "out" / "aligned.step"
+        board = pcbnew.CreateEmptyBoard()
+        from vx_eng.pcb import load_footprint
+        fp = load_footprint("Package_TO_SOT_SMD:SOT-23-5")
+        board.Add(fp)
+        fp.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(20), pcbnew.FromMM(15)))
+        fp.SetOrientationDegrees(90)
+        m = pcbnew.FP_3DMODEL()
+        m.m_Filename = str(aligned)
+        fp.Models().clear()
+        fp.Models().push_back(m)
+        edge = pcbnew.PCB_SHAPE(board)
+        edge.SetShape(pcbnew.SHAPE_T_RECT)
+        edge.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(10), pcbnew.FromMM(5)))
+        edge.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(30), pcbnew.FromMM(25)))
+        edge.SetLayer(pcbnew.Edge_Cuts)
+        board.Add(edge)
+        pcb = self.dir / "b.kicad_pcb"
+        pcbnew.SaveBoard(str(pcb), board)
+        import subprocess
+        subprocess.run(["kicad-cli", "pcb", "export", "step", "--no-board-body", "-f", "-o", "b.step", pcb.name],
+                       cwd=self.dir, capture_output=True, text=True, timeout=300)
+        shape = cq.importers.importStep(str(self.dir / "b.step"))
+        z0 = shape.val().BoundingBox().zmin
+        feet = [f.Center() for f in shape.section(z0 + 0.05).faces().vals()]
+        self.assertEqual(len(feet), 5, "five feet at the board surface")
+        pads = []
+        for p in fp.Pads():
+            c = p.GetPosition()
+            b = p.GetBoundingBox()
+            pads.append((pcbnew.ToMM(b.GetLeft()), pcbnew.ToMM(b.GetRight()), pcbnew.ToMM(b.GetTop()), pcbnew.ToMM(b.GetBottom())))
+        # KiCad's STEP export: X as on the board, Y negated; origin is the board's drawing origin.
+        for f in feet:
+            x, y = f.x, -f.y
+            hit = [p for p in pads if p[0] - 0.05 <= x <= p[1] + 0.05 and p[2] - 0.05 <= y <= p[3] + 0.05]
+            if not hit:   # exports may be centred on the board instead of the page origin
+                x, y = f.x + 20, -f.y + 15
+                hit = [p for p in pads if p[0] - 0.05 <= x <= p[1] + 0.05 and p[2] - 0.05 <= y <= p[3] + 0.05]
+            self.assertTrue(hit, f"foot at ({f.x:.2f}, {f.y:.2f}) is on no pad; pads {pads}")
+
+
+class VerifiedModelInLayoutTests(unittest.TestCase):
+    """A verified manufacturer model replaces KiCad's generic one, ships inside the project and shows in the board STEP."""
+
+    def test_layout_uses_the_verified_model(self):
+        import os
+        import zipfile
+        from model_fixtures import sot23_5
+        from vx_eng import modelcheck
+        from vx_eng.cli import cmd_layout_build
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            r = modelcheck.check(sot23_5(d / "vendor.step", body_height=1.3), "Package_TO_SOT_SMD:SOT-23-5", d / "chk")
+            self.assertEqual(r["status"], "checked")
+            built = cmd_layout_build(FIXTURE, LAYOUT, d / "board",
+                                     {"U1": {"path": str(d / "chk" / "aligned.step"), "name": "AP2112K-3.3TRG1"}})
+            self.assertTrue(built["ok"], built.get("problems"))
+            models = json.loads((d / "board" / "models.json").read_text())
+            u1 = next(m for m in models if m["ref"] == "U1")
+            self.assertEqual((u1["status"], u1["model"]), ("found", "3dmodels/AP2112K-3.3TRG1.step"))
+            with zipfile.ZipFile(d / "board" / built["files"]["project_zip"]) as z:
+                self.assertIn("ldo_led_fixture/3dmodels/AP2112K-3.3TRG1.step", z.namelist())
+            # The board STEP contains the 1.3 mm body (KiCad's generic SOT-23-5 is 1.45 mm with a different shape).
+            import cadquery as cq
+            s = cq.importers.importStep(str(d / "board" / built["files"]["step"]))
+            self.assertGreater(len(s.solids().vals()), 1)

@@ -277,4 +277,44 @@ select pg_temp.expect_error($$select public.record_part('{}'::jsonb, '[]'::jsonb
 select pg_temp.expect_error($$insert into public.parts (mpn, normalized_mpn, manufacturer, normalized_mfr) values ('x','X','y','Y')$$, '%row-level security%');
 select pg_temp.act_as(null);
 
+-- 16. 3D model library: project-private by default, checked by workers, verified by people.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000e');   -- viewer
+select pg_temp.expect_error($$select public.register_part_model('bbbbbbbb-0000-0000-0000-000000000001', 'AP2112K-3.3TRG1',
+  'Diodes Incorporated', 'AP2112K-3.3TRG1', 'DIODES', 'Package_TO_SOT_SMD:SOT-23-5', 'upload', 'Diodes Inc. website', null, null,
+  'bbbbbbbb-0000-0000-0000-000000000001/models/x.step')$$, '%only owners and engineers%');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');   -- owner
+select pg_temp.expect_error($$select public.register_part_model('bbbbbbbb-0000-0000-0000-000000000001', 'X1', 'Y', 'X1', 'Y',
+  'Package_TO_SOT_SMD:SOT-23-5', 'upload', 'vendor', null, null, 'cccccccc-0000-0000-0000-000000000009/models/x.step')$$,
+  '%this project''s storage%');
+insert into ids select 'm1', public.register_part_model('bbbbbbbb-0000-0000-0000-000000000001', 'AP2112K-3.3TRG1',
+  'Diodes Incorporated', 'AP2112K-3.3TRG1', 'DIODES', 'Package_TO_SOT_SMD:SOT-23-5', 'upload', 'Diodes Inc. website', null,
+  'Diodes CAD terms', 'bbbbbbbb-0000-0000-0000-000000000001/models/ap2112.step', false, '{"height_mm": 1.1}');
+insert into ids select 'm2', public.register_part_model('bbbbbbbb-0000-0000-0000-000000000001', 'LM358DR', 'Texas Instruments',
+  'LM358DR', 'TEXAS INSTRUMENTS', 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', 'url', 'ti.com', 'https://www.ti.com/lit/zip/x', null, null, true);
+select pg_temp.check((select pg_temp.id('m2') = public.register_part_model('bbbbbbbb-0000-0000-0000-000000000001', 'LM358DR',
+  'Texas Instruments', 'LM358DR', 'TEXAS INSTRUMENTS', 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', 'url', 'ti.com',
+  'https://www.ti.com/lit/zip/x', null, null, true)), 'registering the same URL twice returns the same model');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');   -- outsider
+select pg_temp.check((select array_agg(id) = array[pg_temp.id('m2')] from public.part_models),
+  'other projects see shared models only, never a private (e.g. NDA) one');
+select pg_temp.as_worker();
+select pg_temp.check((select (public.claim_model_check('eng-1')).id = pg_temp.id('m1')), 'oldest pending model claimed first');
+select pg_temp.expect_error($$select public.complete_model_check(pg_temp.id('m1'), 'someone-else', 'checked', '{}')$$, '%not being checked by%');
+select public.complete_model_check(pg_temp.id('m1'), 'eng-1', 'checked', '{"terminals": 5}', null, null, 'abc',
+  'bbbbbbbb-0000-0000-0000-000000000001/models/aligned.step', 'def', 'bbbbbbbb-0000-0000-0000-000000000001/models/overlay.svg',
+  '{"body_x_mm": 1.6}');
+select pg_temp.check((select status = 'checked' and mechanical ->> 'height_mm' = '1.1' and mechanical ->> 'body_x_mm' = '1.6'
+                      from public.part_models where id = pg_temp.id('m1')), 'check stored; datasheet and measured mechanics kept');
+select pg_temp.check((select (public.claim_model_check('eng-1')).id = pg_temp.id('m2')), 'next model');
+select public.complete_model_check(pg_temp.id('m2'), 'eng-1', 'check_failed', '{}', 'download failed');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000e');   -- viewer
+select pg_temp.expect_error($$select public.decide_part_model(pg_temp.id('m1'), true)$$, '%only owners, engineers and reviewers%');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect_error($$select public.decide_part_model(pg_temp.id('m2'), true)$$, '%only a model that passed%');
+select public.decide_part_model(pg_temp.id('m1'), true, 'pin 1 dot at pad 1');
+select pg_temp.check((select status = 'verified' and verified_by = '00000000-0000-0000-0000-00000000000a'
+                      from public.part_models where id = pg_temp.id('m1')), 'verified by a person');
+select pg_temp.expect_error($$select public.claim_model_check('x')$$, '%permission denied%');
+select pg_temp.act_as(null);
+
 \echo 'All worker tests passed.'
