@@ -52,3 +52,32 @@ export async function revisePlan(projectId: string, planId: string) {
   if (error) fail(path, error);
   redirect(`/projects/${projectId}/plans/${data}?notice=${encodeURIComponent("New draft created from this plan.")}`);
 }
+
+const MODES = ["guided", "professional", "autonomous"];
+
+export async function authorizeRun(projectId: string, planId: string, form: FormData) {
+  const path = `/projects/${projectId}/plans/${planId}`;
+  const { supabase } = await requireUser();
+  const mode = String(form.get("mode"));
+  const ai = Number(form.get("max_ai_spend_usd"));
+  const compute = Number(form.get("max_compute_spend_usd"));
+  const retries = Number(form.get("max_retries_per_task"));
+  const risks = form.getAll("risk").map(String).filter((r) => RISK.includes(r));
+  if (!MODES.includes(mode)) fail(path, "Choose a supervision mode.");
+  if (!(ai >= 0) || !(compute >= 0)) fail(path, "Budgets must be zero or more dollars.");
+  if (!Number.isInteger(retries) || retries < 0 || retries > 5) fail(path, "Retries per task must be between 0 and 5.");
+  if (!risks.length) fail(path, "Allow at least one risk level.");
+  const { data, error } = await supabase.rpc("authorize_run", {
+    p_plan_id: planId,
+    p_mode: mode,
+    p_max_ai_spend_usd: ai,
+    p_max_compute_spend_usd: compute,
+    p_allowed_risk_levels: risks,
+    p_max_retries_per_task: retries,
+    p_task_ids: null,
+    p_stop_conditions: { stop_on_failure: form.get("stop_on_failure") === "on" },
+    p_name: String(form.get("name") ?? "").trim() || null,
+  });
+  if (error) fail(path, error);
+  redirect(`/projects/${projectId}/runs/${data}?notice=${encodeURIComponent("Run authorized. A worker will pick it up; you can close this page.")}`);
+}

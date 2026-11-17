@@ -65,6 +65,45 @@ pnpm --filter @vx/web build && pnpm --filter @vx/web start
 pnpm test:e2e                      # browser flow; run the app with VX_LLM=offline to avoid model calls
 ```
 
+## G2: worker backbone
+
+Approved plans are executed by workers (`services/orchestrator`), separate long-running processes
+that are never on Vercel. The web app only authorizes runs and shows their status. Once a run is
+authorized, the browser can be closed.
+
+- **Authorize a run** on the approved plan: supervision mode, AI and compute budgets (USD), allowed risk
+  levels, retries per task, and optionally stop at the first failure. Pause, resume or cancel it from the
+  run page.
+- **Durable queue.** Workers claim ready tasks in plan order (`claim_next_task`, `SKIP LOCKED`). Each claim
+  is a lease that the worker renews with heartbeats. If a worker stops heartbeating, any other worker
+  reclaims its task (`reap_stale_executions`). A task that keeps crashing workers is blocked after three
+  interruptions.
+- **Checkpoints.** Each executor step's result is saved in the execution's checkpoint. A resumed attempt
+  skips finished steps, so model calls are not repeated, and it does not count as a retry.
+- **Fenced commits.** Every write names the execution, and the database accepts it only from the worker
+  that still holds the lease. A worker that was frozen or partitioned cannot commit after another worker
+  has taken over. A unique index also allows at most one committed version per artifact per task.
+- **Locks.** A worker must hold the per-artifact write lock (`acquire_artifact_lock`) to register outputs.
+- **Budgets.** Model tokens (priced in `services/orchestrator/src/pricing.ts`) and worker time are recorded
+  in `cost_events`. Reaching a budget stops the run, and in-flight work yields at its next checkpoint.
+- **Sign-off.** Outputs commit when checks pass, unless the plan's approval policy requires sign-off, a test
+  needs human review, or a Guided run reaches a design task. Those outputs wait on the run page for
+  approve or return-with-note.
+- **Report.** When nothing more can run, the worker writes an in-app completion report. It covers outputs,
+  checks, recoveries, open approvals, spend, and recommended next steps.
+
+Executors so far:
+- **Design briefs** cover architecture, components, power, thermal, mechanical, enclosure and documentation
+  tasks. They are Claude-drafted and checked against the task's requirements and acceptance tests.
+- **CAD, simulation, sourcing and fabrication tasks** are blocked with a plain reason until their executors
+  land in G3–G4.5. Nothing is simulated.
+
+```bash
+pnpm worker                        # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY (or VX_LLM=offline)
+pnpm test:worker                   # kills and freezes real worker processes against local Supabase
+pnpm test:e2e:g2                   # browser: authorize, close, kill worker, resume, approve, continue, report
+```
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -80,3 +119,5 @@ Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 - Decisions are immutable; changes are recorded as new decisions that supersede old ones.
 - Committed artifact versions are frozen.
 - `claim_next_task()` hands out only tasks whose upstream work is complete, never twice.
+- Worker leases, checkpoint resume, fenced commits, locks, budgets and run controls are covered by
+  `supabase/tests/worker_test.sql`.

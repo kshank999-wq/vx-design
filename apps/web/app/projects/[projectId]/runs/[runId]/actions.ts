@@ -1,0 +1,50 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { fail, requireUser } from "@/lib/auth";
+
+const ACTIONS = ["pause", "resume", "cancel"] as const;
+const DONE: Record<string, string> = { pause: "Paused: running steps finish, then work stops.", resume: "Resumed.", cancel: "Canceled. In-flight work stops at its next checkpoint." };
+
+export async function controlRun(projectId: string, runId: string, action: string) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  if (!ACTIONS.includes(action as never)) fail(path, "Unknown action.");
+  const { error } = await supabase.rpc("control_run", { p_run_id: runId, p_action: action });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(DONE[action]!)}`);
+}
+
+export async function decideTask(projectId: string, runId: string, taskId: string, approve: boolean, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const note = String(form.get("note") ?? "").trim() || null;
+  if (!approve && !note) fail(path, "Say what needs to change before returning the task.");
+  const { error } = await supabase.rpc("decide_task", { p_task_id: taskId, p_approve: approve, p_note: note });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(approve ? "Approved: outputs committed and downstream tasks unblocked." : "Returned for rework with your note.")}`);
+}
+
+/** Start a new run of the same plan with the same limits (e.g. after approving gated tasks). */
+export async function continueRun(projectId: string, runId: string) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { data: run, error: e1 } = await supabase.from("runs").select("*").eq("id", runId).single();
+  if (e1 || !run) fail(path, e1 ?? "Run not found.");
+  const base = String(run.name ?? "Run").replace(/ \(continued( \d+)?\)$/, "");
+  const { data, error } = await supabase.rpc("authorize_run", {
+    p_plan_id: run.plan_id,
+    p_mode: run.mode,
+    p_max_ai_spend_usd: run.max_ai_spend_usd,
+    p_max_compute_spend_usd: run.max_compute_spend_usd,
+    p_allowed_risk_levels: run.allowed_risk_levels,
+    p_max_retries_per_task: run.max_retries_per_task,
+    p_task_ids: run.authorized_task_ids,
+    p_stop_conditions: run.stop_conditions,
+    p_name: `${base} (continued)`,
+  });
+  if (error) fail(path, error);
+  redirect(`/projects/${projectId}/runs/${data}?notice=${encodeURIComponent("New run authorized with the same limits.")}`);
+}

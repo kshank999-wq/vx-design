@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { decidePlan, revisePlan, submitPlan, updateTask } from "./actions";
+import { authorizeRun, decidePlan, revisePlan, submitPlan, updateTask } from "./actions";
 
 interface AcceptanceTest { id: string; description: string; method: string; validationKind?: string }
 interface Generator { model?: string; offline?: boolean; prompt_version?: string; attempts?: number; adjustments?: string[] }
@@ -21,13 +21,14 @@ export default async function PlanPage({ params, searchParams }: {
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
 
-  const [{ data: plan }, { data: tasks }, { data: reqs }, { data: approvals }, { data: me }] = await Promise.all([
+  const [{ data: plan }, { data: tasks }, { data: reqs }, { data: approvals }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("plans").select("*, projects(name)").eq("id", planId).eq("project_id", projectId).maybeSingle(),
     supabase.from("tasks").select("id, key, title, discipline, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
       .eq("plan_id", planId).order("position"),
     supabase.from("requirements").select("id, ref_code, text, source_section, source_excerpt, status").eq("project_id", projectId).order("ref_code"),
     supabase.from("approvals").select("id, status, reason, response_note, requested_at, responded_at").eq("plan_id", planId).order("requested_at"),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
+    supabase.from("runs").select("id, name, status, mode, created_at, stop_reason").eq("plan_id", planId).order("created_at", { ascending: false }),
   ]);
   if (!plan) notFound();
 
@@ -43,6 +44,9 @@ export default async function PlanPage({ params, searchParams }: {
   const uncovered = (reqs ?? []).filter((r) => r.status !== "rejected" && !covered.has(r.id) && !deferred.some((d) => d.ref === r.ref_code));
   const hours = (tasks ?? []).reduce((s, t) => s + Number(t.estimated_hours ?? 0), 0);
   const gates = (tasks ?? []).filter((t) => (t.approval_policy as { required?: boolean })?.required).length;
+  const activeRun = (runs ?? []).find((r) => ["pending", "running", "paused"].includes(r.status));
+  const canRun = plan.status === "approved" && !activeRun && (role === "owner" || role === "engineer");
+  const riskInPlan = new Set((tasks ?? []).map((t) => t.risk_level));
 
   return (
     <main>
@@ -72,6 +76,53 @@ export default async function PlanPage({ params, searchParams }: {
           {canRevise && <form action={revisePlan.bind(null, projectId, planId)}><SubmitButton variant="secondary">Revise as new draft</SubmitButton></form>}
         </div>
       </div>
+
+      {plan.status === "approved" && (
+        <section>
+          <h2>Runs</h2>
+          {(runs ?? []).length > 0 && (
+            <ul className="list">{runs!.map((r) => (
+              <li key={r.id}>
+                <Link href={`/projects/${projectId}/runs/${r.id}`}><strong>{r.name || "Run"}</strong></Link>
+                <span className={`pill pill-${r.status}`}>{r.status}</span>
+                <span className="muted small"> {r.mode} · {new Date(r.created_at).toLocaleString()}{r.stop_reason ? ` · ${r.stop_reason}` : ""}</span>
+              </li>
+            ))}</ul>
+          )}
+          {activeRun && <p className="small muted">This plan has an active run; pause, resume or cancel it from its page.</p>}
+          {canRun && (
+            <form className="card stack" action={authorizeRun.bind(null, projectId, planId)}>
+              <h3>Authorize a run</h3>
+              <p className="small muted">A worker executes ready tasks in plan order within these limits. You can close the browser; the report is waiting here when it finishes.</p>
+              <div className="row">
+                <label>Name<input name="name" placeholder="e.g. Overnight 1" /></label>
+                <label>Supervision
+                  <select name="mode" defaultValue={plan.supervision_mode ?? "guided"}>
+                    <option value="guided">Guided: review every design result</option>
+                    <option value="professional">Professional: review gated tasks only</option>
+                    <option value="autonomous">Autonomous: run unattended within budget</option>
+                  </select>
+                </label>
+              </div>
+              <div className="row">
+                <label>AI budget (USD)<input name="max_ai_spend_usd" type="number" min="0" step="0.01" defaultValue="5" required /></label>
+                <label>Compute budget (USD)<input name="max_compute_spend_usd" type="number" min="0" step="0.01" defaultValue="1" required /></label>
+                <label>Retries per task<input name="max_retries_per_task" type="number" min="0" max="5" defaultValue="2" required /></label>
+              </div>
+              <fieldset className="row">
+                <legend>Risk levels this run may execute</legend>
+                {["low", "medium", "high", "critical"].map((r) => (
+                  <label key={r} className="inline"><input type="checkbox" name="risk" value={r}
+                    defaultChecked={r === "low" || r === "medium" || (r === "high" && riskInPlan.has("high"))}
+                    disabled={r === "critical" && role !== "owner"} /> {r}</label>
+                ))}
+              </fieldset>
+              <label className="inline"><input type="checkbox" name="stop_on_failure" /> Stop the run at the first failed or blocked task</label>
+              <div><SubmitButton pendingText="Authorizing…">Authorize run</SubmitButton></div>
+            </form>
+          )}
+        </section>
+      )}
 
       {canDecide && (
         <form className="card stack" action={decidePlan.bind(null, projectId, planId, true)}>

@@ -1,13 +1,55 @@
-# Orchestrator
+# Orchestrator (worker)
 
-Long-running worker service (not on Vercel). Responsibilities (spec §3, §5–§7):
+This is a long-running worker service that executes authorized runs. It is not for Vercel: the web app
+only authorizes runs and displays their status, so runs continue with the browser closed (spec §3).
 
-- Claim ready tasks with `public.claim_next_task(worker_id, run_id)` — Postgres `SKIP LOCKED`, so
-  multiple workers never take the same task, and a task is only claimable once its upstream tasks are `complete`.
-- Heartbeat `executions.heartbeat_at`; requeue tasks whose worker stopped heartbeating.
-- Enforce run budgets (`runs.max_ai_spend_usd`, `max_compute_spend_usd`) from `cost_events`.
-- Take per-artifact write locks (`artifacts.locked_by_execution_id`) before mutating a design file.
-- Promote scratch artifact versions to `committed` only after validations pass.
-- Write the in-app completion report when a run ends.
+```bash
+SUPABASE_URL=https://<project>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service role key> \
+ANTHROPIC_API_KEY=<key> \
+node services/orchestrator/src/main.ts
+```
 
-Connects with the Supabase service-role key (bypasses RLS). Built in G2.
+Run as many workers as you like; the database arbitrates between them. `SIGTERM` makes a worker finish
+its current step and hand its tasks back to the queue at their latest checkpoint.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WORKER_ID` | hostname-pid | Name shown in logs and on the run page |
+| `WORKER_CONCURRENCY` | 2 | Executions at once |
+| `WORKER_LEASE_SECONDS` | 60 | Lease length; heartbeats every third of it |
+| `WORKER_POLL_MS` | 3000 | Idle poll interval |
+| `VX_LLM` | — | `offline` uses the labelled non-AI stand-in |
+| `VX_PLANNING_MODEL` | claude-opus-5-5 | Claude model id |
+| `VX_COMPUTE_USD_PER_HOUR` | 0.10 | Worker time charged against compute budgets |
+| `VX_STEP_DELAY_MS` | 0 | Test hook: pause after each step |
+
+## How an execution works
+
+1. `claim_next_task` leases the next ready task of a running run, in plan order. If the task's latest
+   attempt was interrupted, the claim resumes it with the saved checkpoint.
+2. The executor runs in steps (`ctx.step(name, fn)`). Before each step the worker confirms its lease.
+   After each step the result is saved in the checkpoint. A resumed attempt returns saved results
+   instead of re-running them.
+3. Outputs are uploaded content-addressed. They are registered as scratch versions under a per-artifact
+   write lock.
+4. `begin_validation` and then `complete_execution` record the checks. The function either commits the
+   outputs or holds them for sign-off. A failure goes to `fail_execution` with one of three outcomes:
+   retry, fail or block.
+5. Each of these calls is fenced: it succeeds only for the worker that still holds the execution.
+
+Each run's report is written by `finish_run` once nothing more can run.
+
+## Executors (`src/executors/`)
+
+| Executor | Disciplines | Evidence |
+| --- | --- | --- |
+| `design-brief` | architecture, components, power, thermal, mechanical, enclosure, documentation | unverified AI reasoning, checked for requirement and acceptance-test coverage |
+| `not-yet-available` | schematic, pcb_layout, simulation, verification, manufacturing, sourcing | blocks the task with the reason and the gate that adds it |
+
+## Tests
+
+- `pnpm test:worker` runs against local Supabase. It kills a worker mid-task, freezes one past its lease,
+  and exercises pause, resume and cancel. It asserts exactly one model call and one committed version
+  per task.
+- SQL-level guarantees are covered in `supabase/tests/worker_test.sql`.

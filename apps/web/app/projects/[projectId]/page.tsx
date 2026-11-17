@@ -28,7 +28,7 @@ export default async function ProjectPage({ params, searchParams }: {
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
 
-  const [{ data: project }, { data: docs }, { data: reqs }, { data: plans }, { data: me }] = await Promise.all([
+  const [{ data: project }, { data: docs }, { data: reqs }, { data: plans }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("projects").select("id, name, description").eq("id", projectId).maybeSingle(),
     supabase.from("documents").select("id, title, filename, mime_type, extraction_status, extraction_report, created_at")
       .eq("project_id", projectId).order("created_at"),
@@ -36,6 +36,8 @@ export default async function ProjectPage({ params, searchParams }: {
       .eq("project_id", projectId).order("ref_code"),
     supabase.from("plans").select("id, version, status, summary, created_at, generator").eq("project_id", projectId).order("version", { ascending: false }),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
+    supabase.from("runs").select("id, name, status, mode, created_at, report, plans(version)").eq("project_id", projectId)
+      .order("created_at", { ascending: false }).limit(10),
   ]);
   if (!project) notFound();
   const canEdit = me?.role === "owner" || me?.role === "engineer";
@@ -164,6 +166,21 @@ export default async function ProjectPage({ params, searchParams }: {
             </SubmitButton>
           </form>
         )}
+      </section>
+
+      <section>
+        <h2>4. Runs</h2>
+        <ul className="list">
+          {(runs ?? []).map((r) => (
+            <li key={r.id}>
+              <Link href={`/projects/${projectId}/runs/${r.id}`}><strong>{r.name || "Run"}</strong></Link>
+              <span className={`pill pill-${r.status}`}>{r.status}</span>
+              <span className="muted small"> plan v{(r.plans as unknown as { version: number }).version} · {r.mode} · {new Date(r.created_at).toLocaleString()}</span>
+              {(r.report as { headline?: string } | null)?.headline && <div className="small">{(r.report as { headline: string }).headline}</div>}
+            </li>
+          ))}
+          {!runs?.length && <li className="muted">No runs yet. Approve a plan, then authorize a run from the plan page.</li>}
+        </ul>
       </section>
     </main>
   );
