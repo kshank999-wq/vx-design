@@ -15,6 +15,7 @@ See [docs/ASSESSMENT.md](docs/ASSESSMENT.md) for the feasibility assessment and 
 | `services/engineering/` | KiCad / CAD / simulation adapter workers |
 | `packages/contracts/` | Typed task, artifact, evidence and decision schemas |
 | `packages/integrations/` | Provider connectors and capability registry |
+| `packages/planning/` | Spec ingestion (DOCX/PDF/Markdown), cited requirement extraction, plan generation and validation |
 | `supabase/migrations/` | Postgres schema, RLS and policies |
 | `supabase/seed.sql` | G0 capability matrix starting rows |
 | `tests/fixtures/` | Small circuits, STEP models and golden outputs |
@@ -37,6 +38,32 @@ runs every tool spike and writes [docs/g0/capability-matrix.md](docs/g0/capabili
 
 To connect a Supabase project, copy `.env.example` to `apps/web/.env.local` and fill in the
 project URL and anon key, then apply `supabase/migrations/` (Supabase CLI: `supabase db push`).
+
+## G1: specification to approved plan
+
+1. **Upload** a DOCX, PDF, Markdown or text spec. It is parsed into sections and blocks with stable ids (`S2.1.p3`).
+2. **Extract requirements.** Claude returns each requirement with a block id and a verbatim excerpt. Every
+   excerpt is checked against the document; unverifiable ones get one correction round, then are dropped
+   and reported. Codes (`REQ-PWR-002`) are assigned deterministically in document order.
+3. **Review**: confirm or reject requirements; ambiguities and open questions are listed.
+4. **Generate a plan.** Claude proposes a task graph; deterministic checks require valid keys, known
+   dependencies, no cycles, an acceptance test per task, and every requirement covered or explicitly
+   deferred (up to 2 repair rounds). High/critical-risk tasks always get an approval gate.
+5. **Edit** tasks while the plan is a draft, **submit**, then an owner/reviewer **approves** (or returns it
+   with a note). Approval freezes the baseline, supersedes the previous one and makes tasks runnable.
+   Changes after that go through **Revise**, which creates a new draft version.
+
+The database enforces the workflow (status changes only through `submit_plan` / `decide_plan` /
+`revise_plan`; frozen task definitions; dependency order), covered by `supabase/tests/planning_test.sql`.
+
+Run locally (needs Docker):
+
+```bash
+npx supabase start                 # local Postgres/Auth/Storage, applies migrations + seed
+cp .env.example apps/web/.env.local   # fill in the local URL/anon key printed above
+pnpm --filter @vx/web build && pnpm --filter @vx/web start
+pnpm test:e2e                      # browser flow; run the app with VX_LLM=offline to avoid model calls
+```
 
 ## Database overview
 

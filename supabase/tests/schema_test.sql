@@ -45,6 +45,9 @@ $$;
 -- 1. Alice creates a project and becomes its owner.
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 insert into public.projects (id, name) values ('11111111-1111-1111-1111-111111111111', 'Smart Slate');
+-- The API inserts with RETURNING (checked against SELECT policies); this must work too.
+create temp table created_project as
+  with ins as (insert into public.projects (name) values ('Returning check') returning id) select id from ins;
 do $$ begin
   if (select role from public.project_members
       where project_id = '11111111-1111-1111-1111-111111111111'
@@ -56,10 +59,10 @@ end $$;
 -- 2. Plan + tasks with a dependency chain: arch -> pwr -> sch.
 insert into public.plans (id, project_id, version) values
   ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 1);
-insert into public.tasks (id, project_id, plan_id, key, title, discipline, status) values
-  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'arch', 'Architecture', 'architecture', 'ready'),
-  ('33333333-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'pwr',  'Power tree',   'power',        'ready'),
-  ('33333333-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'sch',  'Schematic',    'schematic',    'ready');
+insert into public.tasks (id, project_id, plan_id, key, title, discipline) values
+  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'arch', 'Architecture', 'architecture'),
+  ('33333333-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'pwr',  'Power tree',   'power'),
+  ('33333333-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'sch',  'Schematic',    'schematic');
 insert into public.task_dependencies values
   ('33333333-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000001'),
   ('33333333-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000002');
@@ -69,6 +72,10 @@ select pg_temp.expect_error(
   $$insert into public.task_dependencies values
     ('33333333-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003')$$,
   '%cycle%');
+
+-- Approve the plan (owner submits and decides); its tasks become ready.
+select public.submit_plan('22222222-2222-2222-2222-222222222222');
+select public.decide_plan('22222222-2222-2222-2222-222222222222', true);
 
 -- 4. Invalid state transitions are rejected.
 select pg_temp.expect_error(
@@ -148,10 +155,10 @@ begin
 end $$;
 reset role;
 
--- 9. Status changes were audited.
+-- 9. Status changes were audited (3 on approval + 4 during execution).
 do $$ begin
-  if (select count(*) from public.audit_events where event_type = 'task.status_changed') <> 4 then
-    raise exception 'expected 4 audited transitions, got %',
+  if (select count(*) from public.audit_events where event_type = 'task.status_changed') <> 7 then
+    raise exception 'expected 7 audited transitions, got %',
       (select count(*) from public.audit_events where event_type = 'task.status_changed');
   end if;
 end $$;

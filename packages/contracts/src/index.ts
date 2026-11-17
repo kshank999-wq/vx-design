@@ -56,6 +56,14 @@ export const ValidationKind = z.enum([
 ]);
 export const ValidationResult = z.enum(["pass", "warning", "fail", "error"]);
 
+export const RequirementKind = z.enum([
+  "functional", "electrical", "power", "mechanical", "thermal", "interface",
+  "environmental", "regulatory", "manufacturing", "cost", "other",
+]);
+export type RequirementKind = z.infer<typeof RequirementKind>;
+
+export const RequirementPriority = z.enum(["must", "should", "may"]);
+
 export const ArtifactKind = z.enum([
   "specification", "requirements", "plan", "kicad_project", "schematic", "pcb",
   "netlist", "bom", "power_budget", "simulation", "step", "stl", "enclosure",
@@ -83,6 +91,10 @@ export const PlannedTask = z.object({
   timeoutSeconds: z.number().int().positive().default(3600),
   costBudgetUsd: z.number().nonnegative().optional(),
   requirementRefs: z.array(z.string()).default([]),
+  /** Human approval gate before the task's output is committed (spec §7). */
+  approvalRequired: z.boolean().default(false),
+  approvalReason: z.string().nullable().default(null),
+  estimatedHours: z.number().nonnegative().nullable().default(null),
 });
 export type PlannedTask = z.infer<typeof PlannedTask>;
 

@@ -1,0 +1,40 @@
+import Link from "next/link";
+import { Banner } from "@/components/Banner";
+import { SubmitButton } from "@/components/SubmitButton";
+import { requireUser } from "@/lib/auth";
+import { createProject } from "./actions";
+
+export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
+  const { supabase } = await requireUser();
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, name, description, created_at, plans(status, version)")
+    .order("created_at", { ascending: false });
+
+  return (
+    <main>
+      <h1>Projects</h1>
+      <Banner error={error} />
+      <ul className="list">
+        {(projects ?? []).map((p) => {
+          const approved = p.plans?.find((pl: { status: string }) => pl.status === "approved") as { version: number } | undefined;
+          return (
+            <li key={p.id}>
+              <Link href={`/projects/${p.id}`}><strong>{p.name}</strong></Link>
+              {p.description && <span className="muted"> — {p.description}</span>}
+              <span className="pill">{approved ? `baseline v${approved.version}` : "no approved plan"}</span>
+            </li>
+          );
+        })}
+        {!projects?.length && <li className="muted">No projects yet.</li>}
+      </ul>
+      <form action={createProject} className="card stack">
+        <h2>New project</h2>
+        <label>Name<input name="name" required placeholder="Smart Slate" /></label>
+        <label>Description<input name="description" placeholder="Optional" /></label>
+        <div><SubmitButton pendingText="Creating…">Create project</SubmitButton></div>
+      </form>
+    </main>
+  );
+}
