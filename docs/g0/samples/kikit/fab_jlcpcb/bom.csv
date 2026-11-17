@@ -1,0 +1,6 @@
+Comment,Designator,Footprint,LCSC
+VIN 5V,J1,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,
+1uF,"C1,C2",Capacitor_SMD:C_0603_1608Metric,
+AP2112K-3.3,U1,Package_TO_SOT_SMD:SOT-23-5,
+1k,R1,Resistor_SMD:R_0603_1608Metric,
+Green,D1,LED_SMD:LED_0603_1608Metric,

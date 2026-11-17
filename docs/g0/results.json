@@ -1,0 +1,286 @@
+{
+  "generated_at": "2026-11-17T01:09:50+00:00",
+  "results": [
+    {
+      "tool_name": "kicad",
+      "operation": "schematic_generation",
+      "status": "verified",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0 (run as separate process)",
+      "commercial_ok": true,
+      "notes": "Generated a native .kicad_sch from code (symbols copied from installed libraries, `extends` flattened, nets joined by labels on pin endpoints). KiCad's own netlist export reproduces all 4 intended nets exactly.",
+      "errors_seen": null,
+      "fallback": "atopile / SKiDL netlist generation (no schematic drawing)",
+      "evidence": [
+        "samples/kicad/g0_ldo_led.kicad_sch",
+        "samples/kicad/netlist.net"
+      ],
+      "duration_s": 2.47
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "headless_erc",
+      "status": "verified",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0",
+      "commercial_ok": true,
+      "notes": "`kicad-cli sch erc` JSON report: generated schematic has 0 violations; negative control (power flags removed) reports 4 error(s): label_dangling; power_pin_not_driven",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/erc_clean.json"
+      ],
+      "duration_s": 6.32
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "pcb_generation",
+      "status": "verified",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0",
+      "commercial_ok": true,
+      "notes": "Created a .kicad_pcb from the KiCad netlist with the pcbnew Python API: 6 library footprints placed, nets assigned to pads, 28.0x16.0 mm outline. Pre-route DRC shows 10 unconnected items as expected. Design rules from fab profile `jlcpcb-2layer-standard`. Placement is scripted, not automatic. Note: KiCad's SWIG Python bindings are deprecated in favour of the IPC API; plan to migrate.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/unrouted/g0_ldo_led.kicad_pcb"
+      ],
+      "duration_s": 3.01
+    },
+    {
+      "tool_name": "freerouting",
+      "operation": "autoroute",
+      "status": "verified",
+      "tool_version": "2.5.0",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0 (run as separate process)",
+      "commercial_ok": true,
+      "notes": "DSN export -> Freerouting (headless) -> SES import: 31 track segments, 0 vias on a 2-layer board; track widths [0.187, 0.25] mm (narrower segments neck down between fine-pitch pads). Suitable for simple low-speed boards; not for impedance-controlled or high-speed nets.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/routed/g0_ldo_led_routed.kicad_pcb",
+        "samples/freerouting/board.ses",
+        "samples/freerouting/freerouting.log"
+      ],
+      "duration_s": 3.32
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "headless_drc",
+      "status": "verified",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0",
+      "commercial_ok": true,
+      "notes": "`kicad-cli pcb drc` JSON report on the routed board: 0 errors, 0 unconnected items, 0 warning(s). Rules: `jlcpcb-2layer-standard` (min track 0.127 mm, min clearance 0.127 mm), read from the .kicad_pro. Negative control: the same board before routing reported 10 unconnected items.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/drc_routed.json",
+        "samples/kicad/drc_unrouted.json"
+      ],
+      "duration_s": 3.02
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "fab_outputs",
+      "status": "verified",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0",
+      "commercial_ok": true,
+      "notes": "Headless exports: 9 Gerber layers, Excellon drill, pick-and-place CSV (6 parts), BOM CSV. Content checked for all references. Not yet checked: fab-house DFM rules, stackup/impedance notes, assembly drawings.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/fab"
+      ],
+      "duration_s": 1.25
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "step_export",
+      "status": "partial",
+      "tool_version": "10.0.8",
+      "deployment_mode": "docker worker",
+      "license": "GPL-3.0",
+      "commercial_ok": true,
+      "notes": "Board STEP exported headlessly. This image has no KiCad 3D model library (use the kicad/kicad:*-full image or fetch manufacturer STEP files per part), so the STEP contains the bare board only.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kicad/board.step"
+      ],
+      "duration_s": 0.34
+    },
+    {
+      "tool_name": "kikit",
+      "operation": "panelization",
+      "status": "verified",
+      "tool_version": "1.8.1",
+      "deployment_mode": "docker worker",
+      "license": "MIT",
+      "commercial_ok": true,
+      "notes": "`kikit panelize` produced a 2x2 panel (58.1x50.1 mm, 72 footprints) with mousebites and rails. `kikit fab jlcpcb --assembly`: produced bom.csv, gerber, gerbers.zip, pos.csv; LCSC part numbers filled for 0 BOM line(s) - JLCPCB assembly needs one per line (sourcing agent work), and its rotation offsets are not yet verified.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/kikit/panel.kicad_pcb",
+        "samples/kikit/fab_jlcpcb"
+      ],
+      "duration_s": 1.11
+    },
+    {
+      "tool_name": "cadquery",
+      "operation": "step_import_export",
+      "status": "verified",
+      "tool_version": "2.8.0",
+      "deployment_mode": "docker worker",
+      "license": "Apache-2.0 (OCCT: LGPL-2.1 with exception)",
+      "commercial_ok": true,
+      "notes": "Imported KiCad's board STEP: 28.00 x 16.00 x 1.51 mm, matching the 28.0x16.0 mm outline; export/re-import preserves volume. Manufacturer component STEP files still to be tested once real part models are sourced.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 1.32
+    },
+    {
+      "tool_name": "cadquery",
+      "operation": "enclosure_generation",
+      "status": "partial",
+      "tool_version": "2.8.0",
+      "deployment_mode": "docker worker",
+      "license": "Apache-2.0",
+      "commercial_ok": true,
+      "notes": "Parametric open-top shell with corner standoffs generated from the board STEP bounding box; valid solid exported as STEP and STL. Not yet: lid, connector cutouts from footprint positions, process DFM (wall thickness, draft angles).",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/cadquery/enclosure.step",
+        "samples/cadquery/enclosure.stl"
+      ],
+      "duration_s": 0.05
+    },
+    {
+      "tool_name": "cadquery",
+      "operation": "interference_check",
+      "status": "verified",
+      "tool_version": "2.8.0",
+      "deployment_mode": "docker worker",
+      "license": "Apache-2.0",
+      "commercial_ok": true,
+      "notes": "Boolean intersection: board vs generated enclosure = 0.0000 mm^3 (fits). Negative control with walls 1 mm inside the board edge = 126.84 mm^3 (collision detected).",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 0.06
+    },
+    {
+      "tool_name": "ngspice",
+      "operation": "transient_simulation",
+      "status": "verified",
+      "tool_version": "44.2",
+      "deployment_mode": "docker worker",
+      "license": "BSD-3-Clause (modified)",
+      "commercial_ok": true,
+      "notes": "Batch-mode transient run; measured RC time constant 0.9999 ms vs analytic 1.0000 ms (within 1%). Waveform saved. Vendor regulator models still need per-part checks.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/ngspice/rc.cir",
+        "samples/ngspice/rc_out.txt"
+      ],
+      "duration_s": 0.01
+    },
+    {
+      "tool_name": "skidl",
+      "operation": "netlist_compile",
+      "status": "verified",
+      "tool_version": "3.0.0",
+      "deployment_mode": "docker worker",
+      "license": "MIT",
+      "commercial_ok": true,
+      "notes": "Python circuit description compiled to a KiCad netlist whose connectivity matches the fixture exactly.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [
+        "samples/skidl/skidl.net"
+      ],
+      "duration_s": 6.15
+    },
+    {
+      "tool_name": "atopile",
+      "operation": "netlist_compile",
+      "status": "partial",
+      "tool_version": "0.12.6",
+      "deployment_mode": "docker worker",
+      "license": "MIT",
+      "commercial_ok": true,
+      "notes": "CLI installs and runs. A full build was not exercised: atopile projects pull part packages from its registry and need a project scaffold. Evaluate in a follow-up spike alongside SKiDL.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 0.52
+    },
+    {
+      "tool_name": "kicad",
+      "operation": "ipc_api",
+      "status": "blocked",
+      "tool_version": "0.8.0",
+      "deployment_mode": "docker worker",
+      "license": "MIT (kicad-python)",
+      "commercial_ok": true,
+      "notes": "kicad-python needs a running KiCad GUI instance with the API server enabled; none exists in a headless worker. Follow-up: run KiCad under a virtual display (Xvfb) or wait for a headless API host.",
+      "errors_seen": "ConnectionError: Failed to connect to KiCad: Connection refused",
+      "fallback": "kicad-cli + pcbnew Python bindings (verified) and direct file generation",
+      "evidence": [],
+      "duration_s": 0.04
+    },
+    {
+      "tool_name": "digikey",
+      "operation": "product_search",
+      "status": "untested",
+      "tool_version": null,
+      "deployment_mode": "hosted API",
+      "license": null,
+      "commercial_ok": null,
+      "notes": "Not run: set DIGIKEY_CLIENT_ID, DIGIKEY_CLIENT_SECRET to test a live lookup of AP2112K-3.3TRG1.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 0.0
+    },
+    {
+      "tool_name": "mouser",
+      "operation": "product_search",
+      "status": "untested",
+      "tool_version": null,
+      "deployment_mode": "hosted API",
+      "license": null,
+      "commercial_ok": null,
+      "notes": "Not run: set MOUSER_API_KEY to test a live lookup of AP2112K-3.3TRG1.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 0.0
+    },
+    {
+      "tool_name": "nexar",
+      "operation": "part_lookup",
+      "status": "untested",
+      "tool_version": null,
+      "deployment_mode": "hosted API",
+      "license": null,
+      "commercial_ok": null,
+      "notes": "Not run: set NEXAR_CLIENT_ID, NEXAR_CLIENT_SECRET to test a live lookup of AP2112K-3.3TRG1.",
+      "errors_seen": null,
+      "fallback": null,
+      "evidence": [],
+      "duration_s": 0.0
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+* RC step response, tau = R*C = 1 ms
+V1 in 0 PULSE(0 1 0 1n 1n 10m 20m)
+R1 in out 1k
+C1 out 0 1u
+.control
+tran 5u 6m
+meas tran tau WHEN v(out)=0.6321 RISE=1
+wrdata rc_out.txt v(out)
+quit
+.endc
+.end

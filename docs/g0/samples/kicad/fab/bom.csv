@@ -1,0 +1,7 @@
+"Refs","Value","Footprint","Qty","DNP"
+"C1","1uF","Capacitor_SMD:C_0603_1608Metric","1",""
+"C2","1uF","Capacitor_SMD:C_0603_1608Metric","1",""
+"D1","Green","LED_SMD:LED_0603_1608Metric","1",""
+"J1","VIN 5V","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical","1",""
+"R1","1k","Resistor_SMD:R_0603_1608Metric","1",""
+"U1","AP2112K-3.3","Package_TO_SOT_SMD:SOT-23-5","1",""

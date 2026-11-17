@@ -32,6 +32,9 @@ pnpm test:db   # applies migrations to a throwaway local Postgres and runs schem
 pnpm dev       # web app on http://localhost:3000
 ```
 
+G0 capability audit (needs Docker): `./scripts/g0-run.sh` builds the engineering worker image,
+runs every tool spike and writes [docs/g0/capability-matrix.md](docs/g0/capability-matrix.md).
+
 To connect a Supabase project, copy `.env.example` to `apps/web/.env.local` and fill in the
 project URL and anon key, then apply `supabase/migrations/` (Supabase CLI: `supabase db push`).
 
