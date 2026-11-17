@@ -73,7 +73,7 @@ export async function buildRunReport(db: WorkerDb, run: RunRow, waitingFor: stri
   if (waitingFor.length) {
     const keys = scoped.filter((t) => t.status === "ready" && waitingFor.includes(t.discipline)).map((t) => t.key);
     next.push(`${keys.join(", ")} ${keys.length === 1 ? "needs" : "need"} a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks` +
-      (waitingFor.some((d) => d === "schematic" || d === "pcb_layout") ? " (the KiCad engineering worker)" : "") + "; start one, then continue the run.");
+      (waitingFor.some((d) => ["schematic", "pcb_layout", "manufacturing"].includes(d)) ? " (the KiCad engineering worker)" : "") + "; start one, then continue the run.");
   }
   for (const t of (tasks ?? []).filter((x) => !inScope(x) && x.status === "ready")) {
     next.push(`${t.key} was outside this run's scope (risk ${t.risk_level}); include it in a future run if intended.`);

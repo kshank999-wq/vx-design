@@ -26,6 +26,16 @@ class FabProfile:
     via_drill_mm: float
     # Wider class for supply nets
     power_track_mm: float
+    # Ordering defaults written into the fab notes (the buyer confirms them on the order form)
+    house: str = "jlcpcb"                  # KiKit fab target
+    assembly: bool = True                  # the house offers SMT assembly from BOM + CPL
+    thickness_mm: float = 1.6
+    copper_oz: float = 1.0
+    finish: str = "HASL (lead-free)"
+    mask: str = "green"
+    silkscreen: str = "white"
+    min_board_mm: float = 10.0             # smallest side accepted (conservative, assembly-friendly)
+    max_board_mm: float = 400.0
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -41,6 +51,8 @@ PROFILES: dict[str, FabProfile] = {p.name: p for p in (
         copper_edge_clearance_mm=0.3,
         track_mm=0.25, clearance_mm=0.2, via_diameter_mm=0.6, via_drill_mm=0.3,
         power_track_mm=0.5,
+        house="jlcpcb", assembly=True, finish="HASL (lead-free)", mask="green",
+        min_board_mm=10.0, max_board_mm=400.0,
     ),
     FabProfile(
         name="oshpark-2layer",
@@ -51,6 +63,8 @@ PROFILES: dict[str, FabProfile] = {p.name: p for p in (
         copper_edge_clearance_mm=0.381,
         track_mm=0.254, clearance_mm=0.2032, via_diameter_mm=0.7, via_drill_mm=0.35,
         power_track_mm=0.5,
+        house="oshpark", assembly=False, finish="ENIG", mask="purple",
+        min_board_mm=6.35, max_board_mm=400.0,
     ),
 )}
 

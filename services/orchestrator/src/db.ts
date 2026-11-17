@@ -277,25 +277,43 @@ export class WorkerDb {
     if (error) throw new Error(`upload ${path}: ${error.message}`);
   }
 
-  /** Committed JSON output of an upstream task whose artifact name ends with `/${suffix}` (e.g. the schematic's design). */
-  async upstreamJson(taskId: string, suffix: string): Promise<{ taskKey: string; versionId: string; value: unknown } | null> {
-    const { data: deps, error } = await this.client.from("task_dependencies")
-      .select("upstream:tasks!task_dependencies_depends_on_task_id_fkey(id, key, position)").eq("task_id", taskId);
-    if (error) throw new Error(`upstream tasks: ${error.message}`);
-    const ups = (deps ?? []).map((d) => d.upstream as unknown as { id: string; key: string; position: number })
-      .sort((a, b) => b.position - a.position);
-    for (const up of ups) {
-      const { data: links, error: e2 } = await this.client.from("task_artifacts")
-        .select("artifact_versions(id, storage_path, status, artifacts(name))").eq("task_id", up.id).eq("role", "output");
-      if (e2) throw new Error(`upstream outputs: ${e2.message}`);
-      for (const l of links ?? []) {
-        const v = l.artifact_versions as unknown as { id: string; storage_path: string; status: string; artifacts: { name: string } };
-        if (v.status === "committed" && v.artifacts.name.endsWith(`/${suffix}`)) {
-          return { taskKey: up.key, versionId: v.id, value: JSON.parse(await this.downloadText(v.storage_path)) };
+  /**
+   * Nearest committed output named `<task>/<suffix>` among the task's upstream tasks (direct first, then
+   * their upstream, breadth-first). `disciplines` limits which upstream tasks count.
+   */
+  async upstreamVersion(taskId: string, suffix: string, disciplines?: string[]):
+      Promise<{ taskKey: string; versionId: string; storagePath: string; toolConfig: Record<string, unknown> | null } | null> {
+    const seen = new Set<string>([taskId]);
+    let frontier = [taskId];
+    while (frontier.length) {
+      const { data: deps, error } = await this.client.from("task_dependencies")
+        .select("upstream:tasks!task_dependencies_depends_on_task_id_fkey(id, key, discipline, position)").in("task_id", frontier);
+      if (error) throw new Error(`upstream tasks: ${error.message}`);
+      const ups = (deps ?? []).map((d) => d.upstream as unknown as { id: string; key: string; discipline: string; position: number })
+        .filter((u) => !seen.has(u.id)).sort((a, b) => b.position - a.position);
+      for (const up of ups) {
+        seen.add(up.id);
+        if (disciplines && !disciplines.includes(up.discipline)) continue;
+        const { data: links, error: e2 } = await this.client.from("task_artifacts")
+          .select("artifact_versions(id, storage_path, status, tool_config, artifacts(name))").eq("task_id", up.id).eq("role", "output");
+        if (e2) throw new Error(`upstream outputs: ${e2.message}`);
+        for (const l of links ?? []) {
+          const v = l.artifact_versions as unknown as { id: string; storage_path: string; status: string;
+                                                         tool_config: Record<string, unknown> | null; artifacts: { name: string } };
+          if (v.status === "committed" && v.artifacts.name.endsWith(`/${suffix}`)) {
+            return { taskKey: up.key, versionId: v.id, storagePath: v.storage_path, toolConfig: v.tool_config };
+          }
         }
       }
+      frontier = ups.map((u) => u.id);
     }
     return null;
+  }
+
+  /** Committed JSON output of an upstream task whose artifact name ends with `/${suffix}` (e.g. the schematic's design). */
+  async upstreamJson(taskId: string, suffix: string): Promise<{ taskKey: string; versionId: string; value: unknown } | null> {
+    const v = await this.upstreamVersion(taskId, suffix);
+    return v ? { taskKey: v.taskKey, versionId: v.versionId, value: JSON.parse(await this.downloadText(v.storagePath)) } : null;
   }
 
   async downloadBytes(path: string): Promise<Uint8Array> {

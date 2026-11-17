@@ -115,7 +115,7 @@ export default async function RunPage({ params, searchParams }: {
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">
           No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
-          {uncovered.some((d) => d === "schematic" || d === "pcb_layout") ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}.
+          {uncovered.some((d) => ["schematic", "pcb_layout", "manufacturing"].includes(d)) ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}.
           They stay ready and run as soon as one connects.
         </p>
       )}
@@ -158,11 +158,11 @@ export default async function RunPage({ params, searchParams }: {
                 <div className="row spread"><h3><span className="mono muted">{t.key}</span> {t.title}</h3><span className="pill pill-awaiting_approval">awaiting approval</span></div>
                 {appr && <p className="small">{appr.reason}</p>}
                 {(() => {
-                  const render = outputsOf(t.id).find((v) => artifactName(v).endsWith("/render-3d"));
-                  const project = outputsOf(t.id).find((v) => artifactName(v).endsWith("/kicad-project"));
+                  const render = outputsOf(t.id).find((v) => /\/(render-3d|panel-render)$/.test(artifactName(v)));
+                  const project = outputsOf(t.id).find((v) => /\/(kicad-project|fab-package)$/.test(artifactName(v)));
                   if (render && urlOf.get(render.storage_path)) {
                     return <Link href={`/projects/${projectId}/artifacts/${(project ?? render).id}`}>
-                      <img className="render thumb" src={urlOf.get(render.storage_path)} alt="3D render of the routed board" /></Link>;
+                      <img className="render thumb" src={urlOf.get(render.storage_path)} alt="Board render" /></Link>;
                   }
                   const svg = outputsOf(t.id).find((v) => artifactName(v).endsWith("/schematic-svg"));
                   const href = svg && urlOf.get(svg.storage_path);

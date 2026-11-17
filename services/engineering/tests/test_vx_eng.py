@@ -271,3 +271,114 @@ class BoardBuildTests(unittest.TestCase):
         self.assertGreater(report["parity"], 0)
         self.assertTrue(any("10k" in v["description"] or "Value" in v["description"] for v in report["schematic_parity"]),
                         report["schematic_parity"])
+
+
+class FabPackageTests(unittest.TestCase):
+    """G4.5: fab package from the routed fixture board, plus negative controls for every independent check."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        from vx_eng.cli import cmd_fab_package, cmd_layout_build
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        built = cmd_layout_build(FIXTURE, LAYOUT, root / "board")
+        assert built["ok"], built.get("problems")
+        cls.project_zip = root / "board" / built["files"]["project_zip"]
+        cls.out = root / "pkg"
+        cls.result = cmd_fab_package(cls.project_zip, cls.out, panel=True, profile=None)
+        cls.check = json.loads((cls.out / "fab-check.json").read_text())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_package_passes_all_checks(self):
+        r = self.result
+        self.assertTrue(r["ok"], r.get("problems"))
+        self.assertEqual(r["drc"], {"errors": 0, "warnings": 0, "unconnected": 0, "parity": 0, "waived": 0})
+        self.assertEqual(r["gerbers"]["outline_mm"], [34.0, 22.0])
+        self.assertEqual(r["gerbers"]["drill_hits"]["nonplated"], 4, "four M3 mounting holes")
+        self.assertEqual(r["assembly"]["cpl_rows"], 6)
+        self.assertEqual(r["profile"]["house"], "jlcpcb")
+        self.assertEqual(r["panel"]["boards"], 4)
+        self.assertTrue(any(w["code"] == "lcsc_missing" for w in r["warnings"]), "no LCSC numbers yet: warned, not hidden")
+
+    def test_package_zip_and_manifest(self):
+        import hashlib
+        import zipfile
+        with zipfile.ZipFile(self.out / self.result["files"]["package"]) as z:
+            names = set(z.namelist())
+            manifest = json.loads(z.read("manifest.json"))
+            for arc, sha in manifest.items():
+                self.assertEqual(hashlib.sha256(z.read(arc)).hexdigest(), sha, arc)
+        for f in ("gerbers.zip", "bom.csv", "cpl.csv", "FAB-NOTES.txt", "assembly-top.pdf", "drill-map.pdf",
+                  "panel/panel-gerbers.zip", "manifest.json"):
+            self.assertIn(f, names)
+        notes = (self.out / "FAB-NOTES.txt").read_text()
+        self.assertIn("34.0 x 22.0 mm", notes)
+        self.assertIn("MISSING for C1, C2, D1, J1, R1, U1", notes)
+
+    def _facts(self, **changes):
+        facts = copy.deepcopy({**self.check["board"], "parts": self.check["parts"]})
+        facts.update(changes)
+        return facts
+
+    def test_gerber_check_catches_wrong_outline_and_drills(self):
+        from vx_eng.fab import PROFILES
+        from vx_eng.release import check_gerbers
+        gz = self.out / "gerbers.zip"
+        prof = PROFILES["jlcpcb-2layer-standard"]
+        self.assertTrue(check_gerbers(gz, self._facts(), prof)["ok"])
+        r = check_gerbers(gz, self._facts(width_mm=40.0), prof)
+        self.assertIn("outline_size", [p["code"] for p in r["problems"]])
+        holes = dict(self.check["board"]["holes"], vias=self.check["board"]["holes"]["vias"] + 1)
+        r = check_gerbers(gz, self._facts(holes=holes), prof)
+        self.assertIn("drill_count", [p["code"] for p in r["problems"]])
+
+    def test_gerber_check_applies_fab_limits(self):
+        import dataclasses
+        from vx_eng.fab import PROFILES
+        from vx_eng.release import check_gerbers
+        strict = dataclasses.replace(PROFILES["jlcpcb-2layer-standard"], copper_edge_clearance_mm=1.0,
+                                     min_board_mm=50.0, min_hole_mm=0.5, min_via_drill_mm=0.5)
+        codes_ = sorted({p["code"] for p in check_gerbers(self.out / "gerbers.zip", self._facts(), strict)["problems"]})
+        self.assertEqual(codes_, ["board_size", "copper_to_edge", "min_drill"])
+
+    def test_assembly_check_catches_cpl_and_bom_errors(self):
+        from vx_eng.release import check_assembly
+        work = Path(self.tmp.name) / "tampered"
+        work.mkdir(exist_ok=True)
+        rows = (self.out / "cpl.csv").read_text().splitlines()
+        shifted = [rows[0]] + [r.replace("10.00,-11.00", "11.00,-11.00") for r in rows[1:] if not r.startswith("R1,")]
+        (work / "cpl.csv").write_text("\n".join(shifted) + "\n")
+        bom = [r for r in (self.out / "bom.csv").read_text().splitlines() if "D1" not in r]
+        (work / "bom.csv").write_text("\n".join(bom) + "\n")
+        r = check_assembly(work / "bom.csv", work / "cpl.csv", self._facts())
+        self.assertEqual(sorted({p["code"] for p in r["problems"]}), ["bom_missing", "cpl_missing", "cpl_position"])
+
+    def test_drc_gate_refuses_a_broken_board(self):
+        import pcbnew
+        from vx_eng.release import build_package, unzip_project
+        proj = unzip_project(self.project_zip, Path(self.tmp.name) / "broken")
+        pcb = next(proj.glob("*.kicad_pcb"))
+        board = pcbnew.LoadBoard(str(pcb))
+        for t in list(board.GetTracks()):
+            if t.GetNetname() == "/LED_A":
+                board.Remove(t)
+        pcbnew.SaveBoard(str(pcb), board)
+        r = build_package(proj, Path(self.tmp.name) / "broken-out", panel=False)
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["stage"], "drc")
+        self.assertGreater(r["drc"]["unconnected"], 0)
+
+    def test_unsafe_zip_is_rejected(self):
+        import zipfile
+        from vx_eng import kicad
+        from vx_eng.release import unzip_project
+        bad = Path(self.tmp.name) / "bad.zip"
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("../escape.txt", "x")
+        with self.assertRaises(kicad.KicadError):
+            unzip_project(bad, Path(self.tmp.name) / "bad")

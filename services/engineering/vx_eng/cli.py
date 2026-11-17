@@ -152,6 +152,16 @@ def cmd_layout_build(spec: dict, layout_spec: dict, out: Path) -> dict:
     return result
 
 
+def cmd_fab_package(project: Path, out: Path, panel: bool, profile: str | None) -> dict:
+    """Fab package from a G4 project (zip or directory): DRC gate, KiKit fab files, independent checks, drawings, panel."""
+    import tempfile
+    from . import release
+    if project.is_file():
+        tmp = Path(tempfile.mkdtemp(prefix="vx-fab-"))
+        project = release.unzip_project(project, tmp)
+    return release.build_package(project, out, panel=panel, profile_name=profile)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="vx_eng")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -169,10 +179,22 @@ def main(argv: list[str] | None = None) -> int:
     lb.add_argument("--spec", required=True)
     lb.add_argument("--layout", required=True)
     lb.add_argument("--out", required=True)
+    fp = sub.add_parser("fab-package", help="board house package from a routed KiCad project, with independent checks")
+    fp.add_argument("--project", required=True, help="KiCad project zip from layout-build, or its directory")
+    fp.add_argument("--out", required=True)
+    fp.add_argument("--profile", choices=sorted(PROFILES), help="override the project's fab profile")
+    fp.add_argument("--no-panel", action="store_true")
     sub.add_parser("version")
     args = ap.parse_args(argv)
     if args.cmd == "version":
         print(json.dumps({"vx_eng": __version__, "kicad": kicad.version()}))
+        return 0
+    if args.cmd == "fab-package":
+        try:
+            result = cmd_fab_package(Path(args.project), Path(args.out), not args.no_panel, args.profile)
+        except kicad.KicadError as e:
+            result = {"ok": False, "stage": "kicad", "error": str(e)}
+        print(json.dumps(result))
         return 0
     spec = json.load(sys.stdin if args.spec == "-" else open(args.spec))
     try:

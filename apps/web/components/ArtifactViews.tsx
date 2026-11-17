@@ -141,6 +141,72 @@ export function LayoutView({ layout }: { layout: LayoutDoc }) {
   );
 }
 
+interface FabProblem { code: string; message: string }
+interface FabCheck {
+  project: string; revision: string; profile: string;
+  drc: { errors: number; warnings: number; unconnected: number; parity: number; waived: number };
+  gerbers: { ok: boolean; problems: FabProblem[]; warnings: FabProblem[]; layers: string[]; outline_mm: [number, number];
+             drill_hits: { plated: number; nonplated: number }; min_drill_mm: number | null };
+  assembly: { ok: boolean; problems: FabProblem[]; warnings: FabProblem[]; cpl_rows: number; bom_lines: number;
+              lcsc_missing: string[]; rotation_corrections: { ref: string; board: number; cpl: number }[] };
+  board: { width_mm: number; height_mm: number; copper_layers: number; holes: { plated: number; nonplated: number; vias: number };
+           min_drill_mm: number | null; min_track_mm: number | null };
+  parts: { ref: string; value: string; footprint: string; x: number; y: number; rotation: number; side: string; smd: boolean; lcsc: string }[];
+  panel: { size_mm: [number, number]; boards: number } | null;
+  manifest: Record<string, string>;
+}
+
+function CheckLine({ ok, warn, label, children }: { ok: boolean; warn?: boolean; label: string; children: React.ReactNode }) {
+  return (
+    <li><span className={`pill pill-check-${!ok ? "fail" : warn ? "warning" : "pass"}`}>{!ok ? "fail" : warn ? "warning" : "pass"}</span>{" "}
+      <strong>{label}</strong>: {children}</li>
+  );
+}
+
+export function FabCheckView({ check }: { check: FabCheck }) {
+  const g = check.gerbers;
+  const a = check.assembly;
+  const drcOk = !check.drc.errors && !check.drc.unconnected && !check.drc.parity;
+  return (
+    <section>
+      <h2>Fab package checks</h2>
+      <p className="small muted">
+        The Gerbers and drill files were re-read with gerbonara, independently of KiCad, and compared with the board. The
+        pick-and-place file was compared with the board&apos;s footprint positions, and the BOM with its components.
+      </p>
+      <ul className="checks" data-testid="fab-checks">
+        <CheckLine ok={drcOk} label="Release gate">
+          KiCad DRC with schematic parity: {check.drc.errors} errors, {check.drc.unconnected} unrouted, {check.drc.parity} differences, {check.drc.waived} waived
+        </CheckLine>
+        <CheckLine ok={g.ok} warn={g.warnings.length > 0} label="Gerbers">
+          {g.layers.length} layers; outline {g.outline_mm[0]} x {g.outline_mm[1]} mm; {g.drill_hits.plated} plated + {g.drill_hits.nonplated} non-plated
+          holes; smallest drill {g.min_drill_mm} mm
+          {[...g.problems, ...g.warnings].map((p, i) => <div key={i} className={g.problems.includes(p) ? "error-text" : "warn-text"}>{p.message}</div>)}
+        </CheckLine>
+        {(a.cpl_rows > 0 || a.bom_lines > 0) && (
+          <CheckLine ok={a.ok} warn={a.warnings.length > 0} label="Assembly files">
+            {a.cpl_rows} pick-and-place rows, {a.bom_lines} BOM lines
+            {[...a.problems, ...a.warnings].map((p, i) => <div key={i} className={a.problems.includes(p) ? "error-text" : "warn-text"}>{p.message}</div>)}
+          </CheckLine>
+        )}
+      </ul>
+      <h3>Parts</h3>
+      <table className="small">
+        <thead><tr><th>Ref</th><th>Value</th><th>Footprint</th><th>x, y (mm)</th><th>Rotation</th><th>Side</th><th>Type</th><th>LCSC</th></tr></thead>
+        <tbody>{check.parts.map((p) => (
+          <tr key={p.ref} data-ref={p.ref}><td className="mono">{p.ref}</td><td>{p.value}</td><td className="mono">{p.footprint}</td>
+            <td>{p.x}, {p.y}</td><td>{p.rotation}°</td><td>{p.side}</td><td>{p.smd ? "SMD" : "through-hole"}</td>
+            <td>{p.lcsc || <span className="warn-text">missing</span>}</td></tr>
+        ))}</tbody>
+      </table>
+      <h3>Manifest</h3>
+      <table className="small"><tbody>{Object.entries(check.manifest).map(([f, sha]) => (
+        <tr key={f}><td className="mono">{f}</td><td className="mono muted">{sha}</td></tr>
+      ))}</tbody></table>
+    </section>
+  );
+}
+
 interface Evidence {
   method: string;
   counts: Record<string, number>;

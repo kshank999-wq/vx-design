@@ -7,7 +7,7 @@
 | Reference product | VC Smart Slate |
 | Initial deployment | In-house, private |
 | Stack | Vercel · Supabase · GitHub, with separate long-running engineering workers |
-| Status | Merged working specification, 17 Nov 2026. Architecture and plan, not evidence that any vendor API works or that any hardware design has passed professional validation. |
+| Status | Merged working specification, 17 Nov 2026 (owner decisions and G4.5 recorded the same day). Architecture and plan, not evidence that any vendor API works or that any hardware design has passed professional validation. |
 
 ## 0. Document control
 
@@ -38,8 +38,8 @@ v0.1 and v1.0 both use G-numbers for different things, and v1.0 and the assessme
 | 1 | v1.0 numbers product stages G0–G8; v0.1 numbers build gates G0–G6 (G0–G4 already built). | Product stages are renamed S0–S8 (§0.1). |
 | 2 | v1.0 drops plan-first execution, supervision modes, task states, unattended runs, immutable decisions and Flux import. | Kept: they are the platform's core and already built (§7) or planned (§16). v1.0's agents run *as executors inside* that workflow. |
 | 3 | v1.0 lists REST endpoints (`POST /projects` …). The built system uses Supabase RLS, SQL functions and Next.js server actions; v0.1 defers a public API. | v1.0's endpoints are adopted as **logical interfaces** (§18). They map to existing functions now. A public REST API stays deferred. |
-| 4 | v1.0 starts every product with a concept mockup (S1). The platform has no image generation and uses one model provider (Claude, text only). | S1 is planned as a **workflow plus provider adapter**: render from the CAD viewport (KiCad and CadQuery), plus an optional external image provider labelled "cosmetic concept, not CAD" (§9). |
-| 5 | v1.0 mentions clients, supplier access windows and role-based access, which implies external users. v0.1 is in-house only, with multi-tenancy deferred. | In-house first is unchanged. Roles (owner, engineer, reviewer, viewer) exist today. Client and supplier roles are **Planned** with the RFQ work (§12), not in the MVP. |
+| 4 | v1.0 starts every product with a concept mockup (S1). The platform has no image generation and uses one model provider (Claude, text only). | Owner decided: add an image-generation provider behind an adapter for concepts; CAD-model renders take over later (§9). |
+| 5 | v1.0 mentions clients, supplier access windows and role-based access, which implies external users. v0.1 is in-house only, with multi-tenancy deferred. | Owner decided: clients get logins and a project workspace (§17.1, M-UI). Supplier roles come with M-RFQ. Billing and public sign-up stay deferred. |
 | 6 | v1.0 has a 12–16 week plan; the assessment estimates 8–10 months for a useful in-house tool. | The roadmap (§19) is milestone-based with exit tests. The 16-week table is kept only as v1.0's own planning target, not a commitment. |
 | 7 | v0.1 G4 passes on "aligned genuine **manufacturer** geometry" and "fit results". G4 as built uses KiCad library 3D models (generic package shapes), and there is no enclosure yet. | G4 is recorded as **Built, with two carried items**: manufacturer STEP per part (needs sourcing, M-SRC) and fit results (needs enclosure, M-ENC). |
 | 8 | Sourcing: v1.0 has Nexar (primary), DigiKey and Mouser. v0.1 has Nexar and DigiKey. The assessment adds the JLCPCB/LCSC catalog. | v1.0's three-provider order is adopted. LCSC/JLC is added as an **assembly catalog** (basic/extended parts for JLC assembly), not a fourth distributor (§10). |
@@ -130,11 +130,12 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | G2 — Worker backbone | Durable queue, logs, checkpoints, budgets, locks | Browser may close; an authorized run resumes with no duplicate committed work | **Built** |
 | G3 — First circuit | Component evidence, editable schematic, ERC report | A simple test sub-board opens and checks in KiCad | **Built**: KiCad CLI checks pass; the desktop app is untested. Tested with a fixture circuit; a real design needs an API key. |
 | G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**, with two carried items: manufacturer STEP per part (M-SRC) and fit results (M-ENC) |
-| G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | Next |
-| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | Planned; blocked on API keys |
+| G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | **Built**: package checked independently of KiCad. The physical order needs a real design (API key) and LCSC numbers for assembly (M-SRC). |
+| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Next** (owner decision 17 Nov); blocked on API keys |
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | Planned |
-| M-CON — Concept | S1 workflow: concept variants, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
+| M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
+| M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | Planned |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | Planned |
 | G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | Planned (move earlier if the motherboard work lives in Flux) |
 | G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | Planned |
@@ -305,12 +306,18 @@ A community footprint or 3D model is never trusted until its geometry and pad ma
 
 - **Inputs:** approved feasibility pre-check (S0), target envelope, display and battery choices, brand and material preferences.
 - **Outputs:** 2–4 concept variants (moodboard or renders), rough internal envelope, colour and material options, annotated decisions, client sign-off and a recorded **design freeze**.
-- **Rendering:**
-  - primary: renders from the CAD viewport (KiCad `pcb render` for boards, CadQuery/three.js for housings);
-  - fallback: Blender automation;
-  - cosmetic concepts only: an external image-generation provider through the adapter framework.
+- **Rendering** (owner decision, 17 Nov 2026):
+  - **Early concepts come from an image-generation provider** behind a provider-neutral adapter, the same pattern as the
+    model gateway: `generateConcept(prompt, references, n)` returns images plus provider, model, prompt and seed. Candidates
+    are Google's Gemini image model ("Nano Banana") and OpenAI's image API. Each needs its terms, data-sharing and
+    pricing reviewed before use, and keys are stored as worker secrets. The owner has used ChatGPT and Claude Design
+    for concepts; Claude itself does not generate images, so a second provider is required.
+  - **Later mock-ups come from the CAD 3D model**: board STEP plus enclosure (M-ENC), rendered from the CAD viewport
+    (KiCad `pcb render`, CadQuery/three.js, Blender automation as fallback). These replace the generated concepts as the design
+    matures.
   
-  Every concept image is labelled **"concept, not CAD"** and is never used as engineering geometry.
+  Every generated image is labelled **"concept, not CAD"** and is never used as engineering geometry. Generated images,
+  prompts and references are stored as artifacts with their provenance.
 - The design freeze becomes an approved decision that S2+ tasks depend on. Changing it triggers change control (§7).
 
 ## 10. Sourcing and three-provider fallback — from v1.0 (Planned, M-SRC)
@@ -335,6 +342,19 @@ Nexar is the API platform for Octopart data, so the two are not separate fallbac
 **Distributor experience:**
 - Catalog parts show the exact MPN, approved variants, distributor, price breaks, availability date, region, datasheet and purchase link.
 - A saved cart or draft PO is created where supported. Purchasing is always human-authorized.
+
+### 10.1 Manufacturer 3D model library (owner decision, 17 Nov 2026)
+
+A database of manufacturer 3D models, filled per project:
+- for each sourced MPN, fetch the manufacturer's STEP (manufacturer site first, then licensed library providers such as
+  SnapEDA, Ultra Librarian or SamacSys, each with its licence recorded), store it once per part with its sha256, source and
+  licence, and link it to every project that uses the part;
+- keep the manufacturer's mechanical data with it (package drawing dimensions, mounting and keep-out notes, connector mating
+  side), so placement and enclosure work integrate the part per its specification;
+- check the model against the footprint (pad-to-model overlay, body height against the datasheet) before it replaces
+  KiCad's generic model; until then the generic model stays and the 3D model report says which is used.
+
+This closes G4's carried item (manufacturer geometry) and feeds the enclosure fit work (M-ENC).
 
 **Power planning** (assessment §3.4) ships with M-SRC as deterministic math, not model guesswork:
 - power tree, per-rail budgets, regulator dissipation, thermal estimate, battery runtime, inrush and sequencing;
@@ -535,6 +555,24 @@ An imported board is never assumed verified.
 | Supplier comparison / BOM | Offers with live/cached/estimate labels, alternates, landed cost | Planned (M-SRC) |
 | Revision browser | Released revisions, sign-offs, manifests | Planned |
 
+### 17.1 Client workspace (owner decision, 17 Nov 2026) — M-UI
+
+Clients get their own login and a page per project. The project page is a three-part workspace:
+
+| Area | Content |
+|---|---|
+| Chat (left) | A running dialogue with the project, like Claude or ChatGPT: ask questions, give requirements and feedback, approve or return work. Messages are stored per project; the assistant answers from the project's requirements, plan, outputs and evidence, and its actions go through the same plan, approvals and audit as everything else. |
+| Centre | What has been done: reports, schematic, layout, 3D views, concepts, fab package. The viewers built in G3–G4.5 move here. |
+| Checklist (right) | The live plan: what is running, done and next. At an approval point the work **stops**, the checklist shows "approval needed", and the client approves or returns it with a note. |
+
+Implementation notes:
+- The checklist and approval stops are the existing plan, runs and `decide_task`; the chat is new (project
+  conversation table, streaming responses, tool calls limited to reading the project and creating plan changes or
+  approvals that still need confirmation).
+- Client accounts are project members with a `client` role: they see only their projects, approve at their stops, and
+  never see internal notes, costs or other clients. Engineers keep the full views.
+- External accounts arrive with M-UI rather than waiting for M-RFQ (this replaces open decision 3).
+
 ## 18. Data and API contracts
 
 **Built schema:**
@@ -589,12 +627,12 @@ v1.0's backlog, merged with build status:
 | P2 | Power/thermal validation, BOM optimization proposals | Ranked recommendations with evidence and approvals | M-SRC (calculator) + §14 |
 | P3 | Production test, compliance docs, price analytics | Pilot package traceable to revisions and results | Later |
 
-**Recommended next order** (open decision §21.1):
-1. **G4.5 fab package.** This is 2–3 weeks and needs no keys. It ends with ordering and testing the timecode board, which is the real acceptance test.
-2. **M-SRC.** Starts as soon as distributor keys arrive.
+**Next order** (owner decisions, §21):
+1. **G4.5 fab package.** *Built.* Its exit test is ordering and testing the timecode board, which needs a real design.
+2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. It runs alongside 1 and 2, since it needs no hardware.
 4. **M-ENC.**
-5. **M-CON**, **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
+5. **M-UI** (client workspace), **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
 v1.0's 16-week sequence is kept as a target, not a commitment:
 - weeks 1–2: foundation and source registry;
@@ -618,13 +656,25 @@ Weeks 7–9 are already largely delivered.
 8. **Paid standards**: decide which need licensing at their latest editions.
 9. **Outside reviewers** for battery, power, timecode, RF/EMC, industrial design and manufacturing DFM.
 10. **Flux export** of the existing Smart Slate work (for G5).
+11. **Image provider for concepts**: pick one (e.g. Google Gemini image / "Nano Banana", or OpenAI) and get an API key once
+    its terms and data-sharing are acceptable (M-CON).
 
-## 21. Open decisions (need the owner)
+## 21. Owner decisions
 
-1. **Next milestone after G4.5.** Recommended: M-SRC as soon as keys arrive, with M-KB alongside (§19). The alternative is to follow v1.0 strictly and do M-KB and the requirement wizard first.
-2. **Concept rendering provider (S1).** Use CAD-viewport renders only, or add an external image-generation provider for cosmetic concepts? The latter is a second AI vendor and needs its own terms and data-sharing review.
-3. **When external users arrive.** Client approval of concepts and supplier access windows imply external accounts. Keep them in-house-only until M-RFQ (recommended), or bring them earlier?
-4. **Manufacturer STEP models.** Fetch them per MPN once sourcing exists (SnapEDA, Ultra Librarian or manufacturer sites, each with licence review), or accept KiCad generic models until a part is chosen for production?
+Decided 17 Nov 2026:
+1. **Next milestone after G4.5: parts sourcing (M-SRC).** The knowledge base (M-KB) runs alongside where it does not
+   compete for the same work.
+2. **Concept images: add an image-generation provider** (e.g. Gemini "Nano Banana" or OpenAI) behind an adapter, for
+   concepts; later mock-ups come from the CAD 3D model (§9).
+3. **Manufacturer 3D models: build a library**, filled per project, with STEP plus the manufacturer's mechanical data
+   (§10.1).
+4. **Clients get logins and a project workspace** with chat, a live checklist with approval stops, and a central viewer
+   (§17.1, M-UI).
+
+Still open:
+- Which image provider to start with, after its terms and pricing are reviewed.
+- When M-UI is scheduled relative to M-SRC and M-ENC (recommended: start the workspace layout and chat once M-SRC's
+  adapters are in, because the chat is most useful once there is sourcing data to talk about).
 
 ## 22. Success metrics and launch boundaries
 

@@ -190,3 +190,35 @@ export function toLayoutCheck(r: LayoutBuildResult): LayoutCheck {
   }
   return { ok: true, stage: "built", problems: [], warnings };
 }
+
+// --- Fab package (G4.5) --------------------------------------------------------------------
+
+interface FabProblem { code: string; message: string }
+
+export interface FabPackageResult {
+  ok: boolean;
+  stage: "drc" | "built" | "kicad";
+  error?: string;
+  project?: string;
+  revision?: string;
+  generator_version?: string;
+  kicad_version?: string;
+  profile?: { name: string; house: string; assembly: boolean; description: string; finish: string } & Record<string, unknown>;
+  drc?: { errors: number; warnings: number; unconnected: number; parity: number; waived: number };
+  problems?: FabProblem[];
+  warnings?: FabProblem[];
+  board?: { width_mm: number; height_mm: number; copper_layers: number; holes: { plated: number; nonplated: number; vias: number };
+            min_drill_mm: number | null; min_track_mm: number | null };
+  gerbers?: { ok: boolean; layers: string[]; outline_mm: [number, number]; drill_hits: { plated: number; nonplated: number };
+              min_drill_mm: number | null };
+  assembly?: { ok: boolean; cpl_rows: number; bom_lines: number; lcsc_missing: string[];
+               rotation_corrections: { ref: string; board: number; cpl: number }[] };
+  panel?: { size_mm: [number, number]; boards: number } | null;
+  files?: Partial<Record<"package" | "notes" | "gerbers" | "bom" | "cpl" | "assembly_top" | "assembly_bottom" | "drill_map" |
+                         "panel_gerbers" | "panel_render" | "check", string>>;
+}
+
+/** Builds and checks the fab package for a routed KiCad project zip. */
+export async function buildFabPackage(tools: EngineeringTools, projectZip: string, outDir: string): Promise<FabPackageResult> {
+  return call(tools, ["fab-package", "--project", projectZip, "--out", outDir], undefined, 1_800_000) as Promise<FabPackageResult>;
+}

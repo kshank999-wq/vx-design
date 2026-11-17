@@ -21,6 +21,10 @@ FROM ${ENGINEERING_IMAGE}
 USER root
 COPY --from=deps /usr/local/bin/node /usr/local/bin/node
 COPY --from=deps /app /app
+# gerbonara (Apache-2.0) re-reads the generated Gerbers and drill files independently of KiCad (G4.5).
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -f /run/secrets/extra_ca ]; then export PIP_CERT=/run/secrets/extra_ca; fi \
+ && /opt/vx/venv/bin/pip install --no-cache-dir gerbonara==1.6.3
 COPY services/engineering/vx_eng /opt/vx/vx_eng
 ENV VX_ENG_DIR=/opt/vx \
     VX_LIB_INDEX=/opt/vx/kicad-lib-index.json \

@@ -44,7 +44,7 @@ No arbitrary model-generated shell commands; each adapter exposes fixed operatio
 tool version and config with every output; cap CPU, memory and time; no outbound network
 from tool processes unless an adapter needs it.
 
-## vx_eng (G3, G4)
+## vx_eng (G3, G4, G4.5)
 
 `vx_eng/` is the engineering library the worker calls as a subprocess. It prints one JSON document.
 
@@ -54,6 +54,7 @@ python3 -m vx_eng build --spec circuit.json --out dir  # project + ERC + netlist
 python3 -m vx_eng footprints --spec circuit.json      # courtyard extents per footprint, fab profiles (for the layout prompt)
 python3 -m vx_eng layout-check --spec circuit.json --layout layout.json
 python3 -m vx_eng layout-build --spec circuit.json --layout layout.json --out dir   # board + route + DRC + 3D + exports
+python3 -m vx_eng fab-package --project project.zip --out dir   # DRC gate, KiKit fab files, gerbonara re-read, drawings, panel, zip
 ```
 
 - `library.py` holds a name index of every installed symbol and footprint, built at image build time. It
@@ -73,7 +74,13 @@ python3 -m vx_eng layout-build --spec circuit.json --layout layout.json --out di
   - runs DRC with `--schematic-parity --refill-zones`;
   - fetches 3D models per footprint;
   - renders and exports (`pcb render`, SVG, PDF, STEP, GLB).
-- `fab.py` holds the fab design-rule profiles. They are written into the `.kicad_pro` and applied to the board
+- `release.py` (G4.5) builds the fab package:
+  - DRC gate;
+  - `kikit fab <house>`;
+  - an independent Gerber and drill re-read with gerbonara;
+  - CPL and BOM comparisons with the board;
+  - assembly and drill drawings, fab notes, a 2x2 KiKit panel, and a zip with a manifest.
+- `fab.py` holds the fab design-rule profiles, including the ordering defaults written into the fab notes. They are written into the `.kicad_pro` and applied to the board
   for the router.
 
 Tests (`tests/test_vx_eng.py`) include negative controls. One removes the power source, and ERC must report

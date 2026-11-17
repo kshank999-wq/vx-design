@@ -97,9 +97,9 @@ authorized, the browser can be closed.
 Executors so far:
 - **Design briefs** cover architecture, components, power, thermal, mechanical, enclosure and documentation
   tasks. They are Claude-drafted and checked against the task's requirements and acceptance tests.
-- **Simulation, sourcing, verification and fabrication tasks** are blocked with a plain reason until their
-  executors land. Nothing is simulated. Schematic (G3) and PCB layout (G4) tasks wait for the KiCad
-  engineering worker.
+- **Simulation, sourcing and verification tasks** are blocked with a plain reason until their
+  executors land. Nothing is simulated. Schematic (G3), PCB layout (G4) and manufacturing
+  (G4.5) tasks wait for the KiCad engineering worker.
 
 ```bash
 pnpm worker                        # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY (or VX_LLM=offline)
@@ -197,13 +197,54 @@ Limits:
 - Two-layer, low-speed boards only. Freerouting has no impedance control and no length matching.
 - Placement quality depends on the model. The checks guarantee a clean, routed, schematic-matched board, not a
   good one, so review it in KiCad.
-- Gerbers, drill, pick-and-place and panelization are G4.5.
+- Gerbers, drill, pick-and-place and panelization are in G4.5 (below).
 
 ```bash
 docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker .   # now includes the PCB pipeline
 pnpm test:eng                       # placement checks, routed fixture board: DRC + parity clean; unrouted and drifted negative controls
 pnpm test:g4                        # schematic -> approve -> layout; worker killed after layout; fresh-KiCad DRC/parity/ERC of the stored project
 pnpm test:e2e:g4                    # browser: approve schematic, continue, 3D board, DRC report, models, placement, approve
+```
+
+## G4.5: fab package
+
+Manufacturing tasks also run on the KiCad engineering worker. They take the **committed routed board** of an
+upstream PCB layout task, so the layout must be approved first. No model is involved: every step is
+deterministic.
+
+1. **Release gate.** KiCad DRC with schematic parity must be clean on the board being released.
+2. **Board-house files.** KiKit writes the package for the board's fab profile (`jlcpcb` or `oshpark`):
+   - Gerbers (X2) plus Excellon drill files, plated and non-plated separate, zipped the way the house expects;
+   - for JLCPCB, the assembly BOM and pick-and-place (CPL), with KiKit's rotation corrections.
+3. **Independent checks.** gerbonara re-reads the Gerbers and drill files without KiCad and checks:
+   - required layers and outline size;
+   - copper-to-edge clearance against the fab profile;
+   - silkscreen inside the board;
+   - hole count (plated, non-plated, vias) and the smallest drill.
+   
+   The CPL is compared with the board's footprint positions and sides, and the BOM with its components.
+4. **Package contents:**
+   - assembly drawings and a drill map;
+   - `FAB-NOTES.txt`, the settings to enter on the order form (size, layers, thickness, copper, finish, mask,
+     minimum track and drill, hole counts, missing LCSC numbers);
+   - an optional 2x2 KiKit panel with mousebites, rails, tooling holes and fiducials;
+   - one zip with a sha256 `manifest.json`.
+5. **Release sign-off.** A fab package always waits for approval. The package page lists the ordering steps,
+   shows the fab notes and the panel, and has a check page (Gerbers, CPL, parts, manifest). VX Design never
+   places orders.
+
+Limits:
+- JLCPCB assembly needs an LCSC part number on every line. Until sourcing (M-SRC) fills them in, the package
+  says so and only the bare boards can be ordered.
+- KiKit's rotation corrections cover common packages; always check the house's placement preview.
+- The G4.5 exit test is physical: order the board, assemble it and test it. That needs a real (not offline)
+  design.
+
+```bash
+docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker .   # adds gerbonara
+pnpm test:eng                       # fab package + negative controls: wrong outline/drills, fab limits, CPL/BOM tampering, DRC gate
+pnpm test:g45                       # schematic -> layout -> fab package via the worker; manifest and package re-checked
+pnpm test:e2e:g45                   # browser: order card, fab notes, independent checks, panel, approve
 ```
 
 ## Database overview

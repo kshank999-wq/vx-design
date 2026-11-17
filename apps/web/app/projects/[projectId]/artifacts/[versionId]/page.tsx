@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, LayoutView, ModelReportView } from "@/components/ArtifactViews";
+import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, LayoutView, ModelReportView } from "@/components/ArtifactViews";
 import { BoardViewer } from "@/components/BoardViewer";
 import { requireUser } from "@/lib/auth";
 
@@ -53,6 +53,14 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
   };
   const isProject = suffix === "kicad-project";
   const hasBoard = !!sibling("board-glb");
+  const isFab = suffix === "fab-package";
+  let fabNotes: string | null = null;
+  if (isFab && sibling("fab-notes")) {
+    const { data } = await supabase.storage.from("project-files").download(sibling("fab-notes")!.storage_path);
+    fabNotes = data ? await data.text() : null;
+  }
+  const gerbersUrl = isFab ? await signedOf("gerbers") : null;
+  const panelUrl = isFab ? await signedOf("panel-render") : null;
   const [svgUrl, renderUrl, glbUrl] = await Promise.all([
     isProject && !hasBoard ? signedOf("schematic-svg") : null,
     (isProject || suffix === "board-glb") && hasBoard ? signedOf("render-3d") : null,
@@ -98,6 +106,21 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
           {glbUrl && <BoardViewer src={glbUrl} poster={renderUrl ?? undefined} />}
         </div>
       )}
+      {isFab && (
+        <div className="card" data-testid="order-card">
+          <h3>Order this board</h3>
+          <ol className="small">
+            <li>Review the fab notes, the checks above and the assembly drawing.</li>
+            <li>Upload <span className="mono">gerbers.zip</span>{gerbersUrl && <> (<a href={gerbersUrl} download>download</a>)</>} on the board
+              house&apos;s quote page and enter the settings from the fab notes. It also sits inside the package zip.</li>
+            <li>For assembly, also upload <span className="mono">bom.csv</span> and <span className="mono">cpl.csv</span>, then check the
+              house&apos;s placement preview. Parts without an LCSC number cannot be assembled by JLCPCB yet.</li>
+            <li>Ordering is done by you on the board house&apos;s site; VX Design never places orders.</li>
+          </ol>
+          {fabNotes && <pre className="doc" data-testid="fab-notes">{fabNotes}</pre>}
+          {panelUrl && <><h3>Optional 2x2 panel</h3><img className="render" src={panelUrl} alt="Panel render" /></>}
+        </div>
+      )}
       {type === "image/png" && signed?.signedUrl && <img className="render" src={signed.signedUrl} alt={`${artifact.name} render`} />}
       {type === "model/gltf-binary" && signed?.signedUrl && (
         <div className="card"><p className="small muted">Drag to orbit, scroll to zoom. Exported by KiCad with tracks, pads, pours, silkscreen and the
@@ -117,7 +140,8 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       {json && suffix === "drc-report" && <DrcView report={json} />}
       {json && suffix === "model-report" && <ModelReportView models={json} />}
       {json && suffix === "layout" && <LayoutView layout={json} />}
-      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout"].includes(suffix) &&
+      {json && suffix === "fab-check" && <FabCheckView check={json} />}
+      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check"].includes(suffix) &&
         <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
       {text !== null && type.startsWith("text/csv") && <CsvTable csv={text} />}
       {text !== null && !json && !type.startsWith("text/csv") && <pre className="doc">{text}</pre>}
