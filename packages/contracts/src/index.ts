@@ -98,6 +98,15 @@ export const PlannedTask = z.object({
 });
 export type PlannedTask = z.infer<typeof PlannedTask>;
 
+export const RunStatus = z.enum(["pending", "running", "paused", "completed", "stopped", "failed", "canceled"]);
+export type RunStatus = z.infer<typeof RunStatus>;
+export const ExecutionStatus = z.enum(["queued", "running", "succeeded", "failed", "canceled", "timed_out", "interrupted"]);
+export type ExecutionStatus = z.infer<typeof ExecutionStatus>;
+
+/** What a worker is told when it renews its lease (public.heartbeat_execution). */
+export const HeartbeatDirective = z.enum(["continue", "yield", "lost"]);
+export type HeartbeatDirective = z.infer<typeof HeartbeatDirective>;
+
 /** Unattended run authorization (§7). */
 export const RunAuthorization = z.object({
   mode: SupervisionMode,

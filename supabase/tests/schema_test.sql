@@ -7,7 +7,6 @@
 grant usage on schema public to authenticated, service_role;
 grant all on all tables in schema public to authenticated, service_role;
 grant all on all sequences in schema public to authenticated, service_role;
-grant execute on function public.claim_next_task(text, uuid) to service_role;
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'alice@test'),
@@ -135,20 +134,24 @@ end $$;
 
 -- 8. Worker queue: only tasks with completed upstream are claimable; no double claims.
 select pg_temp.act_as(null);
+insert into public.runs (id, project_id, plan_id, mode, status, max_ai_spend_usd, max_compute_spend_usd)
+values ('77777777-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222222', 'autonomous', 'running', 10, 10);
 set role service_role;
 do $$
 declare e public.executions;
+  r constant uuid := '77777777-0000-0000-0000-000000000001';
 begin
-  e := public.claim_next_task('worker-1');
+  e := public.claim_next_task('worker-1', r);
   if e.task_id <> '33333333-0000-0000-0000-000000000001' then
     raise exception 'first claim should be arch, got %', e.task_id;
   end if;
-  e := public.claim_next_task('worker-2');
+  e := public.claim_next_task('worker-2', r);
   if e.id is not null then raise exception 'pwr must wait for arch; claimed %', e.task_id; end if;
 
   update public.tasks set status = 'validating' where key = 'arch';
   update public.tasks set status = 'complete'   where key = 'arch';
-  e := public.claim_next_task('worker-2');
+  e := public.claim_next_task('worker-2', r);
   if e.task_id <> '33333333-0000-0000-0000-000000000002' or e.attempt <> 1 then
     raise exception 'second claim should be pwr attempt 1';
   end if;

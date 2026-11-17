@@ -135,3 +135,28 @@ test("validatePlan catches each structural problem", () => {
   assert.deepEqual(codes({ ...base, tasks: [task("a", [], [])], deferred_requirements: [{ ref: "R1", reason: "later" }] }), []);
   assert.deepEqual(codes({ ...base, tasks: [task("a", [], [])], deferred_requirements: [{ ref: "R7", reason: "x" }] }), ["uncovered", "unknown_deferred"]);
 });
+
+test("brief: missing answers trigger one repair round, then fail", async () => {
+  const { generateBrief, validateBrief, BriefValidationError, ScriptedModel } = await import("../src/index.ts");
+  const input = {
+    projectContext: "Test",
+    task: { key: "arch", title: "Architecture", discipline: "architecture", description: null },
+    requirements: [{ refCode: "REQ-FUN-001", kind: "functional", priority: "must", text: "Output LTC" }],
+    acceptanceTests: [{ id: "AT1", description: "Reviewed", method: "human_review" }],
+    upstream: [], reviewNotes: ["Explain the clock source"],
+  };
+  const good = {
+    summary: "Use an MCU with a TCXO.", approach: "Because jitter.",
+    requirement_responses: [{ ref: "REQ-FUN-001", status: "addressed", response: "LTC via SPI", open_question: null }],
+    acceptance_responses: [{ test_id: "AT1", claim: "needs_review", explanation: "Reviewer judges." }],
+    proposed_decisions: [], risks: [], assumptions: [], open_questions: [],
+  };
+  const incomplete = { ...good, requirement_responses: [], acceptance_responses: [{ test_id: "AT9", claim: "met", explanation: "x" }] };
+  const repaired = new ScriptedModel([() => incomplete, () => good]);
+  const r = await generateBrief(input, repaired);
+  assert.equal(r.attempts, 2);
+  assert.match(String(repaired.calls[0]!.messages[0]!.content), /Explain the clock source/);
+  assert.match(String(repaired.calls[1]!.messages.at(-1)!.content), /no response for REQ-FUN-001/);
+  assert.deepEqual(validateBrief(good as never, input), []);
+  await assert.rejects(generateBrief(input, new ScriptedModel([() => incomplete, () => incomplete])), BriefValidationError);
+});

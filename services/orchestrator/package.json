@@ -1,0 +1,19 @@
+{
+  "name": "@vx/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "bin": { "vx-worker": "./src/main.ts" },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "@vx/contracts": "workspace:*",
+    "@vx/planning": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

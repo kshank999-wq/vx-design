@@ -20,3 +20,18 @@ test("offline model runs the full pipeline on the sample spec and passes validat
   const covered = new Set(plan.tasks.flatMap((t) => t.requirementRefs));
   for (const r of ex.requirements) assert.ok(covered.has(r.refCode), `${r.refCode} uncovered`);
 });
+
+test("offline brief answers every requirement and test as open", async () => {
+  const { generateBrief, OfflineModel } = await import("../src/index.ts");
+  const input = {
+    projectContext: "Test",
+    task: { key: "power-budget", title: "Power budget", discipline: "power", description: null },
+    requirements: [{ refCode: "REQ-PWR-001", kind: "power", priority: "must", text: "5 V input" },
+                   { refCode: "REQ-PWR-002", kind: "power", priority: "must", text: "3.3 V rail" }],
+    acceptanceTests: [{ id: "AT1", description: "Budget reviewed", method: "human_review" }],
+    upstream: [], reviewNotes: [],
+  };
+  const r = await generateBrief(input, new OfflineModel());
+  assert.deepEqual(r.brief.requirement_responses.map((x) => x.ref), ["REQ-PWR-001", "REQ-PWR-002"]);
+  assert.deepEqual(r.brief.acceptance_responses.map((x) => x.claim), ["needs_review"]);
+});

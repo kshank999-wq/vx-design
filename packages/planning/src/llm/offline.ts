@@ -18,7 +18,9 @@ const KIND_KEYWORDS: [string, RegExp][] = [
 export class OfflineModel implements LanguageModel {
   async generate<T>(req: GenerateRequest<T>): Promise<GenerateResult<T>> {
     const prompt = String(req.messages[0]?.content ?? "");
-    const raw = req.purpose.startsWith("extract") ? this.extract(prompt) : this.plan(prompt);
+    const raw = req.purpose.startsWith("extract") ? this.extract(prompt)
+      : req.purpose.startsWith("design_brief") ? this.brief(prompt)
+      : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {
       output,
@@ -47,6 +49,23 @@ export class OfflineModel implements LanguageModel {
       });
     }
     return { requirements, open_questions: [] };
+  }
+
+  /** A template that answers every requirement and test as open: no engineering content. */
+  private brief(prompt: string) {
+    const section = (name: string) => prompt.split(`${name}:\n`)[1]?.split("\n\n")[0] ?? "";
+    const refs = [...section("Requirements").matchAll(/^- (REQ-[A-Z]+-\d+) /gm)].map((m) => m[1]!);
+    const tests = [...section("Acceptance tests").matchAll(/^- (AT\d+) /gm)].map((m) => m[1]!);
+    return {
+      summary: "Offline stand-in: no analysis was performed.",
+      approach: "The offline heuristic does not do engineering work. Configure ANTHROPIC_API_KEY to draft real briefs.",
+      requirement_responses: refs.map((ref) => ({ ref, status: "open", response: "Not analysed (offline mode).", open_question: null })),
+      acceptance_responses: tests.map((test_id) => ({ test_id, claim: "needs_review", explanation: "Not assessed (offline mode)." })),
+      proposed_decisions: [],
+      risks: [],
+      assumptions: [],
+      open_questions: [],
+    };
   }
 
   private plan(prompt: string) {

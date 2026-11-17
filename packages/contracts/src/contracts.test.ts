@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PlannedTask, TASK_TRANSITIONS, TaskStatus, topologicalOrder } from "./index.ts";
+import { ExecutionStatus, PlannedTask, RunStatus, TASK_TRANSITIONS, TaskStatus, topologicalOrder } from "./index.ts";
 
 const migrationsDir = join(import.meta.dirname, "../../../supabase/migrations");
 const sql = readdirSync(migrationsDir)
@@ -15,6 +15,17 @@ test("task_status enum matches SQL", () => {
   assert.ok(m, "task_status enum not found in migrations");
   const sqlValues = [...m[1]!.matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
   assert.deepEqual(sqlValues, TaskStatus.options);
+});
+
+test("run and execution status enums match SQL", () => {
+  const values = (name: string) => {
+    const m = sql.match(new RegExp(`create type public\\.${name} as enum \\(([^)]*)\\)`));
+    assert.ok(m, `${name} enum not found`);
+    const added = [...sql.matchAll(new RegExp(`alter type public\\.${name} add value if not exists '([a-z_]+)'`, "g"))].map((x) => x[1]);
+    return [...[...m[1]!.matchAll(/'([a-z_]+)'/g)].map((x) => x[1]), ...added];
+  };
+  assert.deepEqual(values("run_status"), RunStatus.options);
+  assert.deepEqual(values("execution_status"), ExecutionStatus.options);
 });
 
 test("task transitions match SQL task_transition_allowed", () => {

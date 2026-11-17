@@ -82,6 +82,21 @@ importers:
         specifier: ^9.15.4
         version: 9.15.4
 
+  services/orchestrator:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.119.0
+        version: 2.119.0(@opentelemetry/api@1.10.0)
+      '@vx/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@vx/planning':
+        specifier: workspace:*
+        version: link:../../packages/planning
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
 packages:
 
   '@anthropic-ai/sdk@1.9.0':

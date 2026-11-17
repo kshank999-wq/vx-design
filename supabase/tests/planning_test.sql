@@ -41,7 +41,7 @@ insert into public.requirements (project_id, ref_code, kind, text, priority, blo
 -- 1. Carol (engineer) stores a generated plan atomically.
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 create temp table ids (name text primary key, id uuid);
-grant all on ids to authenticated;
+grant all on ids to authenticated, service_role;
 insert into ids select 'v1', public.create_plan_version('aaaaaaaa-0000-0000-0000-000000000001', $json${
   "summary": "First plan",
   "generator": {"model": "scripted", "prompt_version": "plan-v1"},
@@ -133,8 +133,10 @@ select pg_temp.check((select count(*) = 1 from public.plans where project_id = '
 
 -- 7. Supersede is refused while the baseline has running work.
 select pg_temp.act_as(null);
+insert into public.runs (project_id, plan_id, mode, status, max_ai_spend_usd, max_compute_spend_usd, allowed_risk_levels)
+values ('aaaaaaaa-0000-0000-0000-000000000001', (select id from ids where name = 'v2'), 'autonomous', 'running', 1, 1, '{low,medium,high}');
 set role service_role;
-select public.claim_next_task('worker-1');
+select pg_temp.check((select (public.claim_next_task('worker-1', (select id from public.runs where plan_id = (select id from ids where name = 'v2')))).id is not null), 'claimed');
 reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 insert into ids select 'v3', public.revise_plan((select id from ids where name = 'v2'));
