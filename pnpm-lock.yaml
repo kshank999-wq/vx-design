@@ -32,6 +32,9 @@ importers:
       '@vx/planning':
         specifier: workspace:^
         version: link:../../packages/planning
+      '@vx/power':
+        specifier: workspace:*
+        version: link:../../packages/power
       next:
         specifier: ^16.4.6
         version: 16.4.6(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -68,6 +71,9 @@ importers:
       '@vx/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@vx/power':
+        specifier: workspace:*
+        version: link:../power
       mammoth:
         specifier: ^1.13.0
         version: 1.13.0
@@ -85,6 +91,12 @@ importers:
         specifier: ^9.15.4
         version: 9.15.4
 
+  packages/power:
+    dependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   services/orchestrator:
     dependencies:
       '@supabase/supabase-js':
@@ -99,6 +111,9 @@ importers:
       '@vx/planning':
         specifier: workspace:*
         version: link:../../packages/planning
+      '@vx/power':
+        specifier: workspace:*
+        version: link:../../packages/power
       unpdf:
         specifier: ^2.2.1
         version: 2.2.1

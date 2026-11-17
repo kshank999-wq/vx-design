@@ -23,7 +23,8 @@
     "test:g45": "./scripts/test-g45.sh",
     "test:e2e:g45": "./scripts/test-e2e-g45.sh",
     "test:msrc": "./scripts/test-msrc.sh",
-    "test:e2e:msrc": "./scripts/test-e2e-msrc.sh"
+    "test:e2e:msrc": "./scripts/test-e2e-msrc.sh",
+    "test:e2e:power": "./scripts/test-e2e-power.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

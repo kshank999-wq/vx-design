@@ -4,6 +4,7 @@ import type { EngineeringTools } from "../engineering.ts";
 import { briefExecutor } from "./brief.ts";
 import { fabExecutor } from "./fab.ts";
 import { pcbExecutor } from "./pcb.ts";
+import { powerExecutor } from "./power.ts";
 import { schematicExecutor } from "./schematic.ts";
 import { sourcingExecutor } from "./sourcing.ts";
 import type { SourcingProvider } from "@vx/integrations";
@@ -33,6 +34,7 @@ const pendingExecutor: Executor = {
 export function executorsFor(engineering: EngineeringTools | null, sourcing: SourcingProvider[] = []): Executor[] {
   return [
     briefExecutor,
+    powerExecutor,
     ...(engineering ? [schematicExecutor(engineering), pcbExecutor(engineering), fabExecutor(engineering)] : []),
     // Only a worker with at least one configured distributor (or the fixture stand-in) takes sourcing tasks.
     ...(sourcing.some((p) => p.configured()) ? [sourcingExecutor(sourcing.filter((p) => p.configured()))] : []),

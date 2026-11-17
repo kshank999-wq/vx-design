@@ -95,8 +95,8 @@ authorized, the browser can be closed.
   checks, recoveries, open approvals, spend, and recommended next steps.
 
 Executors so far:
-- **Design briefs** cover architecture, components, power, thermal, mechanical, enclosure and documentation
-  tasks. They are Claude-drafted and checked against the task's requirements and acceptance tests.
+- **Design briefs** cover architecture, components, thermal, mechanical, enclosure and documentation tasks
+  (power tasks use the power calculator, below). They are Claude-drafted and checked against the task's requirements and acceptance tests.
 - **Simulation, sourcing and verification tasks** are blocked with a plain reason until their
   executors land. Nothing is simulated. Schematic (G3), PCB layout (G4) and manufacturing
   (G4.5) tasks wait for the KiCad engineering worker.
@@ -285,14 +285,60 @@ and the run page names the keys that are missing.
   time; fixture results never do. `part_models` is the manufacturer 3D model library (schema only so far).
   Provider calls are metered in `cost_events`.
 
-Not done yet in M-SRC: the manufacturer 3D model library fetch, the power-tree calculator, and LCSC/JLCPCB's
-own APIs (both need an application). No live distributor call has been made yet, because there are no keys.
+Not done yet in M-SRC: the manufacturer 3D model library fetch, and LCSC/JLCPCB's own APIs (both need an
+application). The power calculator is below. No live distributor call has been made yet, because there are no keys.
 
 ```bash
 pnpm --filter @vx/integrations test        # identity, pricing, BOM resolution, adapter contracts (fake HTTP)
 pnpm --filter @vx/integrations test:live   # real calls; runs each provider whose keys are set
 pnpm test:msrc                             # schematic -> sourcing (fixture worker) + layout -> fab package
 pnpm test:e2e:msrc                         # browser: waits for keys, fixture BOM, approve
+```
+
+## Power calculator
+
+Power tasks (discipline `power`) run on any worker. Claude proposes the power tree and a deterministic
+calculator (`packages/power`) checks it. Calculator errors go back to Claude with the computed numbers, up to 3
+repair rounds.
+
+- **Tree.** The tree describes:
+  - sources: battery (chemistry, cells, capacity, usable fraction), USB or DC, with their voltage range and
+    current limit;
+  - converters: LDO, buck, boost, buck-boost or load switch, with rated input range, maximum current,
+    quiescent current, dropout or efficiency, θJA, Tj(max), soft-start and an `enable_after` for sequencing;
+  - rails with their capacitance;
+  - loads, with current per operating mode and a peak;
+  - modes, with hours per day;
+  - sequencing rules.
+  
+  Every source, converter and load carries a basis: datasheet, requirement, measurement, calculation or
+  assumption.
+- **Calculation.** Voltages are worked out top-down and currents bottom-up, for every mode at the
+  minimum, nominal and maximum source voltage, plus a worst-case peak.
+  - LDO: `Iin = Iout + Iq`, `P = (Vin − Vout)·Iout + Vin·Iq`.
+  - Switcher: `Pin = Vout·Iout/η + Vin·Iq`.
+  - Load switch: `P = I²·Ron`.
+  - Junction temperature: `Tj = Ta(max) + P·θJA`.
+  - Battery runtime: per mode and over the daily profile.
+  - Also efficiency per mode and inrush (`C·V/t_ss`).
+- **Checks:**
+  - converter current against its rating (error over 100%, warning over 80%);
+  - LDO dropout, buck headroom and boost topology;
+  - rated input range;
+  - junction temperature (error over Tj(max), warning within 25 °C);
+  - source and battery limits;
+  - inrush;
+  - sequencing that nothing enforces;
+  - structural errors (unknown rails, two supplies driving one rail, loops).
+  
+  Missing data is reported, never silently passed: an assumed efficiency, no θJA, no dropout, no source
+  limit.
+- **Output.** One `power-budget` artifact holds the tree and the full report. The app shows the tree, the
+  findings, battery runtime, the converter and rail tables, efficiency, and the basis of every number.
+
+```bash
+pnpm --filter @vx/power test        # calculator against hand calculations and every check
+pnpm test:e2e:power                 # browser: power task on a plain worker, report page, approve
 ```
 
 ## Database overview

@@ -99,7 +99,10 @@ async function logs(executionId: string): Promise<string[]> {
   return (data ?? []).map((l) => l.message);
 }
 
-/** No duplicate committed work: one model call and at most one committed version per task. */
+/**
+ * No duplicate work: one model call and one output version per task. Architecture and envelope briefs
+ * commit in autonomous mode; the power budget (offline fixture) waits for review as a validated version.
+ */
 async function assertNoDuplicateWork(runId: string, projectId: string) {
   const execs = await executions(runId);
   const modelCalls = new Map<string, number>();
@@ -111,10 +114,12 @@ async function assertNoDuplicateWork(runId: string, projectId: string) {
     assert.equal(modelCalls.get(key), 1, `${key}: exactly one model call across all executions`);
   }
   const { data: versions } = await admin().from("artifact_versions")
-    .select("artifact_id, produced_by_task_id, status").eq("project_id", projectId);
+    .select("artifact_id, produced_by_task_id, status, validated_at").eq("project_id", projectId);
   const committed = (versions ?? []).filter((v) => v.status === "committed");
-  assert.equal(committed.length, 3, "three committed briefs");
-  assert.equal(new Set(committed.map((v) => v.produced_by_task_id)).size, 3, "one committed version per task");
+  const awaiting = (versions ?? []).filter((v) => v.status === "scratch" && v.validated_at);
+  assert.equal(committed.length, 2, "architecture and envelope briefs committed");
+  assert.equal(awaiting.length, 1, "the offline power budget waits for review");
+  assert.equal(new Set((versions ?? []).map((v) => v.produced_by_task_id)).size, 3, "one output per task");
   assert.equal((versions ?? []).length, 3, "no stray scratch versions from the interrupted attempt");
 }
 
@@ -149,10 +154,10 @@ test("a run survives its worker being killed mid-task, without duplicate work", 
     await assertNoDuplicateWork(runId, projectId);
 
     const report = run!.report as { headline: string; recoveries: unknown[]; next_steps: string[]; final_status: string };
-    assert.equal(run!.status, "stopped", "no KiCad worker is online, so the run stops short of complete");
+    assert.equal(run!.status, "stopped", "the power budget waits for review, so the run stops short of complete");
     assert.equal(report.recoveries.length, 1, "report lists the recovery");
-    assert.match(report.headline, /3 of 4 task\(s\) in scope complete; 1 not started/);
-    assert.ok(report.next_steps.some((s) => /schematic needs a worker that can run schematic tasks/.test(s)));
+    assert.match(report.headline, /2 of 4 task\(s\) in scope complete; 1 awaiting your approval; 1 not started/);
+    assert.ok(report.next_steps.some((s) => /Review and approve power-budget \(unblocks schematic\)/.test(s)), report.next_steps.join(" | "));
   } finally {
     await stopWorker(a);
     if (b) await stopWorker(b);

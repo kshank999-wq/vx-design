@@ -229,3 +229,31 @@ test("layout: the offline fixture layout matches the engineering fixture", async
   assert.deepEqual(parsed.board, OFFLINE_FIXTURE_LAYOUT.board);
   assert.deepEqual(parsed.placements, OFFLINE_FIXTURE_LAYOUT.placements);
 });
+
+test("power: calculator errors go back to the model until the tree passes", async () => {
+  const { generatePowerTree, PowerTreeError, ScriptedModel, OFFLINE_FIXTURE_POWER, renderPowerPrompt } = await import("../src/index.ts");
+  const input = {
+    projectContext: "Test", task: { key: "power-budget", title: "Power budget", description: null },
+    requirements: [{ refCode: "REQ-PWR-001", kind: "power", priority: "must", text: "Run 12 h from one 1S Li-ion cell" }],
+    acceptanceTests: [], upstream: [], reviewNotes: [], circuit: null,
+  };
+  assert.match(renderPowerPrompt(input), /REQ-PWR-001 \[power, must\] Run 12 h/);
+  const ldoFromCell = structuredClone(OFFLINE_FIXTURE_POWER);
+  ldoFromCell.converters[0] = { ...ldoFromCell.converters[0]!, kind: "ldo", efficiency: null, dropout_v: 0.25 };
+  const model = new ScriptedModel([() => ldoFromCell, () => OFFLINE_FIXTURE_POWER]);
+  const r = await generatePowerTree(input, model);
+  assert.equal(r.rounds, 2);
+  assert.equal(r.report.ok, true);
+  assert.equal(r.history[0]!.errors, 1);
+  assert.match(String(model.calls[1]!.messages.at(-1)!.content), /U1: U1 cannot make 3.3 V from 3 V/);
+  const never = new ScriptedModel(Array.from({ length: 4 }, () => () => ldoFromCell));
+  await assert.rejects(generatePowerTree(input, never), (e: unknown) => e instanceof PowerTreeError && e.rounds === 4);
+});
+
+test("power: the offline fixture tree passes the calculator", async () => {
+  const { OFFLINE_FIXTURE_POWER } = await import("../src/index.ts");
+  const { calculate } = await import("@vx/power");
+  const r = calculate(OFFLINE_FIXTURE_POWER);
+  assert.equal(r.ok, true, JSON.stringify(r.findings));
+  assert.ok(r.runtime[0]!.perMode.find((m) => m.mode === "active")!.hours! > 40);
+});

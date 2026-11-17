@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, LayoutView, ModelReportView, SourcedBomView } from "@/components/ArtifactViews";
 import { BoardViewer } from "@/components/BoardViewer";
+import { PowerView } from "@/components/PowerView";
 import { requireUser } from "@/lib/auth";
 
 const MAX_INLINE = 2 * 1024 * 1024;
@@ -76,7 +77,7 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       </div>
       {v.summary && <p>{v.summary}</p>}
       {(v.tool_config as { offline?: boolean })?.offline && (
-        <p className="banner banner-warn">Produced with the offline stand-in, not AI: the design content is a fixed fixture, though the KiCad checks on it are real.</p>
+        <p className="banner banner-warn">Produced with the offline stand-in, not AI: the design content is a fixed fixture, though the checks run on it are real.</p>
       )}
       <dl className="facts small card">
         <dt>Kind</dt><dd>{artifact.kind}</dd>
@@ -142,7 +143,8 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       {json && suffix === "layout" && <LayoutView layout={json} />}
       {json && suffix === "fab-check" && <FabCheckView check={json} />}
       {json && suffix === "sourced-bom" && <SourcedBomView bom={json} />}
-      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check", "sourced-bom"].includes(suffix) &&
+      {json && suffix === "power-budget" && json.tree && json.report && <PowerView tree={json.tree} report={json.report} />}
+      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check", "sourced-bom", "power-budget"].includes(suffix) &&
         <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
       {text !== null && type.startsWith("text/csv") && <CsvTable csv={text} />}
       {text !== null && !json && !type.startsWith("text/csv") && <pre className="doc">{text}</pre>}

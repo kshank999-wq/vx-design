@@ -8,6 +8,7 @@
 import type { GenerateRequest, GenerateResult, LanguageModel } from "./model.ts";
 import { OFFLINE_FIXTURE_CIRCUIT } from "../circuit.ts";
 import { OFFLINE_FIXTURE_LAYOUT } from "../layout.ts";
+import { OFFLINE_FIXTURE_POWER } from "../power.ts";
 
 const KIND_KEYWORDS: [string, RegExp][] = [
   ["power", /\b(rail|current|voltage|power|battery|regulator|mA|V)\b/i],
@@ -24,6 +25,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("design_brief") ? this.brief(prompt)
       : req.purpose.startsWith("circuit_design") ? structuredClone(OFFLINE_FIXTURE_CIRCUIT)
       : req.purpose.startsWith("board_layout") ? structuredClone(OFFLINE_FIXTURE_LAYOUT)
+      : req.purpose.startsWith("power_tree") ? structuredClone(OFFLINE_FIXTURE_POWER)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {

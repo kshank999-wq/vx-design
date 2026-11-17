@@ -10,8 +10,9 @@ import { BRIEF_PROMPT_VERSION, BriefValidationError, generateBrief, renderBriefM
 import type { Executor, ExecutorContext, ExecutorResult } from "../execution.ts";
 import type { Validation } from "../db.ts";
 
-const DISCIPLINES = new Set(["architecture", "components", "power", "thermal", "mechanical", "enclosure", "documentation"]);
-const ARTIFACT_KIND: Record<string, string> = { power: "power_budget", enclosure: "enclosure" };
+// Power tasks have their own executor (deterministic power calculator); see power.ts.
+const DISCIPLINES = new Set(["architecture", "components", "thermal", "mechanical", "enclosure", "documentation"]);
+const ARTIFACT_KIND: Record<string, string> = { enclosure: "enclosure" };
 
 export const briefExecutor: Executor = {
   id: "design-brief",

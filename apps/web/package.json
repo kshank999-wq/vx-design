@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.119.0",
     "@vx/contracts": "workspace:*",
     "@vx/planning": "workspace:^",
+    "@vx/power": "workspace:*",
     "next": "^16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
