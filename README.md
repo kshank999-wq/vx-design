@@ -95,8 +95,8 @@ authorized, the browser can be closed.
   checks, recoveries, open approvals, spend, and recommended next steps.
 
 Executors so far:
-- **Design briefs** cover architecture, components, thermal, mechanical, enclosure and documentation tasks
-  (power tasks use the power calculator, below). They are Claude-drafted and checked against the task's requirements and acceptance tests.
+- **Design briefs** cover architecture, components, thermal, mechanical and documentation tasks (power tasks
+  use the power calculator; enclosure tasks the enclosure generator; both below). They are Claude-drafted and checked against the task's requirements and acceptance tests.
 - **Simulation, sourcing and verification tasks** are blocked with a plain reason until their
   executors land. Nothing is simulated. Schematic (G3), PCB layout (G4) and manufacturing
   (G4.5) tasks wait for the KiCad engineering worker.
@@ -377,6 +377,52 @@ exported to STEP, and every foot is found on its pad.
 pnpm test:eng              # model check: re-oriented vendor model, ZIP, wrong part/footprint/height, pin-1 symmetry, KiCad round trip
 pnpm test:models           # upload -> worker check -> verify -> layout ships the model; a non-STEP URL fails cleanly
 pnpm test:e2e:models       # browser: upload, overlay, verify
+```
+
+## M-ENC: enclosure and fit
+
+Enclosure tasks (discipline `enclosure`) run on the KiCad engineering worker. They take the **committed
+routed board** of an upstream PCB layout task. Claude chooses the housing; `vx_eng enclosure` builds and
+checks it, and problems go back to Claude, up to 3 repair rounds.
+
+- **Board facts.** KiCad exports the board and every component as separate STEP solids (drill origin), so a
+  collision always names the part. Claude sees each part's height above the board, how far it reaches below
+  the board, and its distance to the nearest edge.
+- **Design.** Claude sets:
+  - the process (FDM, SLA, SLS or CNC aluminium) and material;
+  - the wall thickness;
+  - the board-edge gap and top clearance;
+  - the standoff height;
+  - the fastening (heat-set insert, thread-forming screw, or tapped hole);
+  - the openings: edge openings through the nearest or a named wall for connectors, and top openings
+    (windows, round light or button holes) through the lid.
+- **Geometry** (CadQuery). The cavity is the board's own outline offset by the edge gap. The base has a floor,
+  walls up to a split plane 2.5 mm above the board, and a standoff with a fastener hole under every mounting
+  hole. The lid has walls, a top and a locating lip. Both parts are built additively, because OCCT's
+  through-cuts failed silently in testing. Every opening cut is verified to have removed material.
+- **Checks:**
+  - every component and the board against base and lid, where any overlap is an error naming the part;
+  - clearance to the housing;
+  - edge connectors set too far behind the wall;
+  - parts without a 3D model, reported as unchecked;
+  - wall thickness against the process minimum;
+  - a fastening the process supports, and a standoff deep enough for it;
+  - CNC inner corner radius;
+  - build volume.
+- **Outputs:**
+  - base and lid as STEP and STL;
+  - an assembly STEP;
+  - an exploded GLB (board in the base, lid beside it) shown in the app;
+  - top and front drawings (SVG);
+  - the fit report with dimensions, Z levels, standoffs, openings, clearances and estimated mass;
+  - the design.
+
+The exit test is physical: print the housing and fit the real, assembled board.
+
+```bash
+pnpm test:eng                  # enclosure: fits; lid too low and short standoffs collide (named parts); process rules; edge recess; split planes
+pnpm test:enclosure            # schematic -> layout -> enclosure with real KiCad 3D models; STEP re-read as one valid solid
+pnpm test:e2e:enclosure        # browser: fit report, exploded 3D view, approve
 ```
 
 ## Database overview

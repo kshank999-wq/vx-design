@@ -115,7 +115,7 @@ export default async function RunPage({ params, searchParams }: {
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">
           No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
-          {uncovered.some((d) => ["schematic", "pcb_layout", "manufacturing"].includes(d)) ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}
+          {uncovered.some((d) => ["schematic", "pcb_layout", "manufacturing", "enclosure"].includes(d)) ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}
           {uncovered.includes("sourcing") ? ": start a worker with distributor API keys (NEXAR_*, DIGIKEY_* or MOUSER_API_KEY)" : ""}.
           They stay ready and run as soon as one connects.
         </p>
@@ -159,8 +159,8 @@ export default async function RunPage({ params, searchParams }: {
                 <div className="row spread"><h3><span className="mono muted">{t.key}</span> {t.title}</h3><span className="pill pill-awaiting_approval">awaiting approval</span></div>
                 {appr && <p className="small">{appr.reason}</p>}
                 {(() => {
-                  const render = outputsOf(t.id).find((v) => /\/(render-3d|panel-render)$/.test(artifactName(v)));
-                  const project = outputsOf(t.id).find((v) => /\/(kicad-project|fab-package)$/.test(artifactName(v)));
+                  const render = outputsOf(t.id).find((v) => /\/(render-3d|panel-render|base-top-svg)$/.test(artifactName(v)));
+                  const project = outputsOf(t.id).find((v) => /\/(kicad-project|fab-package|fit-report)$/.test(artifactName(v)));
                   if (render && urlOf.get(render.storage_path)) {
                     return <Link href={`/projects/${projectId}/artifacts/${(project ?? render).id}`}>
                       <img className="render thumb" src={urlOf.get(render.storage_path)} alt="Board render" /></Link>;

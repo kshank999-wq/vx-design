@@ -534,3 +534,98 @@ class VerifiedModelInLayoutTests(unittest.TestCase):
             import cadquery as cq
             s = cq.importers.importStep(str(d / "board" / built["files"]["step"]))
             self.assertGreater(len(s.solids().vals()), 1)
+
+
+ENCLOSURE = {"process": "fdm", "material": "PETG", "wall_mm": 2, "edge_gap_mm": 0.5, "top_clearance_mm": 2, "standoff_height_mm": 6,
+             "fastening": "heat_set_insert",
+             "openings": [{"kind": "top", "ref": "J1", "shape": "rect", "margin_mm": 0.5},
+                          {"kind": "top", "ref": "D1", "shape": "round", "size_mm": 2.5}]}
+
+
+class EnclosureTests(unittest.TestCase):
+    """Enclosure around the fixture board with stand-in 3D models for every part."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        from model_fixtures import fixture_board_models
+        from vx_eng.cli import cmd_layout_build
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")
+        cls.tmp = tempfile.TemporaryDirectory()
+        d = Path(cls.tmp.name)
+        built = cmd_layout_build(FIXTURE, LAYOUT, d / "board", fixture_board_models(d))
+        assert built["ok"], built.get("problems")
+        cls.project = d / "board"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def build(self, name, **changes):
+        from vx_eng.enclosure import build_enclosure
+        spec = {**copy.deepcopy(ENCLOSURE), **changes}
+        return build_enclosure(self.project, spec, Path(self.tmp.name) / name)
+
+    def test_fixture_enclosure_fits(self):
+        r = self.build("ok")
+        self.assertTrue(r["ok"], r["problems"])
+        self.assertEqual(r["collisions"], [])
+        self.assertEqual(sorted(r["board"]["parts_checked"]), ["C1", "C2", "D1", "J1", "R1", "U1"])
+        self.assertEqual(len(r["mounting"]), 4)
+        self.assertEqual(r["mounting"]["H1"]["hole_mm"], 4.2, "M3 heat-set insert hole")
+        self.assertAlmostEqual(r["dimensions_mm"]["x"], 34 + 2 * (0.5 + 2), places=1)
+        self.assertGreater(min(r["clearance_mm"].values()), 1.5)
+        for f in ("base_step", "lid_step", "base_stl", "lid_stl", "assembly_step", "exploded_glb", "base_top_svg"):
+            self.assertGreater((Path(self.tmp.name) / "ok" / r["files"][f]).stat().st_size, 500, f)
+        self.assertGreater(r["mass_g"]["base"], 1)
+        # Base and lid are open halves that meet at the split plane (a closed box would still "fit").
+        import cadquery as cq
+        base = cq.importers.importStep(str(Path(self.tmp.name) / "ok" / r["files"]["base_step"])).val().BoundingBox()
+        lid = cq.importers.importStep(str(Path(self.tmp.name) / "ok" / r["files"]["lid_step"])).val().BoundingBox()
+        lv = r["levels_mm"]
+        self.assertAlmostEqual(base.zmax, lv["split"], places=2)
+        self.assertAlmostEqual(base.zmin, lv["floor_bottom"], places=2)
+        self.assertAlmostEqual(lid.zmax, lv["top_outer"], places=2)
+        self.assertAlmostEqual(lid.zmin, lv["split"] - lv["lip_height"], places=2)
+        # Material check: walls 2 mm around a 35 x 23 mm cavity (0.5 mm gap) plus floor and top (each 39 x 27 x 2 with rounded corners).
+        self.assertLess(r["volume_cm3"]["base"] + r["volume_cm3"]["lid"], 12, "no doubled shell")
+
+    def test_lid_grows_over_parts_without_an_opening(self):
+        r = self.build("no-window", openings=[{"kind": "top", "ref": "D1", "shape": "round", "size_mm": 2.5}])
+        self.assertTrue(r["ok"], r["problems"])
+        self.assertGreater(r["levels_mm"]["lid_inner"], 1.6 + 8.5, "lid clears the 8.5 mm header pins")
+
+    def test_lid_too_low_is_a_collision_naming_the_parts(self):
+        r = self.build("low-lid", top_clearance_mm=-0.5)
+        self.assertFalse(r["ok"])
+        hits = {(p["ref"], p["part"]) for p in r["problems"] if p["code"] == "interference"}
+        self.assertIn(("U1", "lid"), hits, r["problems"])
+
+    def test_short_standoffs_hit_through_hole_pins_and_cannot_take_inserts(self):
+        r = self.build("short", standoff_height_mm=1)
+        codes = {(p["code"], p.get("ref")) for p in r["problems"]}
+        self.assertIn(("interference", "J1"), codes, "J1's pins reach 1.4 mm below the board's underside")
+        self.assertIn(("boss_depth", "H1"), codes)
+
+    def test_process_rules(self):
+        r = self.build("cnc", process="cnc_aluminum")
+        codes = {p["code"] for p in r["problems"]}
+        self.assertEqual(codes & {"fastening", "inner_radius"}, {"fastening", "inner_radius"})
+        r = self.build("thin", wall_mm=0.8)
+        self.assertIn("wall", {p["code"] for p in r["problems"]})
+
+    def test_edge_opening_reports_the_wall_and_recess(self):
+        r = self.build("edge", openings=[{"kind": "edge", "ref": "J1", "margin_mm": 0.5},
+                                         {"kind": "top", "ref": "D1", "shape": "round", "size_mm": 2.5}],
+                       top_clearance_mm=7.5)
+        j1 = next(o for o in r["openings"] if o["ref"] == "J1")
+        self.assertEqual(j1["side"], "left", "J1 sits 1.3 mm from the left edge")
+        self.assertGreater(j1["recess_mm"], 1.5)
+        self.assertIn("connector_recessed", {w["code"] for w in r["warnings"]})
+        self.assertNotIn(("J1", "lid"), {(p.get("ref"), p.get("part")) for p in r["problems"]})
+
+    def test_bad_spec(self):
+        r = self.build("bad", openings=[{"kind": "top", "ref": "Q9"}])
+        self.assertEqual(r["stage"], "spec")
+        r = self.build("bad2", process="injection")
+        self.assertEqual(r["stage"], "spec")

@@ -8,3 +8,4 @@ export * from "./brief.ts";
 export * from "./circuit.ts";
 export * from "./layout.ts";
 export * from "./power.ts";
+export * from "./enclosure.ts";

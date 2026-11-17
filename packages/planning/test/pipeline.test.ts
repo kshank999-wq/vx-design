@@ -257,3 +257,31 @@ test("power: the offline fixture tree passes the calculator", async () => {
   assert.equal(r.ok, true, JSON.stringify(r.findings));
   assert.ok(r.runtime[0]!.perMode.find((m) => m.mode === "active")!.hours! > 40);
 });
+
+test("enclosure: fit problems go back to the model; the offline fixture matches the engineering fixture", async () => {
+  const { generateEnclosure, EnclosureDesignError, ScriptedModel, OFFLINE_FIXTURE_ENCLOSURE, EnclosureDesign, renderEnclosurePrompt } =
+    await import("../src/index.ts");
+  const facts = {
+    board: { width_mm: 34, height_mm: 22, thickness_mm: 1.6 }, holes: [{ ref: "H1", x: 3.5, y: -3.5, size: "M3" }],
+    parts: [{ ref: "J1", value: "VIN 5V", side: "top", has_model: true, height_above_board_mm: 8.5, bottom_z_mm: -1.4, nearest_edge: "left", edge_distance_mm: 2.7 },
+            { ref: "X1", value: "?", side: "top", has_model: false }],
+    processes: { fdm: { label: "FDM", min_wall_mm: 1.2, fastenings: ["heat_set_insert"], min_inner_radius_mm: 0, build_mm: [250, 210, 210] } },
+    fastener_depth_mm: { heat_set_insert: { M3: 5.7 } },
+  };
+  const input = { projectContext: "Test", task: { key: "enclosure", title: "Enclosure", description: null }, requirements: [],
+                  acceptanceTests: [], upstream: [], reviewNotes: [], facts, components: [{ ref: "J1", value: "VIN 5V", purpose: "5 V input" }] };
+  const prompt = renderEnclosurePrompt(input);
+  assert.match(prompt, /J1 \(VIN 5V, 5 V input\): top side, 8.5 mm above the board, bottom at z -1.4 mm, 2.7 mm from the left edge/);
+  assert.match(prompt, /X1 \(\?\): no 3D model/);
+  const noWindow = { ...OFFLINE_FIXTURE_ENCLOSURE, top_clearance_mm: -1 };
+  const model = new ScriptedModel([() => noWindow, () => OFFLINE_FIXTURE_ENCLOSURE]);
+  const checks = [{ ok: false, stage: "fit" as const, problems: ["U1 collides with the lid: 4.6 mm³"], warnings: [] },
+                  { ok: true, stage: "built" as const, problems: [], warnings: [] }];
+  const r = await generateEnclosure(input, model, async () => checks.shift()!);
+  assert.equal(r.rounds, 2);
+  assert.match(String(model.calls[1]!.messages.at(-1)!.content), /U1 collides with the lid/);
+  await assert.rejects(generateEnclosure(input, new ScriptedModel(Array.from({ length: 4 }, () => () => noWindow)),
+    async () => ({ ok: false, stage: "fit", problems: ["x"], warnings: [] })), (e: unknown) => e instanceof EnclosureDesignError);
+  const py = JSON.parse(readFileSync(join(import.meta.dirname, "../../../services/engineering/vx_eng/fixtures/ldo_led_enclosure.json"), "utf8"));
+  assert.deepEqual(EnclosureDesign.parse(py), OFFLINE_FIXTURE_ENCLOSURE);
+});

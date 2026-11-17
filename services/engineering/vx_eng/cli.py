@@ -192,10 +192,28 @@ def main(argv: list[str] | None = None) -> int:
     mc.add_argument("--footprint", required=True, help="KiCad footprint Library:Name")
     mc.add_argument("--out", required=True)
     mc.add_argument("--mechanical", help="JSON with datasheet mechanical data, e.g. {\"height_mm\": 1.1}")
+    en = sub.add_parser("enclosure", help="enclosure for a routed board: geometry, fit and process checks, STEP/STL/GLB")
+    en.add_argument("--project", required=True, help="KiCad project zip from layout-build, or its directory")
+    en.add_argument("--spec", help="enclosure spec JSON file (omit with --facts)")
+    en.add_argument("--facts", action="store_true", help="only report the board facts used to plan an enclosure")
+    en.add_argument("--out")
     sub.add_parser("version")
     args = ap.parse_args(argv)
     if args.cmd == "version":
         print(json.dumps({"vx_eng": __version__, "kicad": kicad.version()}))
+        return 0
+    if args.cmd == "enclosure":
+        import tempfile
+        from . import enclosure, release
+        try:
+            project = Path(args.project)
+            if project.is_file():
+                project = release.unzip_project(project, Path(tempfile.mkdtemp(prefix="vx-enc-")))
+            result = (enclosure.enclosure_facts(project) if args.facts
+                      else enclosure.build_enclosure(project, json.load(open(args.spec)), Path(args.out)))
+        except kicad.KicadError as e:
+            result = {"ok": False, "stage": "kicad", "error": str(e)}
+        print(json.dumps(result))
         return 0
     if args.cmd == "model-check":
         from . import modelcheck

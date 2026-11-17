@@ -1,0 +1,11 @@
+{
+  "process": "fdm", "material": "PETG", "wall_mm": 2, "edge_gap_mm": 0.5, "top_clearance_mm": 2, "standoff_height_mm": 6,
+  "fastening": "heat_set_insert",
+  "openings": [
+    {"kind": "top", "ref": "J1", "side": null, "shape": "rect", "size_mm": null, "margin_mm": 0.5},
+    {"kind": "top", "ref": "D1", "side": null, "shape": "round", "size_mm": 2.5, "margin_mm": 0.5}
+  ],
+  "rationale": "Offline fixture: a two-part FDM housing; the input header passes through a window in the lid and the LED shows through a light hole; M3 heat-set inserts in 6 mm standoffs.",
+  "assumptions": ["Offline stand-in: no enclosure reasoning was performed."],
+  "open_questions": []
+}

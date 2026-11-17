@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, LayoutView, ModelReportView, SourcedBomView } from "@/components/ArtifactViews";
+import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, FitReportView, LayoutView, ModelReportView, SourcedBomView } from "@/components/ArtifactViews";
 import { BoardViewer } from "@/components/BoardViewer";
 import { PowerView } from "@/components/PowerView";
 import { requireUser } from "@/lib/auth";
@@ -62,6 +62,8 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
   }
   const gerbersUrl = isFab ? await signedOf("gerbers") : null;
   const panelUrl = isFab ? await signedOf("panel-render") : null;
+  const isFit = suffix === "fit-report";
+  const enclosureGlb = isFit ? await signedOf("enclosure-3d") : null;
   const [svgUrl, renderUrl, glbUrl] = await Promise.all([
     isProject && !hasBoard ? signedOf("schematic-svg") : null,
     (isProject || suffix === "board-glb") && hasBoard ? signedOf("render-3d") : null,
@@ -124,10 +126,16 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       )}
       {type === "image/png" && signed?.signedUrl && <img className="render" src={signed.signedUrl} alt={`${artifact.name} render`} />}
       {type === "model/gltf-binary" && signed?.signedUrl && (
-        <div className="card"><p className="small muted">Drag to orbit, scroll to zoom. Exported by KiCad with tracks, pads, pours, silkscreen and the
-          library 3D models.</p><BoardViewer src={signed.signedUrl} poster={renderUrl ?? undefined} /></div>
+        <div className="card"><p className="small muted">Drag to orbit, scroll to zoom.{" "}
+          {suffix === "enclosure-3d" ? "Exploded view: the board with its 3D models in the base on its standoffs, and the lid set beside it."
+            : "Exported by KiCad with tracks, pads, pours, silkscreen and the library 3D models."}</p>
+          <BoardViewer src={signed.signedUrl} poster={renderUrl ?? undefined} /></div>
       )}
-      {type === "model/step" && (
+      {isFit && enclosureGlb && <div className="card"><p className="small muted">Exploded view (drag to orbit).</p><BoardViewer src={enclosureGlb} /></div>}
+      {type === "model/stl" && <p className="small card">STL mesh for slicing (FDM/SLA/SLS). Download it above; print with the flat outer face on the bed.</p>}
+      {type === "model/step" && ["base-step", "lid-step", "assembly-step"].includes(suffix) ? (
+        <p className="small card">STEP of the {suffix.replace("-step", "")} for CAD review, CNC quoting or modification. Download it above.</p>
+      ) : type === "model/step" && (
         <p className="small card">STEP AP214 of the assembled board (board body, copper and the KiCad library 3D models), for enclosure work in
           FreeCAD, Fusion, SolidWorks or CadQuery. Download it above.</p>
       )}
@@ -143,8 +151,9 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       {json && suffix === "layout" && <LayoutView layout={json} />}
       {json && suffix === "fab-check" && <FabCheckView check={json} />}
       {json && suffix === "sourced-bom" && <SourcedBomView bom={json} />}
+      {json && suffix === "fit-report" && <FitReportView report={json} />}
       {json && suffix === "power-budget" && json.tree && json.report && <PowerView tree={json.tree} report={json.report} />}
-      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check", "sourced-bom", "power-budget"].includes(suffix) &&
+      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check", "sourced-bom", "power-budget", "fit-report"].includes(suffix) &&
         <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
       {text !== null && type.startsWith("text/csv") && <CsvTable csv={text} />}
       {text !== null && !json && !type.startsWith("text/csv") && <pre className="doc">{text}</pre>}

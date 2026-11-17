@@ -43,14 +43,14 @@ test("build results become actionable feedback", () => {
 
 test("workers without KiCad do not claim schematic or PCB layout tasks", () => {
   const plain = new Set(executorsFor(null).flatMap((e) => e.disciplines));
-  assert.ok(!plain.has("schematic") && !plain.has("pcb_layout") && !plain.has("manufacturing"));
+  assert.ok(!plain.has("schematic") && !plain.has("pcb_layout") && !plain.has("manufacturing") && !plain.has("enclosure"));
   assert.ok(plain.has("architecture") && plain.has("simulation"));
   assert.ok(!plain.has("sourcing"), "no distributor configured: sourcing is left for a worker that has one");
   const withKeys = new Set(executorsFor(null, sourcingProvidersFromEnv({ MOUSER_API_KEY: "k" })).flatMap((e) => e.disciplines));
   assert.ok(withKeys.has("sourcing"));
   const eng = executorsFor({ python: "python3", dir: "/opt/vx", versions: { vx_eng: "0.4.0", kicad: "10.0.8" } });
   const kinds = eng.flatMap((e) => e.disciplines);
-  assert.ok(kinds.includes("schematic") && kinds.includes("pcb_layout") && kinds.includes("manufacturing"));
+  assert.ok(kinds.includes("schematic") && kinds.includes("pcb_layout") && kinds.includes("manufacturing") && kinds.includes("enclosure"));
 });
 
 test("layout build results become actionable feedback", () => {

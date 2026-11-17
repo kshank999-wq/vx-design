@@ -129,11 +129,11 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | G1 — Plan engine | Upload → cited requirements → task DAG → approvals | Smart Slate spec produces a stable, editable plan with cited requirements | **Built**, tested with a sample spec. The formal pass needs the real Smart Slate spec and an API key. |
 | G2 — Worker backbone | Durable queue, logs, checkpoints, budgets, locks | Browser may close; an authorized run resumes with no duplicate committed work | **Built** |
 | G3 — First circuit | Component evidence, editable schematic, ERC report | A simple test sub-board opens and checks in KiCad | **Built**: KiCad CLI checks pass; the desktop app is untested. Tested with a fixture circuit; a real design needs an API key. |
-| G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**. Manufacturer STEP per part now comes from the verified model library (§10.1); fit results remain with M-ENC |
+| G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**. Manufacturer STEP per part comes from the verified model library (§10.1); fit results come from M-ENC |
 | G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | **Built**: package checked independently of KiCad. The physical order needs a real design (API key) and LCSC numbers for assembly (M-SRC). |
 | M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Power calculator built (model-proposed tree, deterministic checks, repair loop). Manufacturer 3D model library built (upload, URL, Nexar CAD candidates; automatic alignment check; human verification; used by layouts). Remaining: live keys. |
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
-| M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | Planned |
+| M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | **Built** (model-designed housing, per-part interference against the board's 3D models, process rules, STEP/STL/GLB/drawings). The physical exit test needs a real board. |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | Planned |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | Planned |
@@ -193,7 +193,7 @@ v1.0's agents are implemented as **executors**. Each handles one or more task di
 | Industrial design agent | Concept renders, manufacturable style variants | Concept images clearly distinguished from valid CAD | — | Planned (M-CON) |
 | Systems engineer | Block diagrams, requirement allocation, trade studies | Requirement traceability, interface contracts | Design-brief executor (architecture, components, power, thermal, mechanical, enclosure, documentation) | **Partial** |
 | EE/PCB agent | Circuit planning, schematic and PCB via CAD adapters | ERC, DRC, netlist and parity checks, simulation, reviewer sign-off | `kicad-schematic`, `kicad-pcb` | **Built** (simulation planned) |
-| Mechanical/DFM agent | Enclosure, datums, clearances, mounts, gasket, heat, finish | Tolerance stacks, process-specific DFM | — | Planned (M-ENC) |
+| Mechanical/DFM agent | Enclosure, datums, clearances, mounts, gasket, heat, finish | Tolerance stacks, process-specific DFM | `enclosure` executor | **Partial**: housing, fit and process rules built; tolerance stacks, gaskets and thermal planned |
 | Firmware agent | MCU selection, drivers, protocols, testing | CI, hardware-in-the-loop, security review | Briefs only | Deferred (generation) |
 | Supply chain agent | BOM/AVL normalization, quotes, alternates | Price timestamp, MPN identity, fit/function check | `sourcing` executor | **Partial** (no live keys yet) |
 | Manufacturing agent | Route work to process suppliers, generate RFQs | Feasibility, owner approval | — | Planned (G4.5, M-RFQ) |
@@ -637,7 +637,7 @@ v1.0's backlog, merged with build status:
 1. **G4.5 fab package.** *Built.* Its exit test is ordering and testing the timecode board, which needs a real design.
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. It runs alongside 1 and 2, since it needs no hardware.
-4. **M-ENC.**
+4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
 5. **M-UI** (client workspace), **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
 v1.0's 16-week sequence is kept as a target, not a commitment:

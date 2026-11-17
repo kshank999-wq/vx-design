@@ -299,6 +299,58 @@ export function SourcedBomView({ bom }: { bom: SourcedBom }) {
   );
 }
 
+interface FitReport {
+  ok: boolean; process: { name: string; label: string }; material: string;
+  problems: { code: string; message: string }[]; warnings: { code: string; message: string }[];
+  dimensions_mm: { x: number; y: number; z: number }; levels_mm: Record<string, number>;
+  mounting: Record<string, { hole_mm: number; boss_od_mm: number }>;
+  openings: { ref: string; kind: string; side?: string; shape?: string; diameter_mm?: number; width_mm?: number; height_mm?: number;
+              depth_mm?: number; recess_mm?: number; error?: string }[];
+  collisions: { part: string; ref: string; volume_mm3: number }[]; clearance_mm: Record<string, number>; missing_models: string[];
+  mass_g: Record<string, number>; volume_cm3: Record<string, number>;
+  board: { thickness_mm: number; holes: { ref: string; size: string; x: number; y: number }[]; parts_checked: string[]; parts: number };
+  spec: { wall_mm: number; edge_gap_mm: number; top_clearance_mm: number; standoff_height_mm: number; fastening: string; rationale?: string };
+}
+
+export function FitReportView({ report }: { report: FitReport }) {
+  const d = report.dimensions_mm;
+  return (
+    <section>
+      <h2>Enclosure fit</h2>
+      <p className={report.ok ? (report.warnings.length ? "banner banner-warn" : "banner banner-notice") : "banner banner-error"} data-testid="fit-status">
+        {report.ok ? "Fits" : "Does not fit"}: {report.collisions.length} collision(s); {report.board.parts_checked.length} of {report.board.parts} parts
+        checked against their 3D models{report.missing_models.length ? ` (no model: ${report.missing_models.join(", ")})` : ""}; {report.problems.length} problem(s),
+        {" "}{report.warnings.length} warning(s).
+      </p>
+      {[...report.problems, ...report.warnings].length > 0 && (
+        <ul className="checks">{report.problems.map((p, i) => <li key={`p${i}`}><span className="pill pill-check-fail">error</span> {p.message}</li>)}
+          {report.warnings.map((w, i) => <li key={`w${i}`}><span className="pill pill-check-warning">warning</span> {w.message}</li>)}</ul>
+      )}
+      <dl className="facts small card" data-testid="fit-facts">
+        <dt>Process</dt><dd>{report.process.label}, {report.material}</dd>
+        <dt>Outside</dt><dd>{d.x} x {d.y} x {d.z} mm</dd>
+        <dt>Wall / gaps</dt><dd>wall {report.spec.wall_mm} mm; board edge gap {report.spec.edge_gap_mm} mm; {report.spec.top_clearance_mm} mm above the tallest enclosed part</dd>
+        <dt>Board mounting</dt><dd>{report.board.holes.length} standoff(s), {report.spec.standoff_height_mm} mm high, {report.spec.fastening.replace(/_/g, " ")}
+          {Object.values(report.mounting)[0] && ` (hole ${Object.values(report.mounting)[0]!.hole_mm} mm, boss ${Object.values(report.mounting)[0]!.boss_od_mm} mm)`}</dd>
+        <dt>Levels (Z)</dt><dd>floor {report.levels_mm.floor_top} mm · board {0}–{report.levels_mm.board_top} mm · split {report.levels_mm.split} mm · lid inside {report.levels_mm.lid_inner} mm</dd>
+        <dt>Material</dt><dd>base {report.volume_cm3.base} cm³ (~{report.mass_g.base} g) · lid {report.volume_cm3.lid} cm³ (~{report.mass_g.lid} g)</dd>
+      </dl>
+      {report.spec.rationale && <p className="small">{report.spec.rationale}</p>}
+      <h3>Openings</h3>
+      <table className="small">
+        <thead><tr><th>Part</th><th>Where</th><th>Size</th><th>Notes</th></tr></thead>
+        <tbody>{report.openings.map((o, i) => (
+          <tr key={i}><td className="mono">{o.ref}</td><td>{o.kind === "edge" ? `${o.side} wall` : "lid"}</td>
+            <td>{o.diameter_mm ? `⌀ ${o.diameter_mm} mm` : o.kind === "edge" ? `${o.width_mm} x ${o.height_mm} mm` : `${o.width_mm} x ${o.depth_mm} mm`}</td>
+            <td>{o.error ?? (o.recess_mm !== undefined ? `part sits ${o.recess_mm} mm behind the outer wall` : "")}</td></tr>
+        ))}</tbody>
+      </table>
+      <h3>Clearance to the housing</h3>
+      <p className="small">{Object.entries(report.clearance_mm).map(([r, c]) => `${r} ${c} mm`).join(" · ") || "—"}</p>
+    </section>
+  );
+}
+
 interface Evidence {
   method: string;
   counts: Record<string, number>;

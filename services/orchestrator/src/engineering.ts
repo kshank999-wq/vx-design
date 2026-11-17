@@ -5,7 +5,7 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import type { BoardLayout, CircuitCheck, CircuitDesign, FootprintFacts, LayoutCheck } from "@vx/planning";
+import type { BoardLayout, CircuitCheck, CircuitDesign, EnclosureCheck, EnclosureDesign, EnclosureFacts, FootprintFacts, LayoutCheck } from "@vx/planning";
 
 export interface EngineeringTools {
   python: string;
@@ -253,4 +253,47 @@ export async function modelCheck(tools: EngineeringTools, step: string, footprin
   return call(tools, ["model-check", "--step", step, "--footprint", footprint, "--out", outDir,
                       ...(Object.keys(mechanical ?? {}).length ? ["--mechanical", JSON.stringify(mechanical)] : [])],
               undefined, 600_000) as Promise<ModelCheckResult>;
+}
+
+// --- Enclosure -----------------------------------------------------------------------------
+
+export interface EnclosureResult {
+  ok: boolean;
+  stage: "spec" | "built" | "kicad";
+  error?: string;
+  problems?: { code: string; message: string; ref?: string; part?: string }[];
+  warnings?: { code: string; message: string; ref?: string }[];
+  process?: { name: string; label: string };
+  material?: string;
+  dimensions_mm?: { x: number; y: number; z: number };
+  levels_mm?: Record<string, number>;
+  mounting?: Record<string, { hole_mm: number; boss_od_mm: number }>;
+  openings?: Record<string, unknown>[];
+  collisions?: { part: string; ref: string; volume_mm3: number; at: number[] }[];
+  clearance_mm?: Record<string, number>;
+  missing_models?: string[];
+  mass_g?: Record<string, number>;
+  board?: { parts_checked: string[]; parts: number };
+  files?: Partial<Record<"base_step" | "lid_step" | "base_stl" | "lid_stl" | "assembly_step" | "exploded_glb" | "base_top_svg" |
+                         "base_front_svg" | "lid_top_svg" | "lid_front_svg" | "report", string>>;
+}
+
+export async function enclosureFacts(tools: EngineeringTools, projectZip: string): Promise<EnclosureFacts & { ok: boolean; error?: string }> {
+  return call(tools, ["enclosure", "--facts", "--project", projectZip], undefined, 900_000) as Promise<EnclosureFacts & { ok: boolean; error?: string }>;
+}
+
+export async function buildEnclosure(tools: EngineeringTools, projectZip: string, design: EnclosureDesign, outDir: string): Promise<EnclosureResult> {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await mkdir(outDir, { recursive: true });
+  const specPath = `${outDir}.spec.json`;
+  await writeFile(specPath, JSON.stringify(design));
+  return call(tools, ["enclosure", "--project", projectZip, "--spec", specPath, "--out", outDir], undefined, 1_800_000) as Promise<EnclosureResult>;
+}
+
+export function toEnclosureCheck(r: EnclosureResult): EnclosureCheck {
+  if (r.stage === "kicad") return { ok: false, stage: "fit", problems: [`the housing could not be built: ${r.error}`], warnings: [] };
+  const problems = (r.problems ?? []).map((p) => p.message);
+  const warnings = (r.warnings ?? []).map((w) => w.message);
+  if (r.stage === "spec") return { ok: false, stage: "spec", problems, warnings };
+  return { ok: r.ok, stage: r.ok ? "built" : "fit", problems, warnings };
 }
