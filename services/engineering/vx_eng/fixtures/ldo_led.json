@@ -1,0 +1,22 @@
+{
+  "name": "ldo_led_fixture",
+  "title": "3.3 V LDO with power LED (fixture)",
+  "components": [
+    {"ref": "J1", "symbol": "Connector_Generic:Conn_01x02", "value": "VIN 5V", "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical", "purpose": "5 V input"},
+    {"ref": "C1", "symbol": "Device:C", "value": "1uF", "footprint": "Capacitor_SMD:C_0603_1608Metric", "purpose": "LDO input capacitor"},
+    {"ref": "U1", "symbol": "Regulator_Linear:AP2112K-3.3", "value": "AP2112K-3.3", "footprint": "Package_TO_SOT_SMD:SOT-23-5",
+     "mpn": "AP2112K-3.3TRG1", "manufacturer": "Diodes Incorporated", "datasheet": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+     "purpose": "3.3 V regulator",
+     "claims": [{"parameter": "Output current", "value": "600mA"}, {"parameter": "Dropout voltage", "value": "250mV"}]},
+    {"ref": "C2", "symbol": "Device:C", "value": "1uF", "footprint": "Capacitor_SMD:C_0603_1608Metric", "purpose": "LDO output capacitor"},
+    {"ref": "R1", "symbol": "Device:R", "value": "1k", "footprint": "Resistor_SMD:R_0603_1608Metric", "purpose": "LED current limit"},
+    {"ref": "D1", "symbol": "Device:LED", "value": "Green", "footprint": "LED_SMD:LED_0603_1608Metric", "purpose": "power indicator"}
+  ],
+  "nets": [
+    {"name": "VIN", "pins": ["J1.1", "C1.1", "U1.1", "U1.3"], "driven_externally": true},
+    {"name": "GND", "pins": ["J1.2", "C1.2", "U1.2", "C2.2", "D1.1"], "driven_externally": true},
+    {"name": "+3V3", "pins": ["U1.5", "C2.1", "R1.1"]},
+    {"name": "LED_A", "pins": ["R1.2", "D1.2"]}
+  ],
+  "no_connect": ["U1.4"]
+}

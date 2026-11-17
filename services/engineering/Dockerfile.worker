@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# Engineering worker: the KiCad engineering image (G0) + Node.js + the orchestrator + vx_eng.
+# It claims schematic tasks in addition to everything the plain worker does.
+#
+#   docker build -f services/engineering/Dockerfile.worker -t vx-engineering-worker .
+#   (behind a TLS-intercepting proxy add: --secret id=extra_ca,src=/path/to/ca.crt)
+#
+# ENGINEERING_IMAGE is built from services/engineering/Dockerfile (./services/engineering/build.sh).
+ARG ENGINEERING_IMAGE=vx-engineering:g0
+
+FROM node:22-slim AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages ./packages
+COPY services/orchestrator ./services/orchestrator
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -f /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    corepack enable && pnpm install --frozen-lockfile --filter "@vx/orchestrator..."
+
+FROM ${ENGINEERING_IMAGE}
+USER root
+COPY --from=deps /usr/local/bin/node /usr/local/bin/node
+COPY --from=deps /app /app
+COPY services/engineering/vx_eng /opt/vx/vx_eng
+ENV VX_ENG_DIR=/opt/vx \
+    VX_LIB_INDEX=/opt/vx/kicad-lib-index.json \
+    PYTHONDONTWRITEBYTECODE=1
+# Pre-build the symbol/footprint name index so the first design check is fast.
+RUN PYTHONPATH=/opt/vx python3 -c "from vx_eng.library import Library; i = Library().index; print(sum(map(len, i['symbols'].values())), 'symbols')"
+WORKDIR /app
+USER kicad
+ENTRYPOINT ["node", "services/orchestrator/src/main.ts"]

@@ -4,6 +4,7 @@
 \o /dev/null
 
 grant all on public.execution_logs to authenticated, service_role;
+grant select on public.workers to authenticated;
 
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000e', 'erin-viewer@test');
 
@@ -237,5 +238,23 @@ select pg_temp.check((select count(*) = 2 from public.runs where project_id = 'b
 select pg_temp.act_as(null);
 select pg_temp.check((select count(*) >= 10 from public.audit_events where project_id = 'bbbbbbbb-0000-0000-0000-000000000001'
                       and event_type like 'execution.%'), 'executions audited');
+
+-- 14. G3: workers claim only disciplines they advertise; the registry is readable, not writable.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into ids select 'run3', public.authorize_run(pg_temp.id('plan'), 'autonomous', 5, 5, '{low,medium,high}', 2);
+update public.tasks set status = 'ready' where id = pg_temp.task('mech');            -- manual retry of the blocked task
+select pg_temp.as_worker();
+select pg_temp.check((select (public.claim_next_task('kicad-less', pg_temp.id('run3'), 30, '{schematic}')).id is null),
+  'a worker without the discipline claims nothing');
+insert into ids select 'e11', (public.claim_next_task('doc-worker', pg_temp.id('run3'), 30, '{documentation}')).id;
+select pg_temp.check((select t.discipline = 'documentation' from public.executions e join public.tasks t on t.id = e.task_id
+                      where e.id = pg_temp.id('e11')), 'claims a task of its discipline');
+select public.worker_checkin('doc-worker', '{documentation}', '{"node": "22"}');
+select public.worker_checkin('doc-worker', '{documentation,schematic}', '{"kicad": "10.0.8"}');
+select pg_temp.check((select disciplines = '{documentation,schematic}' and tools ->> 'kicad' = '10.0.8' from public.workers
+                      where id = 'doc-worker'), 'check-in upserts');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000e');
+select pg_temp.check((select count(*) = 1 from public.workers), 'signed-in users see workers');
+select pg_temp.expect_error($$select public.worker_checkin('fake', '{schematic}', '{}')$$, '%permission denied%');
 
 \echo 'All worker tests passed.'

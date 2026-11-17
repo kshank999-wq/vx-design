@@ -3,4 +3,6 @@ export * from "./execution.ts";
 export * from "./pricing.ts";
 export * from "./report.ts";
 export * from "./worker.ts";
-export { EXECUTORS } from "./executors/index.ts";
+export * from "./engineering.ts";
+export * from "./datasheet.ts";
+export { EXECUTORS, executorsFor } from "./executors/index.ts";

@@ -17,6 +17,7 @@ export const briefExecutor: Executor = {
   id: "design-brief",
   version: BRIEF_PROMPT_VERSION,
   describe: "Design brief drafted by the model and checked against the task's requirements and acceptance tests",
+  disciplines: [...DISCIPLINES],
   canRun: (task) => DISCIPLINES.has(task.discipline),
 
   async run(ctx: ExecutorContext): Promise<ExecutorResult> {

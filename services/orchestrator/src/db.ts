@@ -118,11 +118,15 @@ export class WorkerDb {
     return data as RunRow[];
   }
 
-  async claim(workerId: string, runId: string, leaseSeconds: number): Promise<ExecutionRow | null> {
+  async claim(workerId: string, runId: string, leaseSeconds: number, disciplines: string[]): Promise<ExecutionRow | null> {
     const row = await this.rpc<ExecutionRow | null>("claim_next_task", {
-      p_worker_id: workerId, p_run_id: runId, p_lease_seconds: leaseSeconds,
+      p_worker_id: workerId, p_run_id: runId, p_lease_seconds: leaseSeconds, p_disciplines: disciplines,
     });
     return row?.id ? row : null;  // PostgREST returns an all-null row for a null composite
+  }
+
+  async checkin(workerId: string, disciplines: string[], tools: Record<string, string>): Promise<void> {
+    await this.rpc("worker_checkin", { p_worker_id: workerId, p_disciplines: disciplines, p_tools: tools });
   }
 
   async heartbeat(executionId: string, workerId: string, checkpoint?: Checkpoint): Promise<HeartbeatDirective> {

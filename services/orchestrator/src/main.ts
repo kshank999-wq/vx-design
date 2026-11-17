@@ -17,7 +17,8 @@
 import { hostname } from "node:os";
 import { ClaudeModel, OfflineModel } from "@vx/planning";
 import { WorkerDb } from "./db.ts";
-import { EXECUTORS } from "./executors/index.ts";
+import { detectEngineering } from "./engineering.ts";
+import { executorsFor } from "./executors/index.ts";
 import { Worker } from "./worker.ts";
 
 function env(name: string, fallback?: string): string {
@@ -39,6 +40,11 @@ if (process.env.VX_LLM === "offline") {
   process.exit(2);
 }
 
+const engineering = await detectEngineering();
+console.log(engineering
+  ? `engineering tools: vx_eng ${engineering.versions.vx_eng}, KiCad ${engineering.versions.kicad}`
+  : "engineering tools not found: this worker will not take schematic tasks");
+
 const worker = new Worker(new WorkerDb(url, key), {
   workerId: env("WORKER_ID", `${hostname()}-${process.pid}`),
   concurrency: Number(env("WORKER_CONCURRENCY", "2")),
@@ -46,7 +52,8 @@ const worker = new Worker(new WorkerDb(url, key), {
   pollMs: Number(env("WORKER_POLL_MS", "3000")),
   stepDelayMs: Number(env("VX_STEP_DELAY_MS", "0")),
   computeUsdPerHour: Number(env("VX_COMPUTE_USD_PER_HOUR", "0.10")),
-}, EXECUTORS, model);
+  tools: engineering ? { kicad: engineering.versions.kicad, vx_eng: engineering.versions.vx_eng } : {},
+}, executorsFor(engineering), model);
 
 let signals = 0;
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

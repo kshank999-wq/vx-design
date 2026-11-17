@@ -160,3 +160,32 @@ test("brief: missing answers trigger one repair round, then fail", async () => {
   assert.deepEqual(validateBrief(good as never, input), []);
   await assert.rejects(generateBrief(input, new ScriptedModel([() => incomplete, () => incomplete])), BriefValidationError);
 });
+
+test("circuit: check problems go back to the model until the design passes", async () => {
+  const { generateCircuit, CircuitDesignError, ScriptedModel, OFFLINE_FIXTURE_CIRCUIT } = await import("../src/index.ts");
+  const input = {
+    projectContext: "Test", task: { key: "schematic", title: "Schematic", description: null },
+    requirements: [{ refCode: "REQ-PWR-001", kind: "power", priority: "must", text: "3.3 V rail" }],
+    acceptanceTests: [{ id: "AT1", description: "ERC passes", method: "validation" }], upstream: [], reviewNotes: [],
+  };
+  const bad = { ...OFFLINE_FIXTURE_CIRCUIT, name: "bad" };
+  const good = { ...OFFLINE_FIXTURE_CIRCUIT, name: "good" };
+  const checks = [
+    { ok: false, stage: "validation" as const, problems: ["U1: symbol Regulator_Linear:AP2112K-33 is not in the KiCad libraries (did you mean Regulator_Linear:AP2112K-3.3?)"], warnings: [] },
+    { ok: false, stage: "erc" as const, problems: ["ERC error power_pin_not_driven: Input Power pin not driven by any Output Power pins"], warnings: ["J1 footprint filter"] },
+    { ok: true, stage: "built" as const, problems: [], warnings: [] },
+  ];
+  const model = new ScriptedModel([() => bad, () => bad, () => good]);
+  const seen: string[] = [];
+  const r = await generateCircuit(input, model, async (d) => { seen.push(d.name); return checks.shift()!; });
+  assert.equal(r.rounds, 3);
+  assert.equal(r.design.name, "good");
+  assert.deepEqual(r.history.map((h) => h.stage), ["validation", "erc", "built"]);
+  const msgs = model.calls[2]!.messages;   // the conversation grows: prompt, design, feedback, design, feedback
+  assert.match(String(msgs[2]!.content), /did you mean Regulator_Linear:AP2112K-3.3/);
+  assert.match(String(msgs[4]!.content), /failed at the erc stage[\s\S]*Warnings/);
+
+  const never = new ScriptedModel(Array.from({ length: 4 }, () => () => bad));
+  await assert.rejects(generateCircuit(input, never, async () => ({ ok: false, stage: "erc", problems: ["x"], warnings: [] })),
+    (e: unknown) => e instanceof CircuitDesignError && e.rounds === 4);
+});

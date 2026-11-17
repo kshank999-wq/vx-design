@@ -6,6 +6,7 @@
  * requirement and builds a fixed-shape plan. Results are labelled as offline in the UI.
  */
 import type { GenerateRequest, GenerateResult, LanguageModel } from "./model.ts";
+import { OFFLINE_FIXTURE_CIRCUIT } from "../circuit.ts";
 
 const KIND_KEYWORDS: [string, RegExp][] = [
   ["power", /\b(rail|current|voltage|power|battery|regulator|mA|V)\b/i],
@@ -20,6 +21,7 @@ export class OfflineModel implements LanguageModel {
     const prompt = String(req.messages[0]?.content ?? "");
     const raw = req.purpose.startsWith("extract") ? this.extract(prompt)
       : req.purpose.startsWith("design_brief") ? this.brief(prompt)
+      : req.purpose.startsWith("circuit_design") ? structuredClone(OFFLINE_FIXTURE_CIRCUIT)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {

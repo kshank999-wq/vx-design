@@ -47,6 +47,8 @@ export interface Executor {
   version: string;
   /** Short description shown in logs and reports. */
   describe: string;
+  /** Disciplines this executor handles; a worker claims only tasks its executors can run. */
+  disciplines: string[];
   canRun(task: TaskRow): boolean;
   run(ctx: ExecutorContext): Promise<ExecutorResult>;
 }

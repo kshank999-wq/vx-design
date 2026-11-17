@@ -15,6 +15,8 @@ export interface WorkerConfig {
   pollMs: number;
   stepDelayMs: number;
   computeUsdPerHour: number;
+  /** Tool versions reported in the worker registry. */
+  tools?: Record<string, string>;
 }
 
 export class Worker {
@@ -24,6 +26,9 @@ export class Worker {
   private readonly model: { model: LanguageModel; label: string; offline: boolean };
   private readonly inflight = new Map<string, { handle?: ExecutionHandle; done: Promise<string> }>();
   private stopping = false;
+  private lastCheckin = 0;
+  readonly disciplines: string[];
+  private readonly tools: Record<string, string>;
   private wake: (() => void) | null = null;
 
   constructor(db: WorkerDb, cfg: WorkerConfig, executors: Executor[], model: { model: LanguageModel; label: string; offline: boolean }) {
@@ -31,6 +36,8 @@ export class Worker {
     this.cfg = cfg;
     this.executors = executors;
     this.model = model;
+    this.disciplines = [...new Set(executors.flatMap((e) => e.disciplines))].sort();
+    this.tools = { node: process.versions.node, model: model.label, ...(cfg.tools ?? {}) };
   }
 
   /** Stop claiming; ask in-flight executions to yield at their next checkpoint. */
@@ -41,7 +48,8 @@ export class Worker {
   }
 
   async run(): Promise<void> {
-    console.log(`[${this.cfg.workerId}] started: concurrency ${this.cfg.concurrency}, lease ${this.cfg.leaseSeconds}s, model ${this.model.label}`);
+    console.log(`[${this.cfg.workerId}] started: concurrency ${this.cfg.concurrency}, lease ${this.cfg.leaseSeconds}s, ` +
+                `model ${this.model.label}, disciplines ${this.disciplines.join(", ")}`);
     while (!this.stopping) {
       try {
         await this.tick();
@@ -58,12 +66,16 @@ export class Worker {
   }
 
   async tick(): Promise<void> {
+    if (Date.now() - this.lastCheckin > 10_000) {
+      await this.db.checkin(this.cfg.workerId, this.disciplines, this.tools);
+      this.lastCheckin = Date.now();
+    }
     const reaped = await this.db.reapStale();
     if (reaped) console.log(`[${this.cfg.workerId}] reclaimed ${reaped} execution(s) from workers that stopped heartbeating`);
 
     for (const run of await this.db.activeRuns()) {
       while (!this.stopping && this.inflight.size < this.cfg.concurrency) {
-        const exec = await this.db.claim(this.cfg.workerId, run.id, this.cfg.leaseSeconds);
+        const exec = await this.db.claim(this.cfg.workerId, run.id, this.cfg.leaseSeconds, this.disciplines);
         if (!exec) break;
         this.launch(exec);
       }
