@@ -13,9 +13,14 @@
  *   VX_PLANNING_MODEL         Claude model id (default claude-opus-5-5)
  *   VX_COMPUTE_USD_PER_HOUR   charge for worker time against compute budgets (default 0.10)
  *   VX_STEP_DELAY_MS          pause after each step (tests use it to interrupt work mid-task)
+ *   NEXAR_CLIENT_ID / NEXAR_CLIENT_SECRET      sourcing primary (Octopart data via Nexar)
+ *   DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET  sourcing fallback A
+ *   MOUSER_API_KEY                             sourcing fallback B
+ *   VX_SOURCING=fixture       offline stand-in for the distributors (invented data, labelled); =off to disable
  */
 import { hostname } from "node:os";
 import { ClaudeModel, OfflineModel } from "@vx/planning";
+import { sourcingProvidersFromEnv } from "@vx/integrations";
 import { WorkerDb } from "./db.ts";
 import { detectEngineering } from "./engineering.ts";
 import { executorsFor } from "./executors/index.ts";
@@ -45,6 +50,11 @@ console.log(engineering
   ? `engineering tools: vx_eng ${engineering.versions.vx_eng}, KiCad ${engineering.versions.kicad}`
   : "engineering tools not found: this worker will not take schematic tasks");
 
+const sourcing = sourcingProvidersFromEnv();
+const sourcingOn = sourcing.filter((p) => p.configured());
+console.log(sourcingOn.length ? `sourcing providers: ${sourcingOn.map((p) => `${p.label} (${p.role})`).join(", ")}`
+                              : "no sourcing provider configured: this worker will not take sourcing tasks");
+
 const worker = new Worker(new WorkerDb(url, key), {
   workerId: env("WORKER_ID", `${hostname()}-${process.pid}`),
   concurrency: Number(env("WORKER_CONCURRENCY", "2")),
@@ -54,7 +64,7 @@ const worker = new Worker(new WorkerDb(url, key), {
   computeUsdPerHour: Number(env("VX_COMPUTE_USD_PER_HOUR", "0.10")),
   uncoveredGraceMs: Number(env("VX_UNCOVERED_GRACE_MS", "30000")),
   tools: engineering ? { kicad: engineering.versions.kicad, vx_eng: engineering.versions.vx_eng } : {},
-}, executorsFor(engineering), model);
+}, executorsFor(engineering, sourcing), model);
 
 let signals = 0;
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

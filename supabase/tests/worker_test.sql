@@ -257,4 +257,24 @@ select pg_temp.act_as('00000000-0000-0000-0000-00000000000e');
 select pg_temp.check((select count(*) = 1 from public.workers), 'signed-in users see workers');
 select pg_temp.expect_error($$select public.worker_checkin('fake', '{schematic}', '{}')$$, '%permission denied%');
 
+-- 15. M-SRC: the parts catalog is readable by signed-in users and written only by workers.
+select pg_temp.as_worker();
+select public.record_part('{"mpn":"AP2112K-3.3TRG1","normalized_mpn":"AP2112K-3.3TRG1","manufacturer":"Diodes Incorporated",
+  "normalized_mfr":"DIODES","lifecycle":"active","provider":"nexar"}'::jsonb,
+  '[{"provider":"nexar","seller":"DigiKey","sku":"AP2112K-3.3TRG1DICT-ND","stock":100,"currency":"USD",
+     "prices":[{"quantity":1,"unit_price":0.5}],"data_status":"live"}]'::jsonb);
+select public.record_part('{"mpn":"ap2112k-3.3trg1","normalized_mpn":"AP2112K-3.3TRG1","manufacturer":"Diodes Inc.",
+  "normalized_mfr":"DIODES","lifecycle":"unknown","provider":"mouser"}'::jsonb,
+  '[{"provider":"mouser","seller":"Mouser","sku":"621-AP2112K-3.3TRG1","stock":50,"currency":"USD","prices":[],"data_status":"live"}]'::jsonb);
+select pg_temp.check((select count(*) = 1 and bool_and(lifecycle = 'active') and bool_and(sources @> '{nexar,mouser}')
+                      from public.parts where normalized_mpn = 'AP2112K-3.3TRG1'),
+  'one part per normalized MPN + manufacturer; an unknown lifecycle does not overwrite a known one; sources merge');
+select pg_temp.check((select count(*) = 2 from public.offers o join public.parts p on p.id = o.part_id
+                      where p.normalized_mpn = 'AP2112K-3.3TRG1'), 'offers accumulate as observations');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select count(*) = 1 from public.parts where normalized_mpn = 'AP2112K-3.3TRG1'), 'any signed-in user reads the catalog');
+select pg_temp.expect_error($$select public.record_part('{}'::jsonb, '[]'::jsonb)$$, '%permission denied%');
+select pg_temp.expect_error($$insert into public.parts (mpn, normalized_mpn, manufacturer, normalized_mfr) values ('x','X','y','Y')$$, '%row-level security%');
+select pg_temp.act_as(null);
+
 \echo 'All worker tests passed.'

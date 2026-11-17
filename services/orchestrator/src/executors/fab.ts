@@ -50,6 +50,14 @@ export function fabExecutor(tools: EngineeringTools): Executor {
       try {
         const source = await ctx.step("context", async () =>
           db.upstreamVersion(task.id, "kicad-project", ["pcb_layout"]));
+        // LCSC numbers from an upstream sourcing task, if any. Only live distributor data is applied.
+        const lcsc = await ctx.step("lcsc", async () => {
+          const m = await db.upstreamJson(task.id, "lcsc-map");
+          if (!m) return { status: "none" as const, map: {} as Record<string, string>, from: null };
+          const v = m.value as { data_status: string; lcsc: Record<string, string> };
+          return v.data_status === "live" ? { status: "applied" as const, map: v.lcsc, from: m.taskKey }
+                                          : { status: "not_live" as const, map: {}, from: m.taskKey };
+        });
         if (!source) {
           return { status: "blocked", reason: "The fab package needs a committed routed board from an upstream PCB layout task " +
                                               "('<layout task>/kicad-project'). Run and approve the layout first." };
@@ -60,7 +68,12 @@ export function fabExecutor(tools: EngineeringTools): Executor {
           const zip = join(work, "project.zip");
           await writeFile(zip, await db.downloadBytes(source.storagePath));
           const out = join(work, "out");
-          const r = await buildFabPackage(tools, zip, out);
+          let mapPath: string | undefined;
+          if (Object.keys(lcsc.map).length) {
+            mapPath = join(work, "lcsc.json");
+            await writeFile(mapPath, JSON.stringify(lcsc.map));
+          }
+          const r = await buildFabPackage(tools, zip, out, mapPath);
           await ctx.log(r.ok ? `fab package ${r.revision}: all checks pass`
                              : `fab package stopped at ${r.stage}: ${r.error ?? (r.problems ?? []).map((p) => p.message).join("; ")}`,
                         { stage: r.stage, drc: r.drc, problems: r.problems, warnings: r.warnings }, r.ok ? "info" : "warn");
@@ -136,12 +149,14 @@ export function fabExecutor(tools: EngineeringTools): Executor {
                   (a.rotation_corrections.length ? `; house rotation corrections on ${a.rotation_corrections.map((c) => c.ref).join(", ")}` : ""),
               artifact_version_id: stored.cpl, tool_name: "vx_eng", tool_version: tools.versions.vx_eng },
             { kind: "bom_check", result: a.lcsc_missing.length ? "warning" : "pass", evidence_category: "unverified_assumption",
-              summary: a.lcsc_missing.length
+              summary: (a.lcsc_missing.length
                 ? `Assembly BOM: ${a.bom_lines} lines; LCSC part numbers missing for ${a.lcsc_missing.length} part(s), so assembly ` +
                   "cannot be ordered yet (bare boards can)"
-                : `Assembly BOM: ${a.bom_lines} lines, every line has an LCSC part number (not yet checked against stock)`,
+                : `Assembly BOM: ${a.bom_lines} lines, every line has an LCSC part number`) +
+                (lcsc.status === "applied" ? `; ${r.lcsc_applied?.length ?? 0} part(s) numbered from ${lcsc.from}'s live sourcing`
+                 : lcsc.status === "not_live" ? `; ${lcsc.from}'s LCSC numbers are fixture data and were not applied` : ""),
               artifact_version_id: stored.bom, tool_name: "vx_eng", tool_version: tools.versions.vx_eng,
-              details: { lcsc_missing: a.lcsc_missing } },
+              details: { lcsc_missing: a.lcsc_missing, lcsc_source: lcsc.from, lcsc_status: lcsc.status, applied: r.lcsc_applied } },
           );
         }
         if (!r.ok) return { status: "failed", retryable: false, validations, error: "the fab package failed its independent checks" };

@@ -152,14 +152,14 @@ def cmd_layout_build(spec: dict, layout_spec: dict, out: Path) -> dict:
     return result
 
 
-def cmd_fab_package(project: Path, out: Path, panel: bool, profile: str | None) -> dict:
+def cmd_fab_package(project: Path, out: Path, panel: bool, profile: str | None, lcsc: dict | None = None) -> dict:
     """Fab package from a G4 project (zip or directory): DRC gate, KiKit fab files, independent checks, drawings, panel."""
     import tempfile
     from . import release
     if project.is_file():
         tmp = Path(tempfile.mkdtemp(prefix="vx-fab-"))
         project = release.unzip_project(project, tmp)
-    return release.build_package(project, out, panel=panel, profile_name=profile)
+    return release.build_package(project, out, panel=panel, profile_name=profile, lcsc=lcsc)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -184,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     fp.add_argument("--out", required=True)
     fp.add_argument("--profile", choices=sorted(PROFILES), help="override the project's fab profile")
     fp.add_argument("--no-panel", action="store_true")
+    fp.add_argument("--lcsc", help="JSON file mapping references to LCSC part numbers (from sourcing)")
     sub.add_parser("version")
     args = ap.parse_args(argv)
     if args.cmd == "version":
@@ -191,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "fab-package":
         try:
-            result = cmd_fab_package(Path(args.project), Path(args.out), not args.no_panel, args.profile)
+            lcsc = json.load(open(args.lcsc)) if args.lcsc else None
+            result = cmd_fab_package(Path(args.project), Path(args.out), not args.no_panel, args.profile, lcsc)
         except kicad.KicadError as e:
             result = {"ok": False, "stage": "kicad", "error": str(e)}
         print(json.dumps(result))

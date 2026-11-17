@@ -1,0 +1,77 @@
+{
+  "Errors": [],
+  "SearchResults": {
+    "NumberOfResult": 1,
+    "Parts": [
+      {
+        "Availability": "10476 In Stock",
+        "DataSheetUrl": "https://www.ti.com/lit/ds/symlink/lm317l.pdf",
+        "Description": "Linear Voltage Regulators 8Pin 100mA Adj Vltg Reg",
+        "FactoryStock": "0",
+        "ImagePath": "https://www.mouser.com/images/texasinstruments/images/ITP_TI_SOIC-8_D_t.jpg",
+        "Category": "Linear Voltage Regulators",
+        "LeadTime": "42 Days",
+        "LifecycleStatus": null,
+        "Manufacturer": "Texas Instruments",
+        "ManufacturerPartNumber": "LM317LID",
+        "Min": "1",
+        "Mult": "1",
+        "MouserPartNumber": "595-LM317LID",
+        "ProductAttributes": [
+          {
+            "AttributeName": "Packaging",
+            "AttributeValue": "Tube"
+          },
+          {
+            "AttributeName": "Standard Pack Qty",
+            "AttributeValue": "75"
+          }
+        ],
+        "PriceBreaks": [
+          {
+            "Quantity": 1,
+            "Price": "$0.98",
+            "Currency": "USD"
+          },
+          {
+            "Quantity": 10,
+            "Price": "$0.707",
+            "Currency": "USD"
+          },
+          {
+            "Quantity": 75,
+            "Price": "$0.545",
+            "Currency": "USD"
+          }
+        ],
+        "AlternatePackagings": [
+          {
+            "APMfrPN": "LM317LIDR"
+          }
+        ],
+        "ProductDetailUrl": "https://www.mouser.com/ProductDetail/Texas-Instruments/LM317LID?qs=iSMark9AYDUr%252BB%2Fg03%252BAoA%3D%3D",
+        "Reeling": false,
+        "ROHSStatus": "RoHS Compliant",
+        "SuggestedReplacement": "595-LM317LIDR",
+        "MultiSimBlue": 0,
+        "UnitWeightKg": {
+          "UnitWeight": 7.26e-05
+        },
+        "AvailabilityInStock": "10476",
+        "AvailabilityOnOrder": [],
+        "InfoMessages": [],
+        "SurchargeMessages": null,
+        "ProductCompliance": [
+          {
+            "ComplianceName": "USHTS",
+            "ComplianceValue": "8542390070"
+          },
+          {
+            "ComplianceName": "ECCN",
+            "ComplianceValue": "EAR99"
+          }
+        ]
+      }
+    ]
+  }
+}

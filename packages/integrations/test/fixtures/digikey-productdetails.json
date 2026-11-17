@@ -1,0 +1,137 @@
+{
+  "SearchLocaleUsed": {
+    "Site": "DE",
+    "Language": "en",
+    "Currency": "EUR"
+  },
+  "Product": {
+    "Description": {
+      "ProductDescription": "RES 22 OHM 1% 1/16W 0402",
+      "DetailedDescription": "22 Ohms \u00b11% 0.063W, 1/16W Chip Resistor 0402 (1005 Metric) Moisture Resistant Thick Film"
+    },
+    "Manufacturer": {
+      "Id": 13,
+      "Name": "YAGEO"
+    },
+    "ManufacturerProductNumber": "RC0402FR-0722RL",
+    "UnitPrice": 0.08,
+    "ProductUrl": "https://www.digikey.de/en/products/detail/yageo/RC0402FR-0722RL/726562",
+    "DatasheetUrl": "https://yageogroup.com/content/datasheet/asset/file/PYU-RC_GROUP_51_ROHS_L",
+    "PhotoUrl": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4849/13_0402-%281005-metric%29.jpg",
+    "ProductVariations": [
+      {
+        "DigiKeyProductNumber": "311-22.0LRCT-ND",
+        "PackageType": {
+          "Id": 2,
+          "Name": "Cut Tape (CT)"
+        },
+        "StandardPricing": [
+          {
+            "BreakQuantity": 1,
+            "UnitPrice": 0.08,
+            "TotalPrice": 0.08
+          },
+          {
+            "BreakQuantity": 10,
+            "UnitPrice": 0.006,
+            "TotalPrice": 0.06
+          }
+        ],
+        "MyPricing": [],
+        "MarketPlace": false,
+        "TariffActive": false,
+        "Supplier": {
+          "Id": 13,
+          "Name": "YAGEO"
+        },
+        "QuantityAvailableforPackageType": 1553626,
+        "MaxQuantityForDistribution": 0,
+        "MinimumOrderQuantity": 1,
+        "StandardPackage": 0,
+        "DigiReelFee": 0.0
+      },
+      {
+        "DigiKeyProductNumber": "311-22.0LRTR-ND",
+        "PackageType": {
+          "Id": 1,
+          "Name": "Tape & Reel (TR)"
+        },
+        "StandardPricing": [
+          {
+            "BreakQuantity": 10000,
+            "UnitPrice": 0.00172,
+            "TotalPrice": 17.2
+          },
+          {
+            "BreakQuantity": 20000,
+            "UnitPrice": 0.00169,
+            "TotalPrice": 33.8
+          }
+        ],
+        "MyPricing": [],
+        "MarketPlace": false,
+        "TariffActive": false,
+        "Supplier": {
+          "Id": 13,
+          "Name": "YAGEO"
+        },
+        "QuantityAvailableforPackageType": 1530000,
+        "MaxQuantityForDistribution": 0,
+        "MinimumOrderQuantity": 10000,
+        "StandardPackage": 0,
+        "DigiReelFee": 0.0
+      }
+    ],
+    "QuantityAvailable": 1553626,
+    "ProductStatus": {
+      "Id": 0,
+      "Status": "Active"
+    },
+    "BackOrderNotAllowed": false,
+    "NormallyStocking": true,
+    "Discontinued": false,
+    "EndOfLife": false,
+    "Ncnr": false,
+    "PrimaryVideoUrl": null,
+    "Parameters": [
+      {
+        "ParameterId": 2085,
+        "ParameterText": "Resistance",
+        "ParameterType": "UnitOfMeasure",
+        "ValueId": "22 Ohms",
+        "ValueText": "22 Ohms"
+      }
+    ],
+    "BaseProductNumber": null,
+    "Category": {
+      "CategoryId": 2,
+      "ParentId": 0,
+      "Name": "Resistors",
+      "ProductCount": 0,
+      "NewProductCount": 0,
+      "ImageUrl": "...",
+      "SeoDescription": "...",
+      "ChildCategories": []
+    },
+    "DateLastBuyChance": null,
+    "ManufacturerLeadWeeks": "18",
+    "ManufacturerPublicQuantity": 0,
+    "Series": {
+      "Id": 81248,
+      "Name": "RC_L"
+    },
+    "ShippingInfo": null,
+    "Classifications": {
+      "ReachStatus": "REACH Unaffected",
+      "RohsStatus": "ROHS3 Compliant",
+      "MoistureSensitivityLevel": "1  (Unlimited)",
+      "ExportControlClassNumber": "EAR99",
+      "HtsusCode": "8533.21.0030"
+    },
+    "OtherNames": [
+      "2266-RC0402FR-0722RL"
+    ]
+  },
+  "AccountIdUsed": 0,
+  "CustomerIdUsed": 0
+}

@@ -214,11 +214,14 @@ export interface FabPackageResult {
   assembly?: { ok: boolean; cpl_rows: number; bom_lines: number; lcsc_missing: string[];
                rotation_corrections: { ref: string; board: number; cpl: number }[] };
   panel?: { size_mm: [number, number]; boards: number } | null;
+  lcsc_applied?: string[];
   files?: Partial<Record<"package" | "notes" | "gerbers" | "bom" | "cpl" | "assembly_top" | "assembly_bottom" | "drill_map" |
                          "panel_gerbers" | "panel_render" | "check", string>>;
 }
 
 /** Builds and checks the fab package for a routed KiCad project zip. */
-export async function buildFabPackage(tools: EngineeringTools, projectZip: string, outDir: string): Promise<FabPackageResult> {
-  return call(tools, ["fab-package", "--project", projectZip, "--out", outDir], undefined, 1_800_000) as Promise<FabPackageResult>;
+export async function buildFabPackage(tools: EngineeringTools, projectZip: string, outDir: string,
+                                      lcscMapPath?: string): Promise<FabPackageResult> {
+  return call(tools, ["fab-package", "--project", projectZip, "--out", outDir, ...(lcscMapPath ? ["--lcsc", lcscMapPath] : [])],
+              undefined, 1_800_000) as Promise<FabPackageResult>;
 }

@@ -1,0 +1,20 @@
+{
+  "errors": [
+    {
+      "message": "Token validation failed. Please provide a valid access token.",
+      "locations": [
+        {
+          "line": 2,
+          "column": 3
+        }
+      ],
+      "path": [
+        "supSearchMpn"
+      ],
+      "extensions": {
+        "code": "AuthInvalidToken"
+      }
+    }
+  ],
+  "data": null
+}

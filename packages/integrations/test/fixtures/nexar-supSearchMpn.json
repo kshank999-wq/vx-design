@@ -1,0 +1,91 @@
+{
+  "data": {
+    "supSearchMpn": {
+      "hits": 1,
+      "results": [
+        {
+          "part": {
+            "id": "42263",
+            "mpn": "LM358DR",
+            "manufacturer": {
+              "id": "370",
+              "name": "Texas Instruments"
+            },
+            "shortDescription": "Op Amp Dual GP \u00b116V/32V 8-Pin SOIC T/R",
+            "bestDatasheet": {
+              "url": "https://datasheet.octopart.com/LM358DR-Texas-Instruments-datasheet-example.pdf",
+              "name": "Datasheet",
+              "mimeType": "application/pdf"
+            },
+            "octopartUrl": "https://octopart.com/lm358dr-texas+instruments-42263",
+            "specs": [
+              {
+                "attribute": {
+                  "shortname": "lifecyclestatus",
+                  "name": "Lifecycle Status"
+                },
+                "value": "Production",
+                "displayValue": "Production"
+              },
+              {
+                "attribute": {
+                  "shortname": "case_package",
+                  "name": "Case/Package"
+                },
+                "value": "SOIC",
+                "displayValue": "SOIC"
+              }
+            ],
+            "sellers": [
+              {
+                "company": {
+                  "id": "459",
+                  "name": "DigiKey",
+                  "homepageUrl": "https://www.digikey.com"
+                },
+                "country": "US",
+                "isAuthorized": true,
+                "offers": [
+                  {
+                    "id": "1234567890",
+                    "sku": "296-1014-1-ND",
+                    "inventoryLevel": 125430,
+                    "moq": 1,
+                    "orderMultiple": 1,
+                    "packaging": "Cut Tape",
+                    "factoryLeadDays": 42,
+                    "clickUrl": "https://octopart.com/click/track?ct=offers&ai=...&sig=...",
+                    "updated": "2026-11-17T06:12:33Z",
+                    "prices": [
+                      {
+                        "quantity": 1,
+                        "price": 0.47,
+                        "currency": "USD",
+                        "convertedPrice": 0.47,
+                        "convertedCurrency": "USD"
+                      },
+                      {
+                        "quantity": 10,
+                        "price": 0.326,
+                        "currency": "USD",
+                        "convertedPrice": 0.326,
+                        "convertedCurrency": "USD"
+                      },
+                      {
+                        "quantity": 100,
+                        "price": 0.2316,
+                        "currency": "USD",
+                        "convertedPrice": 0.2316,
+                        "convertedCurrency": "USD"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

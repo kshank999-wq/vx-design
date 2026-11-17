@@ -93,6 +93,9 @@ importers:
       '@vx/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@vx/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@vx/planning':
         specifier: workspace:*
         version: link:../../packages/planning

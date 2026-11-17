@@ -341,7 +341,40 @@ def _zip(files: dict[str, Path], dest: Path) -> dict[str, str]:
 
 # --- Entry point ---------------------------------------------------------------------------
 
-def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name: str | None = None) -> dict[str, Any]:
+def apply_lcsc(project_dir: Path, pcb: str, lcsc: dict[str, str], sch: str = "") -> list[str]:
+    """Writes LCSC part numbers from sourcing into the schematic symbols (KiKit's assembly BOM reads them there)
+    and the matching board footprints (so schematic parity still holds)."""
+    import pcbnew
+    from .pcb import _set_field
+    from .schematic import _prop
+    from .sexpr import Sym, child, children, dumps, parse
+    if sch and (project_dir / sch).exists():
+        doc = parse((project_dir / sch).read_text())
+        for sym in children(doc, "symbol"):
+            props = {str(p[1]): p for p in children(sym, "property")}
+            ref = props.get("Reference")
+            code = lcsc.get(str(ref[2])) if ref else None
+            if not code:
+                continue
+            if "LCSC" in props:
+                props["LCSC"][2] = code
+            else:
+                at = child(sym, "at") or [Sym("at"), 0, 0, 0]
+                sym.insert(sym.index(ref) + 1, _prop("LCSC", code, (at[1], at[2]), hidden=True))
+        (project_dir / sch).write_text(dumps(doc) + "\n")
+    board = pcbnew.LoadBoard(str(project_dir / pcb))
+    applied = []
+    for fp in board.GetFootprints():
+        code = lcsc.get(fp.GetReference())
+        if code:
+            _set_field(fp, "LCSC", code)
+            applied.append(fp.GetReference())
+    pcbnew.SaveBoard(str(project_dir / pcb), board)
+    return sorted(applied)
+
+
+def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name: str | None = None,
+                  lcsc: dict[str, str] | None = None) -> dict[str, Any]:
     pcb, sch, profile = project_files(project_dir)
     if profile_name:
         profile = PROFILES[profile_name]
@@ -359,6 +392,7 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
                                               f"unrouted, {report['parity']} schematic differences); fix the layout first")]
         return result
 
+    lcsc_applied = apply_lcsc(project_dir, pcb, lcsc, sch) if lcsc else []
     facts = board_facts(project_dir, pcb)
     out.mkdir(parents=True, exist_ok=True)
     fab_dir = out / "fab"
@@ -416,7 +450,7 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
         "warnings": gerbers["warnings"] + assembly["warnings"],
         "board": check["board"], "gerbers": {k: v for k, v in gerbers.items() if k not in ("problems", "warnings")},
         "assembly": {k: v for k, v in assembly.items() if k not in ("problems", "warnings")},
-        "panel": pan, "files": exported, "manifest": manifest,
+        "panel": pan, "files": exported, "manifest": manifest, "lcsc_applied": lcsc_applied,
     })
     return result
 

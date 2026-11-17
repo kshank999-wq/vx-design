@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, LayoutView, ModelReportView } from "@/components/ArtifactViews";
+import { CsvTable, DesignView, DrcView, ErcView, EvidenceView, FabCheckView, LayoutView, ModelReportView, SourcedBomView } from "@/components/ArtifactViews";
 import { BoardViewer } from "@/components/BoardViewer";
 import { requireUser } from "@/lib/auth";
 
@@ -141,7 +141,8 @@ export default async function ArtifactVersionPage({ params }: { params: Promise<
       {json && suffix === "model-report" && <ModelReportView models={json} />}
       {json && suffix === "layout" && <LayoutView layout={json} />}
       {json && suffix === "fab-check" && <FabCheckView check={json} />}
-      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check"].includes(suffix) &&
+      {json && suffix === "sourced-bom" && <SourcedBomView bom={json} />}
+      {json && !["erc-report", "component-evidence", "design", "drc-report", "model-report", "layout", "fab-check", "sourced-bom"].includes(suffix) &&
         <pre className="doc">{JSON.stringify(json, null, 2)}</pre>}
       {text !== null && type.startsWith("text/csv") && <CsvTable csv={text} />}
       {text !== null && !json && !type.startsWith("text/csv") && <pre className="doc">{text}</pre>}

@@ -46,3 +46,12 @@ export function assertCapability(
   if (record.status !== "verified") throw new CapabilityNotVerifiedError(toolName, operation, record.status);
   return record;
 }
+
+export * from "./sourcing/types.ts";
+export * from "./sourcing/normalize.ts";
+export * from "./sourcing/bom.ts";
+export * from "./sourcing/fixture.ts";
+export * from "./sourcing/nexar.ts";
+export * from "./sourcing/digikey.ts";
+export * from "./sourcing/mouser.ts";
+export * from "./sourcing/providers.ts";

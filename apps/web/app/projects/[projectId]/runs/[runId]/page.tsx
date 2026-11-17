@@ -115,7 +115,8 @@ export default async function RunPage({ params, searchParams }: {
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">
           No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
-          {uncovered.some((d) => ["schematic", "pcb_layout", "manufacturing"].includes(d)) ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}.
+          {uncovered.some((d) => ["schematic", "pcb_layout", "manufacturing"].includes(d)) ? ": start the KiCad engineering worker (services/engineering/Dockerfile.worker)" : ""}
+          {uncovered.includes("sourcing") ? ": start a worker with distributor API keys (NEXAR_*, DIGIKEY_* or MOUSER_API_KEY)" : ""}.
           They stay ready and run as soon as one connects.
         </p>
       )}

@@ -316,6 +316,11 @@ export class WorkerDb {
     return v ? { taskKey: v.taskKey, versionId: v.versionId, value: JSON.parse(await this.downloadText(v.storagePath)) } : null;
   }
 
+  /** Adds a live part and its offers to the shared catalog. */
+  async recordPart(part: Record<string, unknown>, offers: Record<string, unknown>[]): Promise<string> {
+    return this.rpc<string>("record_part", { p_part: part, p_offers: offers });
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);

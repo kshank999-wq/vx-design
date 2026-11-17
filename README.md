@@ -247,6 +247,54 @@ pnpm test:g45                       # schematic -> layout -> fab package via the
 pnpm test:e2e:g45                   # browser: order card, fab notes, independent checks, panel, approve
 ```
 
+## M-SRC: part sourcing
+
+Sourcing tasks take the **committed circuit design** of the upstream schematic task and produce a sourced BOM.
+They run on any worker that has at least one distributor configured. A worker without keys leaves them alone,
+and the run page names the keys that are missing.
+
+- **Providers** (`packages/integrations/src/sourcing/`), in fallback order:
+  - Nexar/Octopart (primary; its offers include LCSC, which gives the JLCPCB part numbers);
+  - DigiKey v4 (fallback A);
+  - Mouser v1 (fallback B).
+  
+  Every configured provider is asked; a failing one is recorded and does not stop the line. Request and
+  response field names come from the vendors' own Swagger specs and live GraphQL schema. Contract tests use
+  documented response shapes (`packages/integrations/test/fixtures/README.md` gives each fixture's
+  provenance), and `pnpm --filter @vx/integrations test:live` checks each provider for real once its keys
+  are set.
+- **Identity.** Each part number is normalized and the manufacturer name is matched against known aliases.
+  Every result is labelled an exact match, a packaging variant (e.g. `…TRG1`) or a different part. When
+  providers disagree on lifecycle or manufacturer, the line is flagged.
+- **Generic passives** (no MPN in the design) are chosen by rules:
+  - the same value and package;
+  - a capacitor voltage rating at least twice the rail voltage read from the net name (16 V when the
+    rail is unknown);
+  - LCSC-available first, then stock, then price.
+  
+  They are labelled "chosen by rules: review", and up to three alternates are kept.
+- **Pricing** at 1, 10, 100 and 1000 boards: the cheapest single offer with enough stock, honouring MOQ,
+  multiples and price breaks. Shipping, duty and assembly are not included.
+- **Flags**: single source at 100 boards, lifecycle (obsolete, NRND, unknown), no LCSC number, no price, and
+  provider errors. A line that cannot be sourced fails the task; nothing is invented.
+- **Outputs**: `sourced-bom` (JSON, shown as a table with offers), a CSV and an `lcsc-map`.
+  - The fab package writes live LCSC numbers into the schematic and board fields, so JLCPCB's assembly BOM
+    is filled in.
+  - Fixture numbers are never applied.
+- **Catalog.** Live results go into the shared `parts` and `offers` tables, with each offer's observation
+  time; fixture results never do. `part_models` is the manufacturer 3D model library (schema only so far).
+  Provider calls are metered in `cost_events`.
+
+Not done yet in M-SRC: the manufacturer 3D model library fetch, the power-tree calculator, and LCSC/JLCPCB's
+own APIs (both need an application). No live distributor call has been made yet, because there are no keys.
+
+```bash
+pnpm --filter @vx/integrations test        # identity, pricing, BOM resolution, adapter contracts (fake HTTP)
+pnpm --filter @vx/integrations test:live   # real calls; runs each provider whose keys are set
+pnpm test:msrc                             # schematic -> sourcing (fixture worker) + layout -> fab package
+pnpm test:e2e:msrc                         # browser: waits for keys, fixture BOM, approve
+```
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,

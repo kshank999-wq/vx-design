@@ -373,6 +373,20 @@ class FabPackageTests(unittest.TestCase):
         self.assertEqual(r["stage"], "drc")
         self.assertGreater(r["drc"]["unconnected"], 0)
 
+    def test_lcsc_numbers_from_sourcing_reach_the_assembly_bom(self):
+        from vx_eng.release import build_package, unzip_project
+        proj = unzip_project(self.project_zip, Path(self.tmp.name) / "lcsc")
+        r = build_package(proj, Path(self.tmp.name) / "lcsc-out", panel=False, lcsc={"U1": "C51118", "C1": "C15849", "C2": "C15849"})
+        self.assertTrue(r["ok"], r.get("problems"))
+        self.assertEqual(r["lcsc_applied"], ["C1", "C2", "U1"])
+        bom = (Path(self.tmp.name) / "lcsc-out" / "bom.csv").read_text()
+        self.assertIn("C51118", bom)
+        self.assertIn('"C1,C2",Capacitor_SMD:C_0603_1608Metric,C15849', bom)
+        from vx_eng.pcb import drc
+        report = drc(proj, next(proj.glob("*.kicad_pcb")).name, refill=False)
+        self.assertEqual(report["parity"], 0, "LCSC fields written to schematic and board alike")
+        self.assertEqual(sorted(r["assembly"]["lcsc_missing"]), ["D1", "J1", "R1"])
+
     def test_unsafe_zip_is_rejected(self):
         import zipfile
         from vx_eng import kicad

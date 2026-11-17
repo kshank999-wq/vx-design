@@ -113,7 +113,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 | S1 | Concept & industrial design | 2D render or moodboard, 3D cosmetic mockup, rough internal envelope, colour and material options, customer sign-off | **Planned** (§9) |
 | S2 | System architecture | Block diagram, module-vs-custom comparison, interfaces, power budget, preliminary mechanical stack, tentative BOM | **Partial**: architecture, power and mechanical design briefs. The power calculator, trade studies and BOM are planned. |
 | S3 | Detailed design | Schematics, verified symbols and footprints, PCB layout with DRC and ERC, firmware architecture, MCAD assembly, harness drawings, thermal checks | **Partial**: schematic + ERC (G3), PCB + DRC + 3D (G4). MCAD is M-ENC. Firmware architecture uses briefs. |
-| S4 | Sourcing & DFM | Approved vendor list, sourced BOM with alternates, stackup, placement and export files, manufacturing constraints | **Planned** (M-SRC, G4.5) |
+| S4 | Sourcing & DFM | Approved vendor list, sourced BOM with alternates, stackup, placement and export files, manufacturing constraints | **Partial**: sourced BOM (M-SRC) and fab package (G4.5) built; vendor list planned |
 | S5 | Prototype packages & RFQs | Manufacturer-specific STEP/STL/DXF/Gerber/ODB++/IPC-2581, BOM/CPL, drawings, tolerances, inspection plan, NDA and RFQ packets | **Planned** (G4.5, M-RFQ) |
 | S6 | Build & validation | Incoming inspection, bring-up, test logs, fault corrections, firmware validation, fit and finish, environmental tests | **Planned**: evidence capture (`test_results`) |
 | S7 | Compliance & production | Lab and regulatory assessment, pilot run, production test jig, revision lock, QC and traceability, released files | **Planned**: tracking only, never certification |
@@ -131,7 +131,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | G3 — First circuit | Component evidence, editable schematic, ERC report | A simple test sub-board opens and checks in KiCad | **Built**: KiCad CLI checks pass; the desktop app is untested. Tested with a fixture circuit; a real design needs an API key. |
 | G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**, with two carried items: manufacturer STEP per part (M-SRC) and fit results (M-ENC) |
 | G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | **Built**: package checked independently of KiCad. The physical order needs a real design (API key) and LCSC numbers for assembly (M-SRC). |
-| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Next** (owner decision 17 Nov); blocked on API keys |
+| M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Remaining: manufacturer 3D model library fetch, power-tree calculator. |
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | Planned |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
@@ -195,7 +195,7 @@ v1.0's agents are implemented as **executors**. Each handles one or more task di
 | EE/PCB agent | Circuit planning, schematic and PCB via CAD adapters | ERC, DRC, netlist and parity checks, simulation, reviewer sign-off | `kicad-schematic`, `kicad-pcb` | **Built** (simulation planned) |
 | Mechanical/DFM agent | Enclosure, datums, clearances, mounts, gasket, heat, finish | Tolerance stacks, process-specific DFM | — | Planned (M-ENC) |
 | Firmware agent | MCU selection, drivers, protocols, testing | CI, hardware-in-the-loop, security review | Briefs only | Deferred (generation) |
-| Supply chain agent | BOM/AVL normalization, quotes, alternates | Price timestamp, MPN identity, fit/function check | — | Planned (M-SRC) |
+| Supply chain agent | BOM/AVL normalization, quotes, alternates | Price timestamp, MPN identity, fit/function check | `sourcing` executor | **Partial** (no live keys yet) |
 | Manufacturing agent | Route work to process suppliers, generate RFQs | Feasibility, owner approval | — | Planned (G4.5, M-RFQ) |
 | Compliance agent | Applicable regions, tests, documentation | Human-certified expert or lab decision, recorded results | — | Planned (tracking only) |
 
@@ -266,7 +266,7 @@ Retrieval-augmented generation is used, not fine-tuning, for v1.
 | sources | id, title, publisher, official_url, license, acquisition_method, document_version, last_verified_at, access_level | New. `documents` holds project uploads; `sources` holds shared references. |
 | standards | identifier, issuing_body, edition, region, product_scope, purchase_link, licensed_excerpt_location, review_status | New |
 | parts | manufacturer, normalized_mpn, function, package, lifecycle, ratings, footprint ref, datasheet version | New. The schematic evidence report holds this per design today. |
-| offers | supplier_id, part_id, qty_breaks, currency, MOQ, stock, lead_time, observed_at, terms | New (M-SRC) |
+| offers | supplier_id, part_id, qty_breaks, currency, MOQ, stock, lead_time, observed_at, terms | **Exists** (M-SRC: `offers`, plus `parts` and `part_models`) |
 | modules | module/board id, interfaces, supply, performance, dimensions, CAD, support status | New |
 | manufacturers | legal name, country, processes, contacts, certification evidence, NDA method, file specs, lead times | New (M-RFQ) |
 | process_rules | process, material, capability envelope, tolerances, thickness, finish, verified_at | New. Starts from `vx_eng/fab.py`'s fab profiles. |
@@ -320,7 +320,7 @@ A community footprint or 3D model is never trusted until its geometry and pad ma
   prompts and references are stored as artifacts with their provenance.
 - The design freeze becomes an approved decision that S2+ tasks depend on. Changing it triggers change control (§7).
 
-## 10. Sourcing and three-provider fallback — from v1.0 (Planned, M-SRC)
+## 10. Sourcing and three-provider fallback — from v1.0 (Partial, M-SRC)
 
 | Priority | Provider | Capability | Action |
 |---|---|---|---|

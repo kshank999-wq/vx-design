@@ -207,6 +207,98 @@ export function FabCheckView({ check }: { check: FabCheck }) {
   );
 }
 
+interface BomOffer { provider: string; seller: string; sku: string | null; stock: number | null; moq: number | null; currency: string;
+                    prices: { quantity: number; unitPrice: number }[]; url: string | null; observedAt: string; status: string }
+interface BomLine {
+  refs: string[]; quantityPerBoard: number; class: string;
+  wanted: { mpn: string | null; manufacturer: string | null; value: string; footprint: string; package: string | null; requirements: string[] };
+  selected: { mpn: string; manufacturer: string; description: string | null; lifecycle: string; datasheetUrl: string | null;
+              productUrl: string | null; identity: string; providers: string[] } | null;
+  lcsc: string | null; offers: BomOffer[];
+  pricing: { boards: number; need: number; choice: { seller: string; sku: string | null; unitPrice: number; buyQty: number; extended: number } | null; note: string | null }[];
+  alternates: { mpn: string; manufacturer: string; lcsc: string | null; stock: number | null }[];
+  flags: { code: string; severity: string; message: string }[];
+  attempts: { provider: string; outcome: string; results: number; error?: string }[];
+}
+interface SourcedBom {
+  generatedAt: string; currency: string; quantities: number[]; dataStatus: string;
+  providers: { id: string; label: string; role: string; configured: boolean; terms: string }[];
+  lines: BomLine[]; totals: { boards: number; perBoard: number | null; total: number | null; missingLines: string[] }[];
+  counts: { lines: number; sourced: number; unsourced: number; errors: number; warnings: number; withLcsc: number };
+}
+
+const money = (n: number | null | undefined, c: string) => n == null ? "—" : `${c === "USD" ? "$" : `${c} `}${n < 1 ? n.toFixed(4) : n.toFixed(2)}`;
+const IDENTITY = { exact: "exact match", packaging_variant: "packaging variant", rule_selected: "chosen by rules: review" } as Record<string, string>;
+
+export function SourcedBomView({ bom }: { bom: SourcedBom }) {
+  const c = bom.counts;
+  return (
+    <section>
+      <h2>Sourced BOM</h2>
+      {bom.dataStatus === "live" ? (
+        <p className="banner banner-notice" data-testid="bom-status">
+          Live distributor data observed {new Date(bom.generatedAt).toLocaleString()}. Prices and stock change: re-run sourcing before ordering.
+        </p>
+      ) : (
+        <p className="banner banner-warn" data-testid="bom-status">
+          {bom.dataStatus === "fixture" ? "Fixture data from the offline stand-in: part numbers starting FX-, prices, stock and SKUs are invented."
+                                        : `Data status: ${bom.dataStatus}.`}
+        </p>
+      )}
+      <p className="small" data-testid="bom-counts">
+        {c.sourced} of {c.lines} lines sourced · {c.withLcsc} with LCSC numbers · {c.errors} error(s) · {c.warnings} warning(s)
+      </p>
+      <p className="small muted">
+        Providers: {bom.providers.map((p) => `${p.label} (${p.role.replace("_", " ")}${p.configured ? "" : ", not configured"})`).join(" · ")}
+      </p>
+      <h3>Cost per board</h3>
+      <table className="small" data-testid="bom-totals">
+        <thead><tr><th>Boards</th><th>Parts per board</th><th>Parts total</th><th>Missing lines</th></tr></thead>
+        <tbody>{bom.totals.map((t) => (
+          <tr key={t.boards}><td>{t.boards}</td><td>{money(t.perBoard, bom.currency)}</td><td>{money(t.total, bom.currency)}</td>
+            <td>{t.missingLines.join("; ") || "none"}</td></tr>
+        ))}</tbody>
+      </table>
+      <p className="small muted">Cheapest single offer per line with enough stock, honouring MOQ, multiples and price breaks. Shipping, duty and assembly are not included.</p>
+      <h3>Lines</h3>
+      <table className="small bom">
+        <thead><tr><th>Refs</th><th>Part</th><th>Lifecycle</th><th>LCSC</th>{bom.quantities.map((q) => <th key={q}>@{q}</th>)}<th>Flags</th></tr></thead>
+        <tbody>{bom.lines.map((l) => (
+          <tr key={l.refs.join()} data-refs={l.refs.join(",")}>
+            <td className="mono">{l.refs.join(", ")}<div className="muted">x{l.quantityPerBoard}</div></td>
+            <td>
+              {l.selected ? <>
+                <span className="mono">{l.selected.mpn}</span> · {l.selected.manufacturer}
+                <div className={l.selected.identity === "rule_selected" ? "warn-text" : "muted"}>{IDENTITY[l.selected.identity] ?? l.selected.identity}
+                  {l.selected.datasheetUrl && <> · <a href={l.selected.datasheetUrl} target="_blank" rel="noreferrer">datasheet</a></>}</div>
+              </> : <span className="error-text">not sourced</span>}
+              <div className="muted">{l.wanted.value} · {l.wanted.footprint.split(":").pop()}</div>
+              {l.wanted.requirements.map((r, i) => <div key={i} className="muted">needs: {r}</div>)}
+              {l.alternates.length > 0 && <div className="muted">alternates: {l.alternates.map((a) => a.mpn).join(", ")}</div>}
+              {l.offers.length > 0 && (
+                <details><summary>{l.offers.length} offer(s)</summary>
+                  <table className="small"><tbody>{l.offers.map((o, i) => (
+                    <tr key={i}><td>{o.seller}</td><td className="mono">{o.sku}</td><td>{o.stock ?? "?"} in stock</td><td>MOQ {o.moq ?? 1}</td>
+                      <td>{o.prices.map((b) => `${b.quantity}+: ${money(b.unitPrice, o.currency)}`).join(", ")}</td>
+                      <td className="muted">{o.status}{o.status === "live" ? `, ${new Date(o.observedAt).toLocaleDateString()}` : ""}</td></tr>
+                  ))}</tbody></table>
+                </details>
+              )}
+            </td>
+            <td>{l.selected?.lifecycle.replace(/_/g, " ") ?? "—"}</td>
+            <td className="mono">{l.lcsc ?? <span className="warn-text">none</span>}</td>
+            {l.pricing.map((p) => <td key={p.boards} title={p.note ?? undefined}>{p.choice ? money(p.choice.unitPrice, bom.currency) : "—"}
+              {p.choice && <div className="muted">{p.choice.seller}</div>}</td>)}
+            <td>{l.flags.filter((f) => f.severity !== "info").map((f, i) => (
+              <div key={i} className={f.severity === "error" ? "error-text" : "warn-text"} title={f.message}>{f.code.replace(/_/g, " ")}</div>
+            ))}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </section>
+  );
+}
+
 interface Evidence {
   method: string;
   counts: Record<string, number>;

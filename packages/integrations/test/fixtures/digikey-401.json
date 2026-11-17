@@ -1,0 +1,9 @@
+{
+  "type": "https://tools.ietf.org/html/rfc7235#section-3.1",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Ensure the X-DIGIKEY-Client-Id header has a valid Client-Id",
+  "instance": "",
+  "correlationId": "f230b527",
+  "errors": {}
+}

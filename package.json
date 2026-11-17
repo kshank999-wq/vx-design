@@ -21,7 +21,9 @@
     "test:g4": "./scripts/test-g4.sh",
     "test:e2e:g4": "./scripts/test-e2e-g4.sh",
     "test:g45": "./scripts/test-g45.sh",
-    "test:e2e:g45": "./scripts/test-e2e-g45.sh"
+    "test:e2e:g45": "./scripts/test-e2e-g45.sh",
+    "test:msrc": "./scripts/test-msrc.sh",
+    "test:e2e:msrc": "./scripts/test-e2e-msrc.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
