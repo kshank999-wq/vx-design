@@ -4,6 +4,9 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
+import { confirmStandard, proposeStandard } from "@/app/knowledge/actions";
+import { LicenseFlag, SourceForm } from "@/components/Knowledge";
+import { APPLICABILITY, type License } from "@/lib/knowledge";
 
 export const maxDuration = 300;
 
@@ -43,10 +46,14 @@ export default async function ProjectPage({ params, searchParams }: {
   // Clients work in the workspace: chat, results and approval stops, without the engineering internals.
   if (me?.role === "client") redirect(`/projects/${projectId}/workspace`);
   const isOwner = me?.role === "owner";
-  const [{ data: members }, { data: invitations }] = await Promise.all([
+  const [{ data: members }, { data: invitations }, { data: projectStandards }, { data: allStandards }, { data: projectSources }] = await Promise.all([
     supabase.from("project_members").select("user_id, role").eq("project_id", projectId),
     isOwner ? supabase.from("project_invitations").select("id, email, role, created_at, accepted_at").eq("project_id", projectId).order("created_at")
             : Promise.resolve({ data: [] as never[] }),
+    supabase.from("project_standards").select("id, applicability, rationale, status, confirmed_at, standards(identifier, title, edition, license, review_status)")
+      .eq("project_id", projectId).order("created_at"),
+    supabase.from("standards").select("id, identifier, title, domain").order("domain").order("identifier"),
+    supabase.from("sources").select("id, title, identifier, publisher, license, status, indexed_chunks").eq("project_id", projectId).order("created_at"),
   ]);
   const roleCounts = Object.entries((members ?? []).reduce<Record<string, number>>((m, x) => ({ ...m, [x.role]: (m[x.role] ?? 0) + 1 }), {}));
   const canEdit = me?.role === "owner" || me?.role === "engineer";
@@ -201,7 +208,57 @@ export default async function ProjectPage({ params, searchParams }: {
       </section>
 
       <section>
-        <h2>6. People</h2>
+        <h2>6. Standards and references</h2>
+        <p className="small muted">Which standards apply to this product, and why. Engineers propose; an owner or reviewer confirms.
+          The assistant and design tasks cite these. <Link href={`/knowledge?project=${projectId}`}>Search the knowledge base with this project&apos;s sources</Link></p>
+        <table className="small" data-testid="project-standards">
+          <thead><tr><th>Standard</th><th>Applicability</th><th>Why</th><th>Status</th></tr></thead>
+          <tbody>
+            {(projectStandards ?? []).map((ps) => {
+              const st = ps.standards as unknown as { identifier: string; title: string; edition: string | null; license: License; review_status: string };
+              return (
+                <tr key={ps.id}>
+                  <td><span className="mono">{st.identifier}</span> {st.title}
+                    <div className="muted">{st.edition ? `edition ${st.edition}` : "edition unconfirmed"} <LicenseFlag license={st.license} /></div></td>
+                  <td>{APPLICABILITY[ps.applicability]}</td>
+                  <td>{ps.rationale}</td>
+                  <td><span className={`pill pill-${ps.status === "confirmed" ? "complete" : "awaiting_approval"}`}>{ps.status}</span>
+                    {ps.status === "proposed" && (me?.role === "owner" || me?.role === "reviewer") && (
+                      <form action={confirmStandard.bind(null, projectId, ps.id)}><button className="btn btn-link" type="submit">Confirm</button></form>
+                    )}</td>
+                </tr>
+              );
+            })}
+            {!projectStandards?.length && <tr><td colSpan={4} className="muted">No standards recorded for this project yet.</td></tr>}
+          </tbody>
+        </table>
+        {canEdit && (
+          <form action={proposeStandard.bind(null, projectId)} className="row upload">
+            <select name="standard_id" required aria-label="Standard" defaultValue="">
+              <option value="" disabled>Standard…</option>
+              {(allStandards ?? []).map((s) => <option key={s.id} value={s.id}>{s.identifier} — {s.title.slice(0, 60)}</option>)}
+            </select>
+            <select name="applicability" aria-label="Applicability" defaultValue="applies">
+              {Object.entries(APPLICABILITY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <input name="rationale" required placeholder="Why (market, product scope, a requirement)" aria-label="Why it applies" style={{ flex: 1, minWidth: 200 }} />
+            <SubmitButton pendingText="Saving…">Propose</SubmitButton>
+          </form>
+        )}
+        <h3>Project sources</h3>
+        <ul className="list small" data-testid="project-sources">
+          {(projectSources ?? []).map((s) => (
+            <li key={s.id}><Link href={`/knowledge/sources/${s.id}`}><strong>{s.identifier ? `${s.identifier} — ` : ""}{s.title}</strong></Link>
+              <span className="muted"> {s.publisher} · {s.indexed_chunks} excerpt(s)</span> <LicenseFlag license={s.license as License} />
+              <span className={`pill pill-${s.status === "verified" ? "complete" : "awaiting_approval"}`}>{s.status}</span></li>
+          ))}
+          {!projectSources?.length && <li className="muted">Datasheets, licensed standards and NDA documents for this project only.</li>}
+        </ul>
+        {canEdit && <details><summary>Add a project source</summary><SourceForm projectId={projectId} heading="Add a source to this project" /></details>}
+      </section>
+
+      <section>
+        <h2>7. People</h2>
         <p className="small muted">{roleCounts.map(([r, n]) => `${n} ${r}${n > 1 ? "s" : ""}`).join(" · ")}. Clients see the workspace only:
           requirements, the checklist, results and checks, and the chat. They approve or return work at approval stops, and never see
           runs, worker logs, costs or the audit trail.</p>

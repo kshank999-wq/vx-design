@@ -17,7 +17,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <body>
         <header className="topbar">
-          <Link href="/projects" className="brand">VX Design</Link>
+          <nav className="row">
+            <Link href="/projects" className="brand">VX Design</Link>
+            {email && <Link href="/knowledge" className="small">Knowledge</Link>}
+          </nav>
           {email && (
             <form action={signOut} className="row">
               <span className="muted small">{email}</span>

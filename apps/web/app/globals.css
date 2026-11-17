@@ -158,3 +158,22 @@ body:has(main.embed) .topbar, main.embed .crumbs { display: none; }
   .ws-checklist { position: static; max-height: none; }
 }
 .ws-chat h2, .ws-checklist h2, .ws-view h2 { margin-top: 0; }
+
+/* Knowledge base */
+.hits { list-style: none; padding: 0; margin: 0; }
+.hit { padding: 10px 0; border-top: 1px solid var(--line); }
+.hit .pill:first-child { margin-left: 0; }
+.citation { color: var(--muted); margin-top: 2px; }
+.hit blockquote { margin: 6px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--bg); }
+mark { background: var(--warn-bg); color: inherit; padding: 0 1px; }
+.pill-license-text { background: var(--accent); color: var(--accent-fg); }
+.pill-license-meta { background: var(--chip); }
+.licenses { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.radio { display: flex; gap: 8px; align-items: flex-start; }
+.radio input { margin-top: 4px; }
+.excerpts { padding-left: 20px; }
+.excerpts li { margin-bottom: 10px; }
+.pre { white-space: pre-wrap; }
+.facts { grid-template-columns: 120px 1fr; }
+.cites { margin: 6px 0 0; padding-left: 16px; }
+.licenses label.radio { flex-direction: row; align-items: flex-start; }

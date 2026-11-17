@@ -132,7 +132,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | G4 — PCB + 3D | Board, DRC, STEP, 3D, fit results | Native PCB, zero unwaived DRC errors, matches the schematic, 3D visible | **Built**. Manufacturer STEP per part comes from the verified model library (§10.1); fit results come from M-ENC |
 | G4.5 — Fab package | Gerbers, drill, CPL, fab BOM per fab profile, KiKit panel, fab ZIP, fab and assembly drawings | **Order the board, assemble it and test it** | **Built**: package checked independently of KiCad. The physical order needs a real design (API key) and LCSC numbers for assembly (M-SRC). |
 | M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Power calculator built (model-proposed tree, deterministic checks, repair loop). Manufacturer 3D model library built (upload, URL, Nexar CAD candidates; automatic alignment check; human verification; used by layouts). Remaining: live keys. |
-| M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | Planned (v1.0 P0) |
+| M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | **Built**: source registry with licensing rules enforced in the database, cited excerpts, standards registry (spec references, editions unconfirmed until reviewed), per-project applicability with confirmation, project-private licensed copies, full-text plus identifier search, chat citations. Not yet: vector search (needs an embedding provider), URL fetching, OCR. |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | **Built** (model-designed housing, per-part interference against the board's 3D models, process rules, STEP/STL/GLB/drawings). The physical exit test needs a real board. |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
@@ -165,7 +165,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | Orchestrator | Durable worker service on Postgres (leases, heartbeats, fenced commits, locks, budgets) | Task execution, retries, checkpoints, overnight runs, reports | **Built** (G2) |
 | AI gateway | Provider-neutral model adapter (Claude by default; offline stand-in for tests) | Extraction, planning, design proposals, structured outputs | **Built** |
 | Engineering workers | Docker image: KiCad 10, Freerouting, KiKit, CadQuery, ngspice, SKiDL; plus `vx_eng` | Schematic, PCB, DRC/ERC, 3D, exports; later enclosure and simulation | **Built** for schematic and PCB |
-| Knowledge store | Postgres catalogs + pgvector + Storage, licence-aware | Sources, standards, parts, offers, modules, manufacturers, process rules | **Planned** (M-KB) |
+| Knowledge store | Postgres catalogs + pgvector + Storage, licence-aware | Sources, standards, parts, offers, modules, manufacturers, process rules | **Partial**: sources, excerpts, standards, project standards, parts and offers built; full-text search (pgvector pending an embedding provider); modules, manufacturers and process rules not yet |
 | Source control | GitHub | Code, migrations, rules, fixtures, CI | **Built** (CI planned in G6) |
 
 Constraints:
@@ -249,7 +249,7 @@ These always need approval: processor family, battery chemistry or charger archi
 
 *(Planned. Today's UI is expert-leaning.)*
 
-## 8. Knowledge system — from v1.0 (Planned, M-KB)
+## 8. Knowledge system — from v1.0 (M-KB: core built)
 
 **Storage:**
 - Postgres is the system of record.
@@ -263,8 +263,8 @@ Retrieval-augmented generation is used, not fine-tuning, for v1.
 
 | Catalog | Core fields | Relation to today's schema |
 |---|---|---|
-| sources | id, title, publisher, official_url, license, acquisition_method, document_version, last_verified_at, access_level | New. `documents` holds project uploads; `sources` holds shared references. |
-| standards | identifier, issuing_body, edition, region, product_scope, purchase_link, licensed_excerpt_location, review_status | New |
+| sources | id, title, publisher, official_url, license, acquisition_method, document_version, last_verified_at, access_level | **Exists** (`sources` + `source_chunks`; `project_id` null = shared library, set = project-private). `documents` still holds project specifications. |
+| standards | identifier, issuing_body, edition, region, product_scope, purchase_link, licensed_excerpt_location, review_status | **Exists** (`standards`, seeded; applicability per project in `project_standards`) |
 | parts | manufacturer, normalized_mpn, function, package, lifecycle, ratings, footprint ref, datasheet version | New. The schematic evidence report holds this per design today. |
 | offers | supplier_id, part_id, qty_breaks, currency, MOQ, stock, lead_time, observed_at, terms | **Exists** (M-SRC: `offers`, plus `parts` and `part_models`) |
 | modules | module/board id, interfaces, supply, performance, dimensions, CAD, support status | New |
@@ -649,7 +649,7 @@ v1.0's backlog, merged with build status:
 **Next order** (owner decisions, §21):
 1. **G4.5 fab package.** *Built.* Its exit test is ordering and testing the timecode board, which needs a real design.
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
-3. **M-KB.** v1.0 P0. It runs alongside 1 and 2, since it needs no hardware.
+3. **M-KB.** v1.0 P0. *Core built* (vector search waits for an embedding provider).
 4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
 5. **M-UI** (client workspace) *Built*. **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
@@ -692,6 +692,8 @@ Decided 17 Nov 2026:
 
 Still open:
 - Which image provider to start with, after its terms and pricing are reviewed.
+- Which embedding provider for semantic search in the knowledge base (Anthropic has none; Voyage AI is the usual
+  pairing), or whether full-text search is enough for now. Also who the first knowledge editors are.
 
 ## 22. Success metrics and launch boundaries
 

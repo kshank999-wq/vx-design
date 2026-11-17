@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { answer, loadContext } from "@/lib/assistant";
+import { answer, loadContext, withKnowledge } from "@/lib/assistant";
 import { fail, requireUser } from "@/lib/auth";
 
 const MAX_QUESTION = 4000;
@@ -16,7 +16,7 @@ export async function sendMessage(projectId: string, view: string | null, form: 
   if (!ctx) fail(path, "Project not found.");
   let reply;
   try {
-    reply = await answer(ctx, question);
+    reply = await answer(await withKnowledge(supabase, ctx, question), question);
   } catch (e) {
     // Keep the question; say the assistant could not answer instead of losing what the member wrote.
     const { error } = await supabase.rpc("post_message", { p_project_id: projectId, p_question: question,
@@ -29,7 +29,7 @@ export async function sendMessage(projectId: string, view: string | null, form: 
   const { error } = await supabase.rpc("post_message", {
     p_project_id: projectId, p_question: question, p_answer: reply.answer,
     p_data: { model: reply.label, offline: reply.offline, references: reply.references,
-              suggested_requirement_change: reply.suggested_requirement_change },
+              suggested_requirement_change: reply.suggested_requirement_change, citations: reply.citations },
   });
   if (error) fail(path, error);
   revalidatePath(`/projects/${projectId}/workspace`);

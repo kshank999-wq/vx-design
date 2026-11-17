@@ -453,12 +453,57 @@ pnpm test:e2e:workspace        # browser: invite, client signs up, checklist sto
 
 Screenshots: `docs/workspace/screens`.
 
+## M-KB: knowledge base
+
+A shared library of standards, regulations, datasheets and application notes, plus each project's own sources.
+Every result carries its official link, edition, licence and whether a person has checked it (**Knowledge** in the
+top bar).
+
+- **Licensing rules, enforced in the database** (spec §8: a URL is not permission to copy):
+
+  | Licence | Excerpts indexed | File kept |
+  |---|---|---|
+  | Public domain (e.g. US federal regulations) | yes | yes |
+  | Open licence (CC BY, EU legal texts) | yes | yes |
+  | Manufacturer document (datasheets, app notes) | yes | no: it stays on the vendor's site |
+  | Reference only (IPC, IEC, ISO standards) | no: metadata and official link only | no |
+  | Licensed copy | yes, for one project only | yes, in that project's storage |
+  | Unknown | treated as reference only | no |
+
+  Moving a source to a licence that allows less deletes the excerpts and stored copy it no longer allows.
+- **Standards registry.** Seeded with the spec's starting references (IPC, IEC, UL, UN 38.3, FCC Part 15, EU
+  directives, ISO, ASME, Bluetooth, IEEE, USB). Editions are left unconfirmed until a knowledge editor checks
+  them with the issuing body. Being in the registry is not proof of applicability.
+- **Per-project applicability.** On the project page, engineers propose which standards apply (applies, may apply,
+  does not apply) with a reason; an owner or reviewer confirms. Changing an entry needs confirming again.
+- **Project sources.** Datasheets, licensed standards and NDA documents added on the project page stay private
+  to that project. They are searched only within it, even for someone who belongs to several projects.
+- **Search.** Postgres full-text search over the excerpts (any word matches; passages matching every word rank
+  higher), plus identifier matching ("ipc 2152" finds IPC-2152). Results show the citation locator
+  (section and page), the matched words and the flags. Search runs with the user's own permissions.
+- **Curation.** Knowledge editors (granted by the operator: insert the user's id into `knowledge_editors` with
+  the service role) add to the shared library, verify sources and review standard editions. Project owners and
+  engineers manage project sources; owners and reviewers verify them.
+- **Chat.** The workspace assistant searches the knowledge base for each question and cites what it used. It
+  gets the project's standards list too, and says when an edition is unconfirmed or only the reference is held.
+- **Not yet:** vector (semantic) search, which needs an embedding provider; fetching documents from their URL;
+  OCR for scanned PDFs; design tasks citing standards in their outputs.
+
+```bash
+./scripts/test-db.sh           # kb_test: licensing rules, write access, project scoping, search, standards review, applicability
+pnpm --filter @vx/planning test  # excerpt chunking (section-bounded, page ranges, size limit)
+pnpm test:e2e:knowledge        # browser: registry search, add/verify sources, licensed copy isolation, chat citations, licence downgrade
+```
+
+Screenshots: `docs/knowledge/screens`. The test documents in `tests/fixtures/kb` are original text.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
 `task_dependencies`, `decisions`, `approvals`, `runs`, `executions`, `artifacts`,
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
-`audit_events`, `project_invitations`, `project_messages`, plus a private `project-files` storage bucket.
+`audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
+`project_standards`, `knowledge_editors`, plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 

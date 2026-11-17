@@ -1,5 +1,6 @@
 export * from "./ingest/document.ts";
 export * from "./ingest/parsers.ts";
+export * from "./ingest/chunks.ts";
 export * from "./llm/model.ts";
 export * from "./extract.ts";
 export * from "./plan.ts";

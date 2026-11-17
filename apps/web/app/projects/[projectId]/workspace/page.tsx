@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
-import { loadContext } from "@/lib/assistant";
+import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
 import { decideFromWorkspace, sendMessage } from "./actions";
 
@@ -18,7 +18,10 @@ const LABEL: Record<string, string> = {
   draft: "Not started", blocked: "Blocked", failed: "Needs the team", canceled: "Canceled", superseded: "Replaced",
 };
 
-interface MessageData { model?: string; offline?: boolean; references?: string[]; suggested_requirement_change?: string | null; error?: boolean }
+interface MessageData {
+  model?: string; offline?: boolean; references?: string[]; suggested_requirement_change?: string | null; error?: boolean;
+  citations?: Citation[];
+}
 
 export default async function WorkspacePage({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
@@ -72,6 +75,12 @@ export default async function WorkspacePage({ params, searchParams }: {
                   <div className="small">{d.references.filter((r) => outputName.has(r)).map((r) => (
                     <Link key={r} href={href(r)} className="ref">{outputName.get(r)!.split("/").pop()}</Link>
                   ))}</div>
+                )}
+                {!!d.citations?.length && (
+                  <ul className="small cites" data-testid="citations">{d.citations.map((c) => (
+                    <li key={c.ref}>[{c.ref}] {c.source_id ? <Link href={`/knowledge/sources/${c.source_id}`}>{c.text}</Link> : c.text}
+                      {c.url && <> · <a href={c.url} target="_blank" rel="noreferrer">official</a></>}</li>
+                  ))}</ul>
                 )}
                 {m.author_kind === "assistant" && d.model && <div className="muted small">{d.model}</div>}
               </li>
