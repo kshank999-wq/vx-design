@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { normalizeManufacturer, normalizeMpn } from "@vx/integrations";
 import { fail, requireUser } from "@/lib/auth";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
+import { formFile } from "@/lib/staged";
 
-const MAX_BYTES = 24 * 1024 * 1024;   // under the server-action body limit (next.config.ts); larger files go by URL
+const MAX_BYTES = 100 * 1024 * 1024;  // staged in storage by the browser (StagedFileInput); larger files go by URL
 
 /** Adds a manufacturer 3D model (uploaded STEP/ZIP or an https URL) to the library for checking. */
 export async function addModel(projectId: string, form: FormData) {
@@ -20,11 +21,12 @@ export async function addModel(projectId: string, form: FormData) {
   const url = String(form.get("url") ?? "").trim();
   const height = Number(String(form.get("height_mm") ?? "").trim());
   const shared = form.get("shared") === "on";
-  const file = form.get("file");
+  let file: File | null = null;
+  try { file = await formFile(supabase, form, "file"); } catch (e) { fail(path, (e as Error).message); }
   if (!mpn || !manufacturer || !footprint || !source) fail(path, "Part number, manufacturer, KiCad footprint and source are required.");
   let originalPath: string | null = null;
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_BYTES) fail(path, "The file is larger than 24 MB: give an https URL to it instead.");
+  if (file) {
+    if (file.size > MAX_BYTES) fail(path, "The file is larger than 100 MB: give an https URL to it instead.");
     if (!/\.(step|stp|zip)$/i.test(file.name)) fail(path, "Upload a .step, .stp or .zip file.");
     const bytes = new Uint8Array(await file.arrayBuffer());
     const refused = uploadProblem(file.name, bytes, POLICIES.model);

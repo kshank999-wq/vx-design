@@ -33,7 +33,7 @@ import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
-import { processVirusScans } from "./scan.ts";
+import { processVirusScans, sweepStagedUploads } from "./scan.ts";
 import { processOptimization } from "./optimize.ts";
 import { scannerFromEnv } from "@vx/security";
 
@@ -115,6 +115,13 @@ if (scanner) {
   worker.addJob("virus scans", () => processVirusScans(dbs, scanner, id));
 } else {
   console.log("no virus scanner configured (CLAMD_HOST): uploaded files are not scanned");
+}
+
+// Staged uploads (deployment): sweep browser-staged copies that were never collected.
+{
+  const dbu = new WorkerDb(url, key);
+  const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
+  worker.addJob("staged upload sweep", () => sweepStagedUploads(dbu, id));
 }
 
 let signals = 0;

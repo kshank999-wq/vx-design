@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
+import { StagedFileInput } from "@/components/StagedFileInput";
 import { addSource } from "@/app/knowledge/actions";
 import { LICENSES, SOURCE_KINDS, type KnowledgeHit } from "@/lib/knowledge";
 
@@ -70,7 +71,8 @@ export function SourceForm({ projectId, heading }: { projectId: string | null; h
         <label>What the terms say<input name="license_note" placeholder="e.g. CC BY 4.0; or the clause in the vendor's terms" /></label>
       </fieldset>
       <label>Summary (your own words)<input name="summary" /></label>
-      <label>File (PDF, DOCX, Markdown or text; only for licences that allow excerpts)<input type="file" name="file" accept=".pdf,.docx,.md,.txt" /></label>
+      <StagedFileInput name="file" bucket={projectId ? "project-files" : "knowledge-files"} prefix={projectId ? `${projectId}/uploads` : "staging"}
+        accept=".pdf,.docx,.md,.txt" label="File (PDF, DOCX, Markdown or text; only for licences that allow excerpts)" />
       <div><SubmitButton pendingText="Adding…">Add source</SubmitButton></div>
     </form>
   );

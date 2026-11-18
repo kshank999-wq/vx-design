@@ -5,6 +5,7 @@ import { chunkDocument, parseDocument, UnsupportedDocumentError, type ParsedDocu
 import { fail, requireUser } from "@/lib/auth";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { LICENSES, SOURCE_KINDS, type License } from "@/lib/knowledge";
+import { formFile } from "@/lib/staged";
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const str = (form: FormData, k: string) => String(form.get(k) ?? "").trim();
@@ -24,21 +25,22 @@ export async function addSource(form: FormData) {
   if (!(license in LICENSES)) fail(path, "Choose a licence.");
   if (!SOURCE_KINDS.includes(kind as never)) fail(path, "Choose what kind of source it is.");
   const rule = LICENSES[license];
-  const file = form.get("file");
-  const hasFile = file instanceof File && file.size > 0;
+  let file: File | null = null;
+  try { file = await formFile(supabase, form, "file"); } catch (e) { fail(path, (e as Error).message); }
+  const hasFile = file !== null;
   if (hasFile && !rule.excerpts) {
     fail(path, `${rule.label}: VX Design keeps only the details and the official link for this source. Leave the file out.`);
   }
-  if (hasFile && file.size > MAX_BYTES) fail(path, "The file is larger than 20 MB.");
+  if (hasFile && file!.size > MAX_BYTES) fail(path, "The file is larger than 20 MB.");
 
   let parsed: ParsedDocument | null = null;
   let bytes: Uint8Array | null = null;
   if (hasFile) {
-    bytes = new Uint8Array(await file.arrayBuffer());
-    const refused = uploadProblem(file.name, bytes, POLICIES.source);
+    bytes = new Uint8Array(await file!.arrayBuffer());
+    const refused = uploadProblem(file!.name, bytes, POLICIES.source);
     if (refused) fail(path, refused);
     try {
-      parsed = await parseDocument(bytes, file.type, file.name);
+      parsed = await parseDocument(bytes, file!.type, file!.name);
     } catch (e) {
       fail(path, e instanceof UnsupportedDocumentError ? e.message : `Could not read the file: ${(e as Error).message}`);
     }
@@ -46,7 +48,7 @@ export async function addSource(form: FormData) {
   }
 
   const { data: id, error } = await supabase.rpc("register_source", {
-    p_project_id: projectId, p_kind: kind, p_title: str(form, "title") || parsed?.title || (hasFile ? file.name : ""),
+    p_project_id: projectId, p_kind: kind, p_title: str(form, "title") || parsed?.title || (hasFile ? file!.name : ""),
     p_publisher: str(form, "publisher"), p_official_url: str(form, "official_url") || null,
     p_identifier: str(form, "identifier") || null, p_edition: str(form, "edition") || null, p_license: license,
     p_license_note: str(form, "license_note") || null, p_summary: str(form, "summary") || null,
@@ -59,7 +61,7 @@ export async function addSource(form: FormData) {
     const excerpts = chunkDocument(parsed);
     let storagePath: string | null = null;
     if (rule.file) {
-      const safe = file.name.replace(/[^\w.-]+/g, "_").slice(-100);
+      const safe = file!.name.replace(/[^\w.-]+/g, "_").slice(-100);
       const bucket = projectId ? "project-files" : "knowledge-files";
       storagePath = projectId ? `${projectId}/sources/${id}-${safe}` : `${id}/${parsed.sha256.slice(0, 16)}-${safe}`;
       const { error: up } = await supabase.storage.from(bucket).upload(storagePath, bytes, { contentType: parsed.mimeType, upsert: false });

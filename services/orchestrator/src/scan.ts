@@ -25,3 +25,19 @@ export async function processVirusScans(db: WorkerDb, scanner: Scanner, workerId
   }
   return files.length;
 }
+
+/**
+ * Removes browser-staged upload copies (StagedFileInput) that no form ever collected. Runs at most every `everyMs`.
+ * Returns 0 so it never wakes the worker loop.
+ */
+let lastSweep = 0;
+export async function sweepStagedUploads(db: WorkerDb, workerId: string, everyMs = 10 * 60_000, olderThan = "1 hour"): Promise<number> {
+  if (Date.now() - lastSweep < everyMs) return 0;
+  lastSweep = Date.now();
+  const stale = await db.staleStagedUploads(olderThan);
+  const byBucket = new Map<string, string[]>();
+  for (const f of stale) byBucket.set(f.bucket, [...(byBucket.get(f.bucket) ?? []), f.path]);
+  for (const [bucket, paths] of byBucket) await db.removeFrom(bucket, paths);
+  if (stale.length) console.log(`[${workerId}] removed ${stale.length} abandoned staged upload(s)`);
+  return 0;
+}

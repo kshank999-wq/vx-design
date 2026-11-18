@@ -1,0 +1,58 @@
+# VX Design workers for any Docker host (a VM with 4+ GB RAM; 8 GB with the engineering worker).
+# The web app runs on Vercel and the database on Supabase; workers only make outbound connections.
+#
+#   cp deploy/workers.env.example deploy/workers.env   # fill in, never commit
+#   docker compose -f deploy/docker-compose.yml up -d                          # worker + virus scanner
+#   docker compose -f deploy/docker-compose.yml --profile engineering up -d    # + KiCad engineering worker
+#
+# Images come from the "Worker images" workflow (.github/workflows/images.yml); set VX_IMAGE_PREFIX
+# (e.g. ghcr.io/<owner>) and VX_IMAGE_TAG in the shell or a .env file next to this one.
+name: vx-workers
+
+x-worker: &worker
+  restart: unless-stopped
+  env_file: workers.env
+  environment:
+    CLAMD_HOST: clamav
+    CLAMD_PORT: "3310"
+  depends_on:
+    clamav:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  worker:
+    <<: *worker
+    image: ${VX_IMAGE_PREFIX:?set VX_IMAGE_PREFIX}/vx-worker:${VX_IMAGE_TAG:-latest}
+    deploy:
+      replicas: ${VX_WORKERS:-1}
+
+  engineering:
+    <<: *worker
+    profiles: [engineering]
+    image: ${VX_IMAGE_PREFIX:?set VX_IMAGE_PREFIX}/vx-engineering-worker:${VX_IMAGE_TAG:-latest}
+    volumes:
+      - models3d:/var/cache/vx-3dmodels
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    environment:
+      # Uploads can be large (Flux exports, fab packages).
+      CLAMD_CONF_StreamMaxLength: 300M
+      CLAMD_CONF_MaxFileSize: 300M
+      CLAMD_CONF_MaxScanSize: 600M
+    volumes:
+      - clamdb:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      start_period: 300s
+      retries: 5
+
+volumes:
+  clamdb:
+  models3d:

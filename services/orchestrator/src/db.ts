@@ -500,6 +500,15 @@ export class WorkerDb {
     return data?.value === true;
   }
 
+  async staleStagedUploads(olderThan = "1 hour"): Promise<{ bucket: string; path: string }[]> {
+    return (await this.rpc<{ bucket: string; path: string }[] | null>("worker_stale_staged_uploads", { p_older_than: olderThan })) ?? [];
+  }
+
+  async removeFrom(bucket: string, paths: string[]): Promise<void> {
+    const { error } = await this.client.storage.from(bucket).remove(paths);
+    if (error) throw new Error(`remove from ${bucket}: ${error.message}`);
+  }
+
   async downloadFrom(bucket: string, path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(bucket).download(path);
     if (error) throw new Error(`download ${bucket}/${path}: ${error.message}`);

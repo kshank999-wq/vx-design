@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
+import { StagedFileInput } from "@/components/StagedFileInput";
 import { requireUser } from "@/lib/auth";
 import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
 import { confirmStandard, proposeStandard } from "@/app/knowledge/actions";
@@ -116,7 +117,7 @@ export default async function ProjectPage({ params, searchParams }: {
         </table>
         {canEdit && (
           <form action={uploadDocument.bind(null, projectId)} className="row upload">
-            <input type="file" name="file" accept=".docx,.pdf,.md,.txt" required aria-label="Specification file" />
+            <StagedFileInput name="file" bucket="project-files" prefix={`${projectId}/uploads`} accept=".docx,.pdf,.md,.txt" required ariaLabel="Specification file" />
             <SubmitButton pendingText="Uploading…">Upload</SubmitButton>
           </form>
         )}

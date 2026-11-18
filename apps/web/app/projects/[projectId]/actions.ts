@@ -12,14 +12,16 @@ import {
 import { fail, requireUser } from "@/lib/auth";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { getModel } from "@/lib/model";
+import { formFile } from "@/lib/staged";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export async function uploadDocument(projectId: string, form: FormData) {
   const path = `/projects/${projectId}`;
   const { supabase, userId } = await requireUser();
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) fail(path, "Choose a DOCX, PDF, Markdown or text file.");
+  let file: File | null = null;
+  try { file = await formFile(supabase, form, "file"); } catch (e) { fail(path, (e as Error).message); }
+  if (!file) fail(path, "Choose a DOCX, PDF, Markdown or text file.");
   if (file.size > MAX_UPLOAD_BYTES) fail(path, "File is larger than 20 MB.");
 
   const bytes = new Uint8Array(await file.arrayBuffer());

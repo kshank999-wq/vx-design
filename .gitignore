@@ -13,3 +13,7 @@ supabase/.temp/
 supabase/.branches/
 g0-out/
 __pycache__/
+
+# Worker host secrets
+deploy/workers.env
+deploy/.env

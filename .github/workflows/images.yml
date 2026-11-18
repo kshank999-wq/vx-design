@@ -1,0 +1,43 @@
+# Builds the worker images and pushes them to this repository's GitHub container registry (private, like the
+# repository). Run by hand (Actions → Worker images → Run workflow); nothing is published on push.
+name: Worker images
+
+on:
+  workflow_dispatch:
+    inputs:
+      engineering:
+        description: Also build the KiCad engineering worker (slow, ~5 GB)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Registry login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Names
+        run: |
+          echo "PREFIX=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "TAG=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+      - name: Worker
+        run: |
+          docker build -f services/orchestrator/Dockerfile -t "$PREFIX/vx-worker:$TAG" -t "$PREFIX/vx-worker:latest" .
+          docker push --all-tags "$PREFIX/vx-worker"
+      - name: Engineering worker
+        if: inputs.engineering
+        run: |
+          IMAGE=vx-engineering:g0 ./services/engineering/build.sh
+          docker build -f services/engineering/Dockerfile.worker --build-arg ENGINEERING_IMAGE=vx-engineering:g0 \
+            -t "$PREFIX/vx-engineering-worker:$TAG" -t "$PREFIX/vx-engineering-worker:latest" .
+          docker push --all-tags "$PREFIX/vx-engineering-worker"
+      - name: Summary
+        run: |
+          echo "Pushed $PREFIX/vx-worker:$TAG$([ '${{ inputs.engineering }}' = true ] && echo " and $PREFIX/vx-engineering-worker:$TAG")." >> "$GITHUB_STEP_SUMMARY"
+          echo "On the worker host: VX_IMAGE_PREFIX=$PREFIX VX_IMAGE_TAG=$TAG docker compose -f deploy/docker-compose.yml up -d" >> "$GITHUB_STEP_SUMMARY"

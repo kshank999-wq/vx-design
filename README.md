@@ -6,7 +6,8 @@ decision traced to evidence.
 
 The master specification is [docs/SPEC.md](docs/SPEC.md) (v1.1). It merges the v0.1 platform spec and the
 v1.0 product spec, and marks what is built. The source documents are in [docs/specs/](docs/specs/), and
-[docs/ASSESSMENT.md](docs/ASSESSMENT.md) holds the feasibility assessment.
+[docs/ASSESSMENT.md](docs/ASSESSMENT.md) holds the feasibility assessment. Deployment (Vercel, Supabase, worker host):
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Layout
 

@@ -1,4 +1,5 @@
 "use server";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fail } from "@/lib/auth";
@@ -16,7 +17,10 @@ export async function signIn(form: FormData) {
 
 export async function signUp(form: FormData) {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp(credentials(form));
+  // The confirmation email links back to this site (the host must be in the project's allowed redirect URLs).
+  const h = await headers();
+  const origin = process.env.VX_SITE_URL ?? `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  const { data, error } = await supabase.auth.signUp({ ...credentials(form), options: { emailRedirectTo: `${origin}/auth/callback` } });
   if (error) fail("/login", error);
   if (!data.session) redirect("/login?notice=" + encodeURIComponent("Check your email to confirm the account, then sign in."));
   redirect("/projects");

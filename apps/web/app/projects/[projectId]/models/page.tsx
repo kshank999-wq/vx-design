@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
+import { StagedFileInput } from "@/components/StagedFileInput";
 import { requireUser } from "@/lib/auth";
 import { addModel, decideModel } from "./actions";
 
@@ -63,7 +64,7 @@ export default async function ModelsPage({ params, searchParams }: {
               <label>Body height from the datasheet (mm, optional)<input name="height_mm" inputMode="decimal" /></label>
               <label>Source<input name="source" required placeholder="Manufacturer website, OEM drawing pack ..." /></label>
               <label>Licence / terms<input name="license" placeholder="e.g. free for design use; NDA" /></label>
-              <label>STEP or ZIP file<input type="file" name="file" accept=".step,.stp,.zip" /></label>
+              <StagedFileInput name="file" bucket="project-files" prefix={`${projectId}/uploads`} accept=".step,.stp,.zip" label="STEP or ZIP file" />
               <label>…or an https URL to one<input name="url" type="url" placeholder="https://..." /></label>
             </div>
             <label className="row"><input type="checkbox" name="shared" /> Shared: public manufacturer CAD other projects may use (never for NDA files)</label>
