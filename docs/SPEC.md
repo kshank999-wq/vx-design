@@ -114,7 +114,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 | S2 | System architecture | Block diagram, module-vs-custom comparison, interfaces, power budget, preliminary mechanical stack, tentative BOM | **Partial**: architecture and mechanical briefs, power calculator, sourced BOM. Trade studies are planned. |
 | S3 | Detailed design | Schematics, verified symbols and footprints, PCB layout with DRC and ERC, firmware architecture, MCAD assembly, harness drawings, thermal checks | **Partial**: schematic + ERC (G3), PCB + DRC + 3D (G4). MCAD is M-ENC. Firmware architecture uses briefs. |
 | S4 | Sourcing & DFM | Approved vendor list, sourced BOM with alternates, stackup, placement and export files, manufacturing constraints | **Partial**: sourced BOM (M-SRC) and fab package (G4.5) built; vendor list planned |
-| S5 | Prototype packages & RFQs | Manufacturer-specific STEP/STL/DXF/Gerber/ODB++/IPC-2581, BOM/CPL, drawings, tolerances, inspection plan, NDA and RFQ packets | **Planned** (G4.5, M-RFQ) |
+| S5 | Prototype packages & RFQs | Manufacturer-specific STEP/STL/DXF/Gerber/ODB++/IPC-2581, BOM/CPL, drawings, tolerances, inspection plan, NDA and RFQ packets | **Partial**: fab package (G4.5) and NDA/RFQ packets with disclosure approval (M-RFQ) built; manufacturer-specific formats and inspection plans planned |
 | S6 | Build & validation | Incoming inspection, bring-up, test logs, fault corrections, firmware validation, fit and finish, environmental tests | **Planned**: evidence capture (`test_results`) |
 | S7 | Compliance & production | Lab and regulatory assessment, pilot run, production test jig, revision lock, QC and traceability, released files | **Planned**: tracking only, never certification |
 | S8 | Lifecycle | PCN and EOL tracking, redesign impact, substitute qualification, revisions, vendor performance, cost history | **Planned** |
@@ -136,7 +136,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | **Built** (model-designed housing, per-part interference against the board's 3D models, process rules, STEP/STL/GLB/drawings). The physical exit test needs a real board. |
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | **Built**: Claude brief from requirements and direction, Gemini ("Nano Banana") and OpenAI image adapters plus an offline placeholder, rounds and refinement from a chosen variant, provenance per image, design freeze recorded as a decision with change control, workspace checklist step. Live image generation untested until a key is set. |
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
-| M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | Planned |
+| M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | **Built**: directory with candidate → verified → approved vendor states and "verify contact"; §12 manifest with completeness checks; reproducible supplier-neutral packet (cover letter, manifest, NDA template, chosen requirements and committed files, checksums); owner approval bound to the packet hash; supplier portal with access windows, quotes and decline; award recorded as a decision; full audit trail. Not yet: email sending, structured quote adapters for vendor portals, quote currency conversion, process-rule matching. |
 | G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | Planned (move earlier if the motherboard work lives in Flux) |
 | G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | Planned |
 
@@ -144,7 +144,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Next:** M-CON, M-RFQ, optimization proposals (§14), S6 evidence capture.
+**Next:** G5 Flux audit, optimization proposals (§14), S6 evidence capture.
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;
@@ -268,7 +268,7 @@ Retrieval-augmented generation is used, not fine-tuning, for v1.
 | parts | manufacturer, normalized_mpn, function, package, lifecycle, ratings, footprint ref, datasheet version | New. The schematic evidence report holds this per design today. |
 | offers | supplier_id, part_id, qty_breaks, currency, MOQ, stock, lead_time, observed_at, terms | **Exists** (M-SRC: `offers`, plus `parts` and `part_models`) |
 | modules | module/board id, interfaces, supply, performance, dimensions, CAD, support status | New |
-| manufacturers | legal name, country, processes, contacts, certification evidence, NDA method, file specs, lead times | New (M-RFQ) |
+| manufacturers | legal name, country, processes, contacts, certification evidence, NDA method, file specs, lead times | **Exists** (`manufacturers`, `manufacturer_contacts`; RFQs in `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`) |
 | process_rules | process, material, capability envelope, tolerances, thickness, finish, verified_at | New. Starts from `vx_eng/fab.py`'s fab profiles. |
 | requirements | project, constraint, priority, acceptance test, provenance, approval status | **Exists** (with citations) |
 | design_revisions | project, rev, CAD artifacts, suppliers, results, sign-offs | Covered by `plans`, `artifact_versions`, `approvals` and `audit_events`. A release/revision view is planned. |
@@ -463,6 +463,29 @@ Initial discovery list (not endorsements): JLCPCB, PCBWay, Seeed Fusion, Protola
 - tooling ownership, shipping terms, response deadline and quote breakdown;
 - NDA status and permitted sharing scope.
 
+**Built (18 Nov 2026, M-RFQ):**
+- **Directory.**
+  - Suppliers move from candidate to verified (legal identity, country and processes recorded, with evidence) to
+    approved vendor (library editors only).
+  - Editing a verified supplier's identity resets it to candidate.
+  - Contacts stay "verify contact" until the email's confirmation is recorded.
+- **RFQs.**
+  - The manifest above is checked for completeness in the database.
+  - Disclosure is explicit: the sharing scope, the chosen requirements and the chosen committed files.
+  - The packet is reproducible and supplier-neutral, and its NDA template is marked for legal review.
+  - The contact sheet stays internal.
+- **Approval and release.**
+  - The owner's approval is bound to the packet's sha256 and the supplier list. Any change drops it.
+  - Release opens per-supplier access windows. Email is sent by the owner.
+  - Suppliers sign in with the confirmed contact address to download, quote, revise or decline.
+- **Award.** Choosing a quote closes access and is recorded as a `manufacturing` decision. The order itself happens
+  outside VX Design.
+- **Not yet:**
+  - recommending manufacturers by process rules (today: a category filter);
+  - structured adapters for vendor quote portals;
+  - currency conversion;
+  - sending email.
+
 ## 13. Smart Slate pilot
 
 | Subsystem | Early decision / investigation | Evidence required | Platform path |
@@ -538,7 +561,7 @@ Today's datasheet evidence is a text match and is labelled so.
 **Security:**
 - RLS tenant isolation, roles, signed URLs, an immutable audit log and secrets kept out of the database *(Built)*;
 - sandboxed tools with no model-originated commands *(Built: the model returns data, never commands)*;
-- file virus scanning, upload archive validation, encryption policy review, and supplier access windows *(Planned, G6/M-RFQ)*.
+- file virus scanning, upload archive validation, encryption policy review, and supplier access windows *(Planned, G6; supplier access windows built in M-RFQ)*.
 
 **Provenance:**
 - Every artifact has a sha256 and tool version/config *(Built)*.
@@ -627,7 +650,7 @@ Implementation notes:
 - the knowledge catalogs (§8);
 - `test_results`;
 - `offers`;
-- `manufacturers` and `process_rules`;
+- `process_rules` (`manufacturers` built in M-RFQ);
 - per-part licence and provenance fields.
 
 v1.0's endpoints are **logical interfaces**. Today they are SQL functions under RLS plus server actions. A public REST surface is deferred.
@@ -640,14 +663,15 @@ v1.0's endpoints are **logical interfaces**. Today they are SQL functions under 
 | Knowledge | `GET /sources/search`, `POST /sources/register`, `GET /standards/applicability` | Planned |
 | Parts/BOM | `GET /parts/search`, `POST /bom/resolve`, `POST /bom/alternates` | Planned |
 | Design | `POST /design/jobs`, `GET /design/jobs/:id`, `POST /revisions/:id/approve` | A design job is a task in an authorized run; approval via `decide_task` |
-| Manufacturing | `GET /manufacturers/match`, `POST /rfq/draft`, `POST /rfq/:id/approve-disclosure` | Planned |
+| Manufacturing | `GET /manufacturers/match`, `POST /rfq/draft`, `POST /rfq/:id/approve-disclosure` | **Built** as RPCs: `create_rfq`, `update_rfq`, `set_rfq_attachments`, `add_rfq_recipient`, `request_rfq_packet`, `approve_rfq_disclosure`, `send_rfq`, `close_rfq`; supplier side `supplier_rfqs`, `supplier_open_rfq`, `submit_quote`, `decline_rfq`. Matching is a category filter for now |
 | Compliance | `POST /assessments`, `POST /test-results`, `GET /projects/:id/gate-status` | Planned |
 
 Every response carries source references, timestamps, job state, error codes, permissions and a trace id.
 
 **Adapter methods:**
 - *Built* (in `vx_eng` and the orchestrator): `runERC()`, `runDRC()`, `generateSchematic()`, `renderModel()`.
-- *Planned*: `searchParts()`, `fetchDatasheetMetadata()`, `validateDFM()`, `createRFQDraft()`, `getQuoteStatus()`.
+- *Built* (M-RFQ): `createRFQDraft()` (`create_rfq`), `getQuoteStatus()` (quotes per supplier).
+- *Planned*: `searchParts()`, `fetchDatasheetMetadata()`, `validateDFM()`.
 
 ## 19. Roadmap and backlog
 
@@ -663,7 +687,7 @@ v1.0's backlog, merged with build status:
 | P1 | Smart Slate subsystem library + module comparisons | Architecture and trade studies with supplier evidence | Briefs built; catalogs with M-KB/M-SRC |
 | P1 | KiCad worker, ERC/DRC, export verification | Reproducible, tested generated PCB starter project | **Built** (G3, G4); exports in G4.5 |
 | P2 | Mechanical CAD worker + process rules | Editable source + STEP/STL/drawings + checks | M-ENC |
-| P2 | Manufacturer CRM, NDA/RFQ packets | Approved request → complete attachments + audit log | M-RFQ |
+| P2 | Manufacturer CRM, NDA/RFQ packets | Approved request → complete attachments + audit log | **Built** (M-RFQ) |
 | P2 | Power/thermal validation, BOM optimization proposals | Ranked recommendations with evidence and approvals | M-SRC (calculator) + §14 |
 | P3 | Production test, compliance docs, price analytics | Pilot package traceable to revisions and results | Later |
 
@@ -672,7 +696,7 @@ v1.0's backlog, merged with build status:
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. *Core built* (vector search waits for an embedding provider).
 4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
-5. **M-UI** (client workspace) *Built*. **M-CON** *Built* (live images need a key). **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
+5. **M-UI** (client workspace) *Built*. **M-CON** *Built* (live images need a key). **M-RFQ** *Built*. Next: the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
 v1.0's 16-week sequence is kept as a target, not a commitment:
 - weeks 1–2: foundation and source registry;
@@ -698,6 +722,9 @@ Weeks 7–9 are already largely delivered.
 10. **Flux export** of the existing Smart Slate work (for G5).
 11. **Image provider for concepts**: pick one (Google Gemini image / "Nano Banana", or OpenAI) and set `GEMINI_API_KEY`
     or `OPENAI_API_KEY` as a worker secret once its terms and data-sharing are acceptable (M-CON is built and waiting).
+12. **NDA template review**: have counsel review (or replace) the RFQ packet's mutual NDA template before the first
+    full-design RFQ. Enter the first real suppliers in the directory with how each identity and contact email was
+    confirmed (M-RFQ is built and waiting).
 
 ## 21. Owner decisions
 
@@ -715,6 +742,8 @@ Still open:
 - Which image provider to start with, after its terms and pricing are reviewed (both adapters are built).
 - Which embedding provider for semantic search in the knowledge base (Anthropic has none; Voyage AI is the usual
   pairing), or whether full-text search is enough for now. Also who the first knowledge editors are.
+- Whether clients see RFQs and quotes (today they do not), and who besides library editors may approve vendors.
+- Whether VX Design should send RFQ emails itself (needs a transactional email provider; today the owner sends them).
 
 ## 22. Success metrics and launch boundaries
 

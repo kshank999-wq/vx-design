@@ -3,7 +3,7 @@
  * that checks the worker still holds the execution (see supabase/migrations/*_g2_worker.sql).
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { HeartbeatDirective } from "@vx/contracts";
+import type { HeartbeatDirective, ManufacturingCategory } from "@vx/contracts";
 
 export class LeaseLostError extends Error {}
 
@@ -414,6 +414,39 @@ export class WorkerDb {
     if (error) throw new Error(`cost event: ${error.message}`);
   }
 
+  // --- RFQ packets (M-RFQ) ---
+
+  async claimRfqPacket(workerId: string): Promise<RfqRow | null> {
+    const r = await this.rpc<RfqRow | null>("claim_rfq_packet", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completeRfqPacket(id: string, workerId: string, path: string, sha256: string, files: unknown[], error: string | null): Promise<string> {
+    return this.rpc<string>("complete_rfq_packet", { p_rfq_id: id, p_worker_id: workerId, p_path: path, p_sha256: sha256,
+                                                    p_files: files, p_error: error });
+  }
+
+  /** Exactly what the RFQ selects: its committed attachments and the project's requirements (filtered by the builder). */
+  async rfqContents(rfqId: string, projectId: string): Promise<{
+    requirements: { ref_code: string; kind: string; priority: string; text: string }[];
+    attachments: { name: string; version: number; sha256: string; ext: string; storage_path: string }[];
+  }> {
+    const [{ data: reqs, error: e1 }, { data: att, error: e2 }] = await Promise.all([
+      this.client.from("requirements").select("ref_code, kind, priority, text").eq("project_id", projectId).neq("status", "rejected"),
+      this.client.from("rfq_attachments").select("artifact_versions(version, sha256, storage_path, status, project_id, artifacts(name))").eq("rfq_id", rfqId),
+    ]);
+    const err = e1 ?? e2;
+    if (err) throw new Error(`rfq contents: ${err.message}`);
+    const attachments = (att ?? []).map((a) => {
+      const v = a.artifact_versions as unknown as { version: number; sha256: string; storage_path: string; status: string; project_id: string;
+                                                   artifacts: { name: string } };
+      if (v.status !== "committed" || v.project_id !== projectId) throw new Error(`${v.artifacts.name} v${v.version} is not a committed file of this project`);
+      const ext = /\.([A-Za-z0-9]{1,8})$/.exec(v.storage_path)?.[1] ?? "";
+      return { name: v.artifacts.name, version: v.version, sha256: v.sha256, ext, storage_path: v.storage_path };
+    });
+    return { requirements: reqs ?? [], attachments };
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);
@@ -432,3 +465,8 @@ export interface ConceptRoundRow {
   attempts: number;
 }
 
+
+export interface RfqRow {
+  id: string; project_id: string; rfq_no: number; title: string; category: ManufacturingCategory;
+  sharing_scope: "summary_only" | "drawings" | "full_design"; response_deadline: string; manifest: unknown;
+}

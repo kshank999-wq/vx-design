@@ -9,6 +9,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const { supabase } = await requireUser();
   // Invitations sent to this email before the account existed become memberships on first visit.
   await supabase.rpc("accept_invitations");
+  const invites = ((await supabase.rpc("supplier_rfqs").select("recipient_id")).data ?? []) as unknown[];
   const { data: projects } = await supabase
     .from("projects")
     .select("id, name, description, created_at, plans(status, version)")
@@ -18,6 +19,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <main>
       <h1>Projects</h1>
       <Banner error={error} />
+      {!!invites.length && (
+        <p className="banner banner-notice" data-testid="supplier-invites">You have {invites.length} request(s) for quotation.{" "}
+          <Link href="/supplier">Open the supplier portal</Link></p>
+      )}
       <ul className="list">
         {(projects ?? []).map((p) => {
           const approved = p.plans?.find((pl: { status: string }) => pl.status === "approved") as { version: number } | undefined;

@@ -20,3 +20,5 @@ $$;
 
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+-- Supabase sets this when the address is confirmed (immediately when confirmations are off).
+alter table auth.users add column if not exists email_confirmed_at timestamptz default now();

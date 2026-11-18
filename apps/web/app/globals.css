@@ -191,3 +191,10 @@ mark { background: var(--warn-bg); color: inherit; padding: 0 1px; }
 .round { margin-top: 20px; }
 .freeze { border-color: var(--accent); }
 @media (max-width: 640px) { .concept-thumb { width: 100%; } }
+
+/* RFQ */
+.pill-mfr-verified, .pill-mfr-approved, .pill-rfq-sent, .pill-rfq-approved, .pill-rec-quoted, .pill-nda-signed { background: var(--ok-bg); }
+.pill-mfr-candidate, .pill-rfq-ready, .pill-rfq-packaging, .pill-nda-pending, .pill-rec-invited, .pill-rec-viewed { background: var(--warn-bg); color: var(--warn); }
+.pill-rec-declined, .pill-rec-revoked { background: var(--error-bg); color: var(--danger); }
+tr.chosen td { background: var(--ok-bg); }
+code { font-size: 12px; word-break: break-all; }

@@ -20,6 +20,7 @@
     "@vx/integrations": "workspace:*",
     "@vx/planning": "workspace:*",
     "@vx/power": "workspace:*",
+    "fflate": "0.8.3",
     "unpdf": "^2.2.1",
     "zod": "^4.6.7"
   }

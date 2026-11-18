@@ -120,6 +120,9 @@ importers:
       '@vx/power':
         specifier: workspace:*
         version: link:../../packages/power
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       unpdf:
         specifier: ^2.2.1
         version: 2.2.1

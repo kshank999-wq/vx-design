@@ -30,6 +30,7 @@ import { executorsFor } from "./executors/index.ts";
 import { Worker } from "./worker.ts";
 import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
+import { processRfqPacket } from "./rfq.ts";
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -85,6 +86,13 @@ if (images?.configured()) {
   worker.addJob("concepts", () => processConceptRound(dbc, model, images, id));
 } else {
   console.log("no image provider configured: this worker will not take concept rounds");
+}
+
+// RFQ packets (M-RFQ): no external service needed, so every worker takes them.
+{
+  const dbr = new WorkerDb(url, key);
+  const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
+  worker.addJob("rfq packets", () => processRfqPacket(dbr, id));
 }
 
 let signals = 0;

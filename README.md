@@ -535,13 +535,72 @@ pnpm test:e2e:concepts            # browser: client asks, compares, refines, fre
 
 Screenshots: `docs/concepts/screens`.
 
+## M-RFQ: manufacturers and RFQ
+
+Getting quotes for custom parts without disclosing more than intended (spec §12).
+
+**Supplier directory** (`/suppliers`, for project owners and engineers; clients and suppliers never see it):
+
+- Suppliers start as **candidates**. The six from the spec's discovery list (JLCPCB, PCBWay, Seeed Fusion, Protolabs,
+  Xometry, Hubs) are seeded as candidates with no legal names or contacts filled in. They are not endorsements.
+- **Verified** means someone recorded the legal name, country (ISO code) and process matrix and said how they
+  checked it. Changing any of these later sends the supplier back to candidate.
+- **Approved vendor list**: only a library editor can approve, and only a verified supplier.
+- A contact's email shows **"verify contact"** until someone records how the address was confirmed. Changing the
+  address clears that. Only confirmed contacts of verified suppliers can receive an RFQ.
+
+**RFQ** (project page → RFQs, owners and engineers):
+
+1. **Manifest:** the §12 fields are project code (suppliers see this, never the project name), buyer, classification,
+   quantities, materials, critical-to-quality dimensions, drawing revision, standards, compliance, tests, tooling
+   ownership, shipping terms, deadline and quote breakdown. Missing items are listed, and the database refuses to
+   build a packet until they are filled.
+2. **Disclosure choices:**
+   - the sharing scope: summary only, drawings, or full design;
+   - which requirements to include (none by default);
+   - which **committed** design files to include (scratch work cannot be attached).
+3. **Suppliers:** these rows are the internal contact sheet, with each supplier's NDA status. Suppliers never see each
+   other. The full-design scope needs a signed NDA, recorded per supplier.
+4. **Packet:** a worker builds one supplier-neutral ZIP and checks each file against its recorded sha256. It contains:
+   - README and cover letter;
+   - the manifest as JSON and readable text;
+   - an NDA template marked for legal review;
+   - the chosen requirements and files;
+   - `SHA256SUMS`.
+
+   The same inputs always give the same bytes.
+5. **Owner approval:** the owner approves *this packet* (by its sha256) to *these suppliers*. The audit log records
+   every file hash and recipient. Any later change to the manifest, files or suppliers drops the approval.
+6. **Release:** this opens each supplier's access window (1–90 days). VX Design does not send email: the page drafts
+   each message for the owner to send from their own mailbox.
+7. **Supplier portal** (`/supplier`): the supplier signs in with the contact's **confirmed** email address. There
+   they can download the packet while the window is open (each download is logged), quote at each quantity with
+   tooling, shipping, lead time and validity, revise the quote, or decline. They see only their own invitations,
+   never the project name or other suppliers.
+8. **Compare and choose:** quotes appear side by side, in the currencies they were quoted in (not converted).
+   - Choosing one closes the RFQ, ends every access window, and records a `manufacturing` decision.
+   - The purchase order is placed outside VX Design.
+
+Clients do not see RFQs or quotes (an open decision). Every step is audited:
+`rfq.created`, `rfq.packaged`, `rfq.disclosure_approved`, `rfq.approval_invalidated`, `rfq.sent`, `rfq.packet_opened`,
+`rfq.quote_received`, `rfq.declined`, `rfq.access_revoked`, `rfq.awarded` and `rfq.closed`.
+
+```bash
+./scripts/test-db.sh                          # rfq_test: directory rules, completeness, approval bound to the packet, windows, isolation, award
+pnpm --filter @vx/orchestrator test           # packet: contents, checksums, reproducibility, tampered files refused
+pnpm test:e2e:rfq                             # browser: owner to supplier to quote to award
+```
+
+Screenshots: `docs/rfq/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
 `task_dependencies`, `decisions`, `approvals`, `runs`, `executions`, `artifacts`,
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
-`project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, plus private `project-files` and `knowledge-files` storage buckets.
+`project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
+`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 

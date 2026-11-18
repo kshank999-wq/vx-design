@@ -31,7 +31,8 @@
     "test:e2e:enclosure": "./scripts/test-e2e-enclosure.sh",
     "test:e2e:workspace": "./scripts/test-e2e-workspace.sh",
     "test:e2e:knowledge": "./scripts/test-e2e-knowledge.sh",
-    "test:e2e:concepts": "./scripts/test-e2e-concepts.sh"
+    "test:e2e:concepts": "./scripts/test-e2e-concepts.sh",
+    "test:e2e:rfq": "./scripts/test-e2e-rfq.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

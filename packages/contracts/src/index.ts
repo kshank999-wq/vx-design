@@ -144,3 +144,51 @@ export function topologicalOrder(tasks: readonly PlannedTask[]): string[] {
   for (const t of tasks) visit(t.key, []);
   return order;
 }
+
+// --- RFQ manifest (M-RFQ, spec §12). Stored in rfqs.manifest; public.rfq_missing() checks the required parts. ---
+
+export const ManufacturingCategory = z.enum([
+  "bare_pcb", "pcba", "sheet_metal", "cnc", "printing_casting", "injection_molding", "silicone_overmolding",
+  "displays", "battery_packs", "harnesses", "finishing_assembly", "compliance_labs",
+]);
+export type ManufacturingCategory = z.infer<typeof ManufacturingCategory>;
+
+export const CATEGORY_LABEL: Record<ManufacturingCategory, string> = {
+  bare_pcb: "Bare PCB", pcba: "PCB assembly (SMT) and test", sheet_metal: "Sheet metal and finishing", cnc: "CNC machining",
+  printing_casting: "3D printing and urethane casting", injection_molding: "Injection molding and tooling",
+  silicone_overmolding: "Silicone and overmolding", displays: "Displays and optical bonding",
+  battery_packs: "Battery packs, BMS and testing", harnesses: "Harnesses and flex cables",
+  finishing_assembly: "Finishing, packaging and final assembly", compliance_labs: "Compliance and environmental labs",
+};
+
+const text = (max = 2000) => z.string().trim().max(max);
+export const RfqManifest = z.object({
+  project_code: text(40).regex(/^[A-Za-z0-9-]*$/, "letters, digits and hyphens only").default(""),
+  buyer: z.object({ company: text(200).default(""), contact_name: text(200).optional(), contact_email: text(320).optional() }).default({ company: "" }),
+  classification: text(500).default(""),
+  quantities: z.object({
+    prototype: z.number().int().min(0).max(10_000_000).default(0),
+    production: z.number().int().min(0).max(100_000_000).optional(),
+    forecast_annual: z.number().int().min(0).max(1_000_000_000).optional(),
+  }).default({ prototype: 0 }),
+  materials: z.array(text(300)).max(30).default([]),
+  finish: text(500).optional(),
+  ctq_dimensions: z.array(z.object({ feature: text(200), nominal: text(60), tolerance: text(60) })).max(50).default([]),
+  drawing_revision: text(40).optional(),
+  standards: z.array(text(200)).max(30).default([]),
+  compliance: text(1000).optional(),
+  tests_inspection: text(2000).optional(),
+  tooling_ownership: z.enum(["buyer", "supplier", "not_applicable", ""]).default("buyer"),
+  shipping_terms: text(200).default(""),
+  quote_breakdown: z.array(text(200)).max(20).default([]),
+  requirement_refs: z.array(text(60)).max(200).default([]),
+  notes: text(4000).optional(),
+});
+export type RfqManifest = z.infer<typeof RfqManifest>;
+
+export const SharingScope = z.enum(["summary_only", "drawings", "full_design"]);
+export const SHARING_SCOPE_LABEL: Record<z.infer<typeof SharingScope>, string> = {
+  summary_only: "Summary only (no files)",
+  drawings: "Drawings and files needed to quote",
+  full_design: "Full design (needs a signed NDA with each supplier)",
+};
