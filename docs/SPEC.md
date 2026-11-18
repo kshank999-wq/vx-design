@@ -110,7 +110,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 | Stage | Phase | Outputs / acceptance | Platform support today |
 |---|---|---|---|
 | S0 | Project intake & feasibility | Intended use, region, quantity, target cost, dimensions, battery/radio needs, risk register, target standards; high-risk or infeasible requirements flagged | **Partial**: spec intake with cited requirements and ambiguity flags. Risk register and feasibility checks are planned. |
-| S1 | Concept & industrial design | 2D render or moodboard, 3D cosmetic mockup, rough internal envelope, colour and material options, customer sign-off | **Planned** (§9) |
+| S1 | Concept & industrial design | 2D render or moodboard, 3D cosmetic mockup, rough internal envelope, colour and material options, customer sign-off | **Built** for generated concepts and the design freeze (§9); CAD-based mock-ups later |
 | S2 | System architecture | Block diagram, module-vs-custom comparison, interfaces, power budget, preliminary mechanical stack, tentative BOM | **Partial**: architecture and mechanical briefs, power calculator, sourced BOM. Trade studies are planned. |
 | S3 | Detailed design | Schematics, verified symbols and footprints, PCB layout with DRC and ERC, firmware architecture, MCAD assembly, harness drawings, thermal checks | **Partial**: schematic + ERC (G3), PCB + DRC + 3D (G4). MCAD is M-ENC. Firmware architecture uses briefs. |
 | S4 | Sourcing & DFM | Approved vendor list, sourced BOM with alternates, stackup, placement and export files, manufacturing constraints | **Partial**: sourced BOM (M-SRC) and fab package (G4.5) built; vendor list planned |
@@ -134,7 +134,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | M-SRC — Sourcing & power | Nexar/DigiKey/Mouser adapters with fallbacks, LCSC assembly catalog, BOM resolve and alternates, manufacturer 3D model library (§10.1), deterministic power-tree calculator | Smart Slate BOM and power budget usable with real timestamps | **Partial**: distributor adapters, fallback chain, BOM resolution, catalog and LCSC-to-fab built and tested with fixtures and documented response shapes; no live call yet (no keys). Power calculator built (model-proposed tree, deterministic checks, repair loop). Manufacturer 3D model library built (upload, URL, Nexar CAD candidates; automatic alignment check; human verification; used by layouts). Remaining: live keys. |
 | M-KB — Knowledge base | Source registry, licensing controls, standards registry, retrieval with citations | Searches return official URLs, edition and licence flags, and citations | **Built**: source registry with licensing rules enforced in the database, cited excerpts, standards registry (spec references, editions unconfirmed until reviewed), per-project applicability with confirmation, project-private licensed copies, full-text plus identifier search, chat citations. Not yet: vector search (needs an embedding provider), URL fetching, OCR. |
 | M-ENC — Enclosure & fit | CadQuery enclosure from board STEP, interference and fit report, process rules, STEP/STL/drawings | A 3D-printed housing fits the real assembled board | **Built** (model-designed housing, per-part interference against the board's 3D models, process rules, STEP/STL/GLB/drawings). The physical exit test needs a real board. |
-| M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | Planned |
+| M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | **Built**: Claude brief from requirements and direction, Gemini ("Nano Banana") and OpenAI image adapters plus an offline placeholder, rounds and refinement from a chosen variant, provenance per image, design freeze recorded as a decision with change control, workspace checklist step. Live image generation untested until a key is set. |
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | Planned |
 | G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | Planned (move earlier if the motherboard work lives in Flux) |
@@ -190,7 +190,7 @@ v1.0's agents are implemented as **executors**. Each handles one or more task di
 |---|---|---|---|---|
 | Orchestrator | Sequence stages, assign tasks, dependencies, approvals, tool calls | State machine, audit, retries, cost ceiling | Worker + SQL state machine | **Built** |
 | Knowledge agent | Retrieve standards, licensed references, datasheets, vendor rules | Citations, edition dates, source permission, uncertainty | Datasheet text-match evidence only | **Partial** (M-KB) |
-| Industrial design agent | Concept renders, manufacturable style variants | Concept images clearly distinguished from valid CAD | — | Planned (M-CON) |
+| Industrial design agent | Concept renders, manufacturable style variants | Concept images clearly distinguished from valid CAD | Claude brief + image provider | **Built** (M-CON) |
 | Systems engineer | Block diagrams, requirement allocation, trade studies | Requirement traceability, interface contracts | Design-brief executor (architecture, components, power, thermal, mechanical, enclosure, documentation) | **Partial** |
 | EE/PCB agent | Circuit planning, schematic and PCB via CAD adapters | ERC, DRC, netlist and parity checks, simulation, reviewer sign-off | `kicad-schematic`, `kicad-pcb` | **Built** (simulation planned) |
 | Mechanical/DFM agent | Enclosure, datums, clearances, mounts, gasket, heat, finish | Tolerance stacks, process-specific DFM | `enclosure` executor | **Partial**: housing, fit and process rules built; tolerance stacks, gaskets and thermal planned |
@@ -302,7 +302,7 @@ Publishers: ipc.org, iec.ch, iso.org, astm.org, ul.com, fcc.gov, bluetooth.com, 
 
 A community footprint or 3D model is never trusted until its geometry and pad mapping are verified against the datasheet. Today `vx_eng` checks pin-to-pad coverage and courtyards; a dimension check against the datasheet is planned with the parts catalog.
 
-## 9. Concept and industrial design (S1) — from v1.0 (Planned, M-CON)
+## 9. Concept and industrial design (S1) — from v1.0 (M-CON: built)
 
 - **Inputs:** approved feasibility pre-check (S0), target envelope, display and battery choices, brand and material preferences.
 - **Outputs:** 2–4 concept variants (moodboard or renders), rough internal envelope, colour and material options, annotated decisions, client sign-off and a recorded **design freeze**.
@@ -319,6 +319,27 @@ A community footprint or 3D model is never trusted until its geometry and pad ma
   Every generated image is labelled **"concept, not CAD"** and is never used as engineering geometry. Generated images,
   prompts and references are stored as artifacts with their provenance.
 - The design freeze becomes an approved decision that S2+ tasks depend on. Changing it triggers change control (§7).
+
+**Built (18 Nov 2026):**
+- A member (owner, engineer or client) asks for a round of 1–4 variants with a direction, or refines a variant. At most
+  2 rounds run at a time and 12 a day per project, because image generation is paid.
+- A worker with an image key takes the round. Claude writes the brief from the requirements, the direction, the variant
+  being refined and the current freeze: per variant a name, design language, rationale, colours/materials/finishes and
+  an image prompt (studio three-quarter render; no text, logos, brands, people or imitation of real products), plus a
+  rough envelope with its basis. The image provider renders each prompt; a refinement sends the chosen variant's
+  image as the reference. A variant the provider declines is recorded with the reason; the rest still count.
+- Images are stored in the project's folder with the prompt, provider, model, seed, any rewritten prompt, references,
+  usage and the provider's watermark notice (Gemini adds SynthID). Every image is labelled "concept, not CAD".
+- Providers: Google Gemini image (`gemini-nano-banana-2.1` by default) via generateContent, and OpenAI GPT image
+  (`gpt-image-2.5-sunburst` by default; `gpt-image-1` was shut down in Oct 2026) via images/generations and
+  images/edits. Both follow the published API references (checked 18 Nov 2026) and are untested live until a key is
+  set. `VX_IMAGES=fixture` draws labelled placeholders for development and tests.
+- Owners, reviewers and clients freeze a variant with the envelope (L × W × H mm) and CMF. The freeze is a `mechanical`
+  decision citing the image's hash; a later freeze needs a reason and supersedes the earlier decision.
+- The workspace checklist starts with "Concept and design freeze", the centre shows the concepts, and the chat knows
+  the rounds and the freeze.
+- Not yet: S2+ tasks reading the frozen envelope automatically (the enclosure task still takes its size from the board),
+  CAD-based mock-ups, uploading reference images (sketches, mood images) from the client.
 
 ## 10. Sourcing and three-provider fallback — from v1.0 (Partial, M-SRC)
 
@@ -557,7 +578,7 @@ An imported board is never assumed verified.
 | Engineering view | Schematic SVG/PDF, ERC, component evidence, BOM, board renders, interactive 3D (GLB), DRC with parity, 3D model report, placement, downloads | **Built** |
 | Activity view | Reasoning summaries (not hidden reasoning), tool calls, checks, errors, costs | **Built** (execution logs) |
 | Beginner wizard | Requirements wizard, risk classification, plain-language tradeoffs | Planned (v1.0 P0) |
-| Concept review | Variant comparison, design freeze | Planned (M-CON) |
+| Concept review | Variant comparison, design freeze | **Built** (M-CON; also in the workspace centre) |
 | Supplier comparison / BOM | Offers with live/cached/estimate labels, alternates, landed cost | Planned (M-SRC) |
 | Revision browser | Released revisions, sign-offs, manifests | Planned |
 
@@ -615,7 +636,7 @@ v1.0's endpoints are **logical interfaces**. Today they are SQL functions under 
 |---|---|---|
 | Project | `POST /projects`, `GET /projects/:id`, `POST /projects/:id/requirements` | Tables under RLS; document intake action → requirement extraction |
 | Plan & runs | (v0.1) | `create_plan_version`, `submit_plan`, `decide_plan`, `authorize_run`, `control_run`, `decide_task` |
-| Concept | `POST /projects/:id/concepts`, `POST /concepts/:id/approve` | Planned |
+| Concept | `request_concepts`, `cancel_concepts`, `freeze_design` (Supabase RPCs; the worker uses `claim_concept_round` / `complete_concept_round`) | **Built** |
 | Knowledge | `GET /sources/search`, `POST /sources/register`, `GET /standards/applicability` | Planned |
 | Parts/BOM | `GET /parts/search`, `POST /bom/resolve`, `POST /bom/alternates` | Planned |
 | Design | `POST /design/jobs`, `GET /design/jobs/:id`, `POST /revisions/:id/approve` | A design job is a task in an authorized run; approval via `decide_task` |
@@ -651,7 +672,7 @@ v1.0's backlog, merged with build status:
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. *Core built* (vector search waits for an embedding provider).
 4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
-5. **M-UI** (client workspace) *Built*. **M-CON** (with the image provider), **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
+5. **M-UI** (client workspace) *Built*. **M-CON** *Built* (live images need a key). **M-RFQ** and the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
 
 v1.0's 16-week sequence is kept as a target, not a commitment:
 - weeks 1–2: foundation and source registry;
@@ -675,8 +696,8 @@ Weeks 7–9 are already largely delivered.
 8. **Paid standards**: decide which need licensing at their latest editions.
 9. **Outside reviewers** for battery, power, timecode, RF/EMC, industrial design and manufacturing DFM.
 10. **Flux export** of the existing Smart Slate work (for G5).
-11. **Image provider for concepts**: pick one (e.g. Google Gemini image / "Nano Banana", or OpenAI) and get an API key once
-    its terms and data-sharing are acceptable (M-CON).
+11. **Image provider for concepts**: pick one (Google Gemini image / "Nano Banana", or OpenAI) and set `GEMINI_API_KEY`
+    or `OPENAI_API_KEY` as a worker secret once its terms and data-sharing are acceptable (M-CON is built and waiting).
 
 ## 21. Owner decisions
 
@@ -691,7 +712,7 @@ Decided 17 Nov 2026:
    (§17.1, M-UI).
 
 Still open:
-- Which image provider to start with, after its terms and pricing are reviewed.
+- Which image provider to start with, after its terms and pricing are reviewed (both adapters are built).
 - Which embedding provider for semantic search in the knowledge base (Anthropic has none; Voyage AI is the usual
   pairing), or whether full-text search is enough for now. Also who the first knowledge editors are.
 

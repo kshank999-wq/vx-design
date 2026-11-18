@@ -10,6 +10,7 @@ import { OFFLINE_FIXTURE_CIRCUIT } from "../circuit.ts";
 import { OFFLINE_FIXTURE_LAYOUT } from "../layout.ts";
 import { OFFLINE_FIXTURE_POWER } from "../power.ts";
 import { OFFLINE_FIXTURE_ENCLOSURE } from "../enclosure.ts";
+import { OFFLINE_FIXTURE_CONCEPT } from "../concept.ts";
 
 const KIND_KEYWORDS: [string, RegExp][] = [
   ["power", /\b(rail|current|voltage|power|battery|regulator|mA|V)\b/i],
@@ -28,6 +29,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("board_layout") ? structuredClone(OFFLINE_FIXTURE_LAYOUT)
       : req.purpose.startsWith("power_tree") ? structuredClone(OFFLINE_FIXTURE_POWER)
       : req.purpose.startsWith("enclosure_design") ? structuredClone(OFFLINE_FIXTURE_ENCLOSURE)
+      : req.purpose.startsWith("concept_brief") ? structuredClone(OFFLINE_FIXTURE_CONCEPT)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {

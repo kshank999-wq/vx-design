@@ -17,15 +17,19 @@
  *   DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET  sourcing fallback A
  *   MOUSER_API_KEY                             sourcing fallback B
  *   VX_SOURCING=fixture       offline stand-in for the distributors (invented data, labelled); =off to disable
+ *   GEMINI_API_KEY / OPENAI_API_KEY            concept images (Gemini "Nano Banana" preferred when both are set)
+ *   VX_IMAGE_PROVIDER         gemini | openai;  VX_IMAGE_MODEL  override the provider's default model
+ *   VX_IMAGES=fixture         offline placeholder images (labelled on the image); =off to disable
  */
 import { hostname } from "node:os";
 import { ClaudeModel, OfflineModel } from "@vx/planning";
-import { sourcingProvidersFromEnv } from "@vx/integrations";
+import { imageProviderFromEnv, sourcingProvidersFromEnv } from "@vx/integrations";
 import { WorkerDb } from "./db.ts";
 import { detectEngineering } from "./engineering.ts";
 import { executorsFor } from "./executors/index.ts";
 import { Worker } from "./worker.ts";
 import { processModelCheck } from "./models.ts";
+import { processConceptRound } from "./concepts.ts";
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -70,6 +74,17 @@ if (engineering) {
   const db3d = new WorkerDb(url, key);
   const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
   worker.addJob("3D model check", () => processModelCheck(db3d, engineering, id));
+}
+
+// Concept images (M-CON): any worker with an image provider key (worker secret) takes concept rounds.
+const images = imageProviderFromEnv();
+if (images?.configured()) {
+  const dbc = new WorkerDb(url, key);
+  const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
+  console.log(`concept images: ${images.label} (${images.model})`);
+  worker.addJob("concepts", () => processConceptRound(dbc, model, images, id));
+} else {
+  console.log("no image provider configured: this worker will not take concept rounds");
 }
 
 let signals = 0;

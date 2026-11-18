@@ -365,6 +365,55 @@ export class WorkerDb {
       .filter((m) => parts.some((p) => p.normalizedMpn === m.normalized_mpn && p.normalizedMfr === m.normalized_mfr));
   }
 
+  // --- Concepts (M-CON) ---
+
+  async claimConceptRound(workerId: string): Promise<ConceptRoundRow | null> {
+    const r = await this.rpc<ConceptRoundRow | null>("claim_concept_round", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completeConceptRound(id: string, workerId: string, brief: unknown, briefModel: string | null, provider: string | null,
+                             model: string | null, variants: unknown[], error: string | null): Promise<string> {
+    return this.rpc<string>("complete_concept_round", {
+      p_round_id: id, p_worker_id: workerId, p_brief: brief, p_brief_model: briefModel, p_provider: provider, p_model: model,
+      p_variants: variants, p_error: error,
+    });
+  }
+
+  /** What the brief needs: project, requirements, the variant being refined, and the current design freeze. */
+  async conceptContext(round: ConceptRoundRow): Promise<{
+    project: { name: string; description: string | null };
+    requirements: { ref_code: string; kind: string; text: string }[];
+    parent: { name: string; prompt: string; cmf: Record<string, unknown>; image_path: string; mime_type: string; round_no: number } | null;
+    freeze: { name: string; envelope: { length_mm: number; width_mm: number; height_mm: number } } | null;
+  }> {
+    const [{ data: project, error: e1 }, { data: reqs, error: e2 }, parent, { data: freeze, error: e4 }] = await Promise.all([
+      this.client.from("projects").select("name, description").eq("id", round.project_id).single(),
+      this.client.from("requirements").select("ref_code, kind, text").eq("project_id", round.project_id).neq("status", "rejected").order("ref_code"),
+      round.parent_variant_id
+        ? this.client.from("concept_variants").select("name, prompt, cmf, image_path, mime_type, concept_rounds!concept_variants_round_id_fkey(round_no)").eq("id", round.parent_variant_id).single()
+        : Promise.resolve({ data: null, error: null }),
+      this.client.from("current_design_freeze").select("envelope, concept_variants(name)").eq("project_id", round.project_id).maybeSingle(),
+    ]);
+    const err = e1 ?? e2 ?? parent.error ?? e4;
+    if (err) throw new Error(`concept context: ${err.message}`);
+    const p = parent.data as { name: string; prompt: string; cmf: Record<string, unknown>; image_path: string; mime_type: string;
+                               concept_rounds: { round_no: number } } | null;
+    return {
+      project: project!, requirements: reqs ?? [],
+      parent: p ? { name: p.name, prompt: p.prompt, cmf: p.cmf, image_path: p.image_path, mime_type: p.mime_type, round_no: p.concept_rounds.round_no } : null,
+      freeze: freeze ? { name: (freeze.concept_variants as unknown as { name: string }).name,
+                         envelope: freeze.envelope as { length_mm: number; width_mm: number; height_mm: number } } : null,
+    };
+  }
+
+  /** A cost outside a run (concept generation is asked for directly, not by a plan task). */
+  async recordProjectCost(projectId: string, kind: "ai_tokens" | "api_call", provider: string, resource: string,
+                          quantity: number, unit: string, costUsd = 0): Promise<void> {
+    const { error } = await this.client.from("cost_events").insert({ project_id: projectId, kind, provider, resource, quantity, unit, cost_usd: costUsd });
+    if (error) throw new Error(`cost event: ${error.message}`);
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);
@@ -377,3 +426,9 @@ export class WorkerDb {
     return data.text();
   }
 }
+
+export interface ConceptRoundRow {
+  id: string; project_id: string; round_no: number; direction: string; variant_count: number; parent_variant_id: string | null;
+  attempts: number;
+}
+

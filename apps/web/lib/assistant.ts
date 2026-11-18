@@ -27,6 +27,11 @@ export interface ProjectContext {
   messages: { author_kind: string; body: string }[];
   /** Standards recorded for the project, with applicability and whether it was confirmed. */
   standards: { identifier: string; title: string; edition: string | null; applicability: string; status: string; rationale: string }[];
+  /** Concept rounds (newest first) and the current design freeze. */
+  concepts: {
+    rounds: { round_no: number; status: string; direction: string; variants: { name: string; status: string; cmf: string | null }[] }[];
+    freeze: { name: string; envelope: { length_mm: number; width_mm: number; height_mm: number }; cmf: string | null; frozen_at: string } | null;
+  };
   /** Knowledge base hits for the current question (shared library plus this project's own sources). */
   knowledge: KnowledgeHit[];
 }
@@ -63,11 +68,14 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
       .order("created_at", { ascending: false }).limit(40),
     supabase.from("project_messages").select("author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(12),
     supabase.from("project_standards").select("applicability, status, rationale, standards(identifier, title, edition)").eq("project_id", projectId),
+    supabase.from("concept_rounds").select("round_no, status, direction, concept_variants!concept_variants_round_id_fkey(name, status, cmf, ordinal)").eq("project_id", projectId)
+      .order("round_no", { ascending: false }).limit(10),
+    supabase.from("current_design_freeze").select("envelope, cmf, frozen_at, concept_variants(name)").eq("project_id", projectId).maybeSingle(),
   ]);
   // A failed query must not read as "nothing to show": the checklist and the assistant would both mislead.
   const failed = results.find((r) => "error" in r && r.error);
   if (failed && "error" in failed) throw new Error(`Could not load the project: ${failed.error!.message}`);
-  const [{ data: reqs }, { data: tasks }, { data: approvals }, { data: outputs }, { data: checks }, { data: messages }, { data: standards }] = results;
+  const [{ data: reqs }, { data: tasks }, { data: approvals }, { data: outputs }, { data: checks }, { data: messages }, { data: standards }, { data: rounds }, { data: freeze }] = results;
   return {
     project,
     requirements: reqs ?? [],
@@ -85,6 +93,14 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
       const st = p.standards as unknown as { identifier: string; title: string; edition: string | null };
       return { identifier: st.identifier, title: st.title, edition: st.edition, applicability: p.applicability, status: p.status, rationale: p.rationale };
     }),
+    concepts: {
+      rounds: (rounds ?? []).map((r) => ({ round_no: r.round_no, status: r.status, direction: r.direction,
+        variants: ((r.concept_variants ?? []) as { name: string; status: string; cmf: { summary?: string } | null; ordinal: number }[])
+          .sort((a, b) => a.ordinal - b.ordinal).map((v) => ({ name: v.name, status: v.status, cmf: v.cmf?.summary ?? null })) })),
+      freeze: freeze ? { name: (freeze.concept_variants as unknown as { name: string }).name,
+                         envelope: freeze.envelope as { length_mm: number; width_mm: number; height_mm: number },
+                         cmf: (freeze.cmf as { summary?: string } | null)?.summary ?? null, frozen_at: freeze.frozen_at } : null,
+    },
     knowledge: [],
   };
 }
@@ -130,6 +146,13 @@ export function contextText(ctx: ProjectContext): string {
   for (const o of ctx.outputs.slice(0, 40)) lines.push(`- ${o.id} | ${o.name} v${o.version} | ${o.status === "committed" ? "approved" : "awaiting approval"} | ${o.summary ?? ""}`);
   lines.push("\nCHECKS (newest first):");
   for (const c of ctx.checks.slice(0, 30)) lines.push(`- ${c.task_key ?? "?"} ${c.kind}: ${c.result} — ${c.summary}`);
+  lines.push("\nCONCEPTS (generated images for choosing a look; concept, not CAD):");
+  const f = ctx.concepts.freeze;
+  lines.push(f ? `- DESIGN FREEZE: "${f.name}", envelope ${f.envelope.length_mm} x ${f.envelope.width_mm} x ${f.envelope.height_mm} mm${f.cmf ? `, ${f.cmf}` : ""}`
+               : "- no design freeze yet");
+  for (const r of ctx.concepts.rounds) {
+    lines.push(`- round ${r.round_no} (${r.status}) "${r.direction.slice(0, 200)}": ${r.variants.map((v) => `${v.name}${v.status === "failed" ? " [failed]" : ""}${v.cmf ? ` (${v.cmf})` : ""}`).join("; ") || "no variants yet"}`);
+  }
   lines.push("\nSTANDARDS FOR THIS PROJECT:");
   for (const s of ctx.standards) lines.push(`- ${s.identifier} ${s.title}: ${s.applicability.replace(/_/g, " ")} (${s.status}${s.edition ? `, edition ${s.edition}` : ", edition unconfirmed"}) — ${s.rationale}`);
   if (!ctx.standards.length) lines.push("- none recorded yet");
@@ -159,6 +182,10 @@ export function offlineAnswer(ctx: ProjectContext, question: string): AssistantA
   if (active.length) parts.push(`In progress or queued: ${active.join(", ")}.`);
   const stuck = ctx.tasks.filter((t) => ["blocked", "failed"].includes(t.status));
   if (stuck.length) parts.push(`Needs the team's attention: ${stuck.map((t) => `${t.title} (${t.status}${t.blocker_reason ? `: ${t.blocker_reason}` : ""})`).join("; ")}.`);
+  const f = ctx.concepts.freeze;
+  const readyRound = ctx.concepts.rounds.find((r) => r.status === "ready" || r.status === "partial");
+  if (f) parts.push(`Design frozen on "${f.name}" (${f.envelope.length_mm} × ${f.envelope.width_mm} × ${f.envelope.height_mm} mm).`);
+  else if (readyRound) parts.push(`Concepts are ready to compare (round ${readyRound.round_no}: ${readyRound.variants.filter((v) => v.status === "ready").map((v) => v.name).join(", ")}). Freeze one under Concepts.`);
   const latest = ctx.outputs.slice(0, 3);
   if (latest.length) parts.push(`Latest outputs: ${latest.map((o) => o.name.split("/").pop()).join(", ")}.`);
   const refs = ctx.knowledge.slice(0, 3);

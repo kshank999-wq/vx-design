@@ -497,13 +497,51 @@ pnpm test:e2e:knowledge        # browser: registry search, add/verify sources, l
 
 Screenshots: `docs/knowledge/screens`. The test documents in `tests/fixtures/kb` are original text.
 
+## M-CON: concepts and design freeze
+
+The first step of a product (S1): pick a look before detailed engineering. On a project's **Concepts** page (also the
+first step of the workspace checklist, shown in the workspace centre):
+
+1. **Ask for concepts.** Owners, engineers and clients describe a direction (look and feel, materials, colours,
+   how it is held or mounted) and choose 1–4 variants. At most 2 rounds run at a time and 12 a day per project.
+2. **Brief.** On the worker, Claude turns the requirements and the direction into distinct variants: a name, design
+   language, rationale, colours/materials/finishes and an image prompt, plus a rough envelope with its basis.
+3. **Images.** The image provider renders each variant. Every image is labelled **concept, not CAD** and stored in
+   the project with its prompt, provider, model, seed and references. A variant the provider's safety system
+   declines is shown with the reason.
+4. **Refine.** "Refine this" on any variant starts a new round with that image as the reference.
+5. **Freeze.** Owners, reviewers and clients freeze one variant with its envelope (L × W × H mm) and CMF. The freeze
+   is recorded as a decision citing the image's hash. Changing it later needs a reason, supersedes the old
+   decision, and is audited.
+
+Image providers (worker secrets, never in the web app):
+
+| Variable | Effect |
+|---|---|
+| `GEMINI_API_KEY` | Google Gemini image ("Nano Banana"), default model `gemini-nano-banana-2.1` |
+| `OPENAI_API_KEY` | OpenAI GPT image, default model `gpt-image-2.5-sunburst` |
+| `VX_IMAGE_PROVIDER` | `gemini` or `openai` when both keys are set (default Gemini) |
+| `VX_IMAGE_MODEL` | override the default model |
+| `VX_IMAGES=fixture` | labelled offline placeholders instead (development and tests) |
+
+Both adapters follow the providers' published API references (checked 18 Nov 2026) and are tested against those
+shapes with mocked responses; neither has made a live call yet.
+
+```bash
+./scripts/test-db.sh              # concept_test: who may ask/freeze, limits, worker lease, change control
+pnpm --filter @vx/integrations test   # image adapters: request/response shapes, refusals, rate limits
+pnpm test:e2e:concepts            # browser: client asks, compares, refines, freezes; owner changes the freeze with a reason
+```
+
+Screenshots: `docs/concepts/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
 `task_dependencies`, `decisions`, `approvals`, `runs`, `executions`, `artifacts`,
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
-`project_standards`, `knowledge_editors`, plus private `project-files` and `knowledge-files` storage buckets.
+`project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 

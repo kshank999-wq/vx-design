@@ -68,7 +68,8 @@ export default async function ProjectPage({ params, searchParams }: {
       {project.description && <p className="muted">{project.description}</p>}
       <Banner error={error} notice={notice} />
       <p><Link href={`/projects/${projectId}/workspace`} className="btn">Open the workspace</Link>
-        <span className="muted small"> Chat, results and approval stops: the view your client sees.</span></p>
+        <span className="muted small"> Chat, results and approval stops: the view your client sees.</span>{" "}
+        <Link href={`/projects/${projectId}/concepts`} className="btn">Concepts</Link></p>
 
       <section>
         <h2>1. Specification documents</h2>

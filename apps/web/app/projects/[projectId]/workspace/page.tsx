@@ -42,8 +42,15 @@ export default async function WorkspacePage({ params, searchParams }: {
   const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
   const outputName = new Map(ctx.outputs.map((o) => [o.id, o.name]));
   const done = ctx.tasks.filter((t) => t.status === "complete").length;
-  const live = ctx.tasks.some((t) => ["running", "validating", "ready"].includes(t.status));
+  const live = ctx.tasks.some((t) => ["running", "validating", "ready"].includes(t.status))
+    || ctx.concepts.rounds.some((r) => r.status === "queued" || r.status === "generating");
   const selected = view && ctx.outputs.find((o) => o.id === view);
+  const showConcepts = view === "concepts";
+  const c = ctx.concepts;
+  const conceptsBusy = c.rounds.some((r) => r.status === "queued" || r.status === "generating");
+  const conceptsReady = c.rounds.some((r) => r.status === "ready" || r.status === "partial");
+  // The first checklist step: concept and design freeze (S1), ahead of the engineering plan.
+  const conceptStep = c.freeze ? "complete" : conceptsBusy ? "running" : conceptsReady ? "awaiting_approval" : "draft";
   const href = (v?: string) => `/projects/${projectId}/workspace${v ? `?view=${v}` : ""}`;
   // Prefer the reports people read (power budget, fit report, BOM, DRC) over raw files when pointing at a task's result.
   const PREFERRED = ["power-budget", "fit-report", "sourced-bom", "fab-package", "drc-report", "kicad-project", "erc-report", "design", "brief"];
@@ -95,7 +102,15 @@ export default async function WorkspacePage({ params, searchParams }: {
       </section>
 
       <section className="ws-view" aria-label="Results">
-        {selected ? (
+        {showConcepts ? (
+          <>
+            <div className="row spread">
+              <Link href={href()}>← Overview</Link>
+              <Link href={`/projects/${projectId}/concepts`} target="_blank">Open in a new tab</Link>
+            </div>
+            <iframe className="ws-frame" src={`/projects/${projectId}/concepts?embed=1`} title="Concepts" data-testid="concepts-viewer" />
+          </>
+        ) : selected ? (
           <>
             <div className="row spread">
               <Link href={href()}>← Overview</Link>
@@ -117,6 +132,11 @@ export default async function WorkspacePage({ params, searchParams }: {
             ) : <p className="muted">The team is still turning the specification into a plan. Results will appear here as work completes.</p>}
             <h3>Results</h3>
             <div className="tiles">
+              <Link href={href("concepts")} className="tile" data-testid="concepts-tile">
+                <strong>Concepts</strong>
+                <span className="small">{c.freeze ? `Design frozen: ${c.freeze.name}` : c.rounds.length ? `${c.rounds.length} round(s); no design freeze yet` : "No concepts yet: ask for a first round"}</span>
+                <span className={`pill pill-${c.freeze ? "complete" : "awaiting_approval"}`}>{c.freeze ? "frozen" : conceptsBusy ? "generating" : "open"}</span>
+              </Link>
               {ctx.tasks.filter((t) => mainOutput(t.key)).map((t) => {
                 const o = mainOutput(t.key)!;
                 return (
@@ -127,7 +147,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                   </Link>
                 );
               })}
-              {!ctx.outputs.length && <p className="muted small">No results yet.</p>}
+              {!ctx.outputs.length && <p className="muted small">No engineering results yet.</p>}
             </div>
           </div>
         )}
@@ -136,6 +156,13 @@ export default async function WorkspacePage({ params, searchParams }: {
       <aside className="ws-checklist card" aria-label="Checklist" data-testid="checklist">
         <div className="row spread"><h2>Checklist</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
         <ol className="checklist">
+          <li className={`check check-${conceptStep}`} data-status={conceptStep} data-testid="concept-step">
+            <span className="check-icon" aria-hidden>{ICON[conceptStep]}</span>
+            <div>
+              <div><Link href={href("concepts")}>Concept and design freeze</Link></div>
+              <div className="small muted">{c.freeze ? `Frozen: ${c.freeze.name}` : conceptsBusy ? "Generating concepts" : conceptsReady ? "Approval needed: choose a concept and freeze the design" : "Not started"}</div>
+            </div>
+          </li>
           {ctx.tasks.map((t) => {
             const a = approvalFor.get(t.id);
             const o = mainOutput(t.key);
@@ -163,7 +190,7 @@ export default async function WorkspacePage({ params, searchParams }: {
               </li>
             );
           })}
-          {!ctx.tasks.length && <li className="muted small">The checklist appears once the plan is approved.</li>}
+          {!ctx.tasks.length && <li className="muted small">The engineering steps appear once the plan is approved.</li>}
         </ol>
       </aside>
     </main>
