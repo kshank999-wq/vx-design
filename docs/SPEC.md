@@ -137,14 +137,14 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | M-CON — Concept | S1 workflow: concept variants from an image-generation provider, envelope, design freeze | The client selects a concept and records a design freeze | **Built**: Claude brief from requirements and direction, Gemini ("Nano Banana") and OpenAI image adapters plus an offline placeholder, rounds and refinement from a chosen variant, provenance per image, design freeze recorded as a decision with change control, workspace checklist step. Live image generation untested until a key is set. |
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | **Built**: directory with candidate → verified → approved vendor states and "verify contact"; §12 manifest with completeness checks; reproducible supplier-neutral packet (cover letter, manifest, NDA template, chosen requirements and committed files, checksums); owner approval bound to the packet hash; supplier portal with access windows, quotes and decline; award recorded as a decision; full audit trail. Not yet: email sending, structured quote adapters for vendor portals, quote currency conversion, process-rule matching. |
-| G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | Planned (move earlier if the motherboard work lives in Flux) |
+| G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | **Built**: import of Flux exports (project JSON, EDIF, IPC-D-356, Gerbers, BOM, placement, STEP, chat/report exports) per revision; inventory and missing dependencies; cross-export consistency and schematic-vs-layout connectivity; current-state map; revision comparison with undone changes; quoted decisions and claims (always unverifiable); migration plan. Tested on a synthetic export; the formal pass needs the real Smart Slate Flux export. |
 | G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | Planned |
 
 ## 4. Scope
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Next:** G5 Flux audit, optimization proposals (§14), S6 evidence capture.
+**Next:** optimization proposals (§14), S6 evidence capture, G6 hardening.
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;
@@ -591,6 +591,29 @@ Steps:
 
 An imported board is never assumed verified.
 
+**What Flux exports** (Flux documentation, checked 18 Nov 2026):
+- **Project data:** Flux project data (JSON). This is `project.json` with a published `project.schema.json`, plus
+  optional asset files. It holds components, part data, pins, placements, nets, the BOM, boards (outline, stackup,
+  traces, vias, pads, fills, rules), schematic wires, and assets with SHA-256.
+- **Netlists:** schematic netlist (EDIF) and layout netlist (IPC-D-356).
+- **Manufacturing and assembly:** Gerbers ZIP, BOM ZIP (per-manufacturer CSVs), pick-and-place ZIP, IPC-2581C,
+  ODB++, GenCAD.
+- **Mechanical:** STEP and other 3D formats, plus DXF, SVG and PDF drawings.
+- **Documents:** schematic PDF, and Markdown for documents and tables.
+
+No KiCad export and no revision-history export are documented.
+
+**Built (18 Nov 2026):**
+- **Upload:** each revision's exports are uploaded straight to project storage.
+- **Deterministic audit (`@vx/flux`):** covers steps 1, 3 and 4 above. That is the inventory with missing
+  dependencies; consistency across the exports; schematic against layout compared by which pins are joined; board
+  facts; the current-state map; and revision diffs, including changes that were made and undone.
+- **Step 2:** Claude extracts decisions and claims, and each quote is checked word for word against its file. All of
+  them are unverifiable; where a related file exists the claim is "evidence present, not re-run".
+- **Step 5:** a migration plan of bounded tasks, each tied to the findings it resolves.
+- **Not yet:** parsing IPC-2581 and ODB++; reading screenshots; turning the migration plan into project plan tasks;
+  checking the JSON reader against a real export.
+
 ## 17. User interface
 
 | View | Content | Status |
@@ -696,7 +719,7 @@ v1.0's backlog, merged with build status:
 2. **M-SRC** (owner decision) with the manufacturer 3D model library. Starts as soon as distributor keys arrive.
 3. **M-KB.** v1.0 P0. *Core built* (vector search waits for an embedding provider).
 4. **M-ENC.** *Built* (physical print-and-fit test pending a real board).
-5. **M-UI** (client workspace) *Built*. **M-CON** *Built* (live images need a key). **M-RFQ** *Built*. Next: the **G5 Flux audit**. Move G5 earlier if the motherboard work lives in Flux.
+5. **M-UI** (client workspace) *Built*. **M-CON** *Built* (live images need a key). **M-RFQ** *Built*. **G5 Flux audit** *Built* (its formal pass needs the real Flux export).
 
 v1.0's 16-week sequence is kept as a target, not a commitment:
 - weeks 1–2: foundation and source registry;
@@ -719,7 +742,7 @@ Weeks 7–9 are already largely delivered.
 7. **Commercial terms with suppliers**: NDA, IP and tooling ownership, warranty, import/export documents, referral or volume arrangements, all in writing.
 8. **Paid standards**: decide which need licensing at their latest editions.
 9. **Outside reviewers** for battery, power, timecode, RF/EMC, industrial design and manufacturing DFM.
-10. **Flux export** of the existing Smart Slate work (for G5).
+10. **Flux export** of the existing Smart Slate work (G5 is built and waiting). For each revision you have, in Flux: Export → Flux project data (*JSON and asset files*); Electronics → Netlists (both EDIF and IPC-D-356), Manufacturing files, Bill of materials, Pick & place; Mechanical → full 3D assembly (STEP); plus any chat or notes exports and test reports.
 11. **Image provider for concepts**: pick one (Google Gemini image / "Nano Banana", or OpenAI) and set `GEMINI_API_KEY`
     or `OPENAI_API_KEY` as a worker secret once its terms and data-sharing are acceptable (M-CON is built and waiting).
 12. **NDA template review**: have counsel review (or replace) the RFQ packet's mutual NDA template before the first

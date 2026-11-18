@@ -593,6 +593,63 @@ pnpm test:e2e:rfq                             # browser: owner to supplier to qu
 
 Screenshots: `docs/rfq/screens`.
 
+## G5: Flux import and audit
+
+Bringing existing work from Flux into VX Design (spec §16). Project page → **Flux import** (owners and engineers;
+staff can read; clients cannot).
+
+1. **Upload** everything Flux exports, tagged by revision (with a date so they sort oldest first). The browser
+   uploads straight to the project's storage, so large ZIPs and STEP files never pass through the web server. Useful
+   exports:
+   - Export → Flux project data (JSON and asset files);
+   - Electronics → Netlists (EDIF and IPC-D-356), Manufacturing files, Bill of materials, Pick & place;
+   - 3D (STEP);
+   - chat, notes or report exports, and screenshots.
+
+   ZIPs are unpacked (nested once) with size and count limits.
+2. **Audit** (worker, `@vx/flux`, deterministic: the same files give the same report):
+   - **Inventory:** every file is hashed and classified, and missing exports are listed. Assets that `project.json`
+     refers to but that are not in the upload are flagged.
+   - **Consistency:**
+     - each designator is checked across the project JSON, the EDIF netlist, the BOM and the placement file;
+     - conflicting part numbers and parts with no part number are flagged;
+     - lifecycle is taken from the VX parts catalog where the part is known.
+   - **Schematic against layout:** EDIF (or the JSON nets) is compared with IPC-D-356 by which pins are joined, not by
+     net names. A split net, a merged net, a missing pin or an extra pin is a **blocker**.
+   - **Board:** layer count and outline from the JSON stackup and the Gerber X2 attributes and outline, cross-checked.
+   - **Current-state map:**
+     - parts, with which exports each appears in and why it is uncertain;
+     - connectors with their nets and edge positions;
+     - power rails by net name;
+     - outline, mounting holes and edge connectors as enclosure constraints.
+   - **Revisions:** parts and nets added, removed or changed between consecutive revisions. Changes that were made and
+     then undone (A → B → A) are flagged as decisions taken twice, and parts that keep changing are listed.
+   - **History:** Claude lists earlier decisions and claimed validations from the text and PDF exports. Each item
+     must quote its file; items whose quote is not found word for word are dropped. Decisions and claims are always
+     *unverifiable*. A claim with a related file in the export (for example a DRC report) is "evidence file present,
+     not re-run".
+   - **Migration plan:** bounded tasks, each with a discipline, an effort, a scope, inputs, a "done when" and the
+     findings it resolves.
+3. **Report:** shown on the page, and stored as JSON and Markdown (with sha256) in the project's folder.
+
+Nothing imported is ever marked verified. The best a part can be is *consistent across the exports*.
+
+Limits:
+- Flux documents the content of `project.json` and publishes its schema, but this reader was written from the
+  description, not a real export, and reports any section it cannot find. Check it on the first real export.
+- Flux has no KiCad export. The plan's "Rebuild in KiCad" task recreates the design from the netlist, BOM and
+  placement.
+- IPC-2581, ODB++ and GenCAD are inventoried but not parsed.
+- Screenshots are listed for a person to read.
+
+```bash
+pnpm --filter @vx/flux test       # parsers and audit on a synthetic three-revision export with planted problems
+./scripts/test-db.sh              # flux_test: who may import, file rules, worker lease, staff-only
+pnpm test:e2e:flux                # browser: upload three revisions, run, read the report
+```
+
+Screenshot: `docs/flux/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -600,7 +657,7 @@ Screenshots: `docs/rfq/screens`.
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
-`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, plus private `project-files` and `knowledge-files` storage buckets.
+`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 

@@ -11,3 +11,4 @@ export * from "./layout.ts";
 export * from "./power.ts";
 export * from "./enclosure.ts";
 export * from "./concept.ts";
+export * from "./flux-history.ts";

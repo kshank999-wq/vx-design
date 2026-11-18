@@ -447,6 +447,35 @@ export class WorkerDb {
     return { requirements: reqs ?? [], attachments };
   }
 
+  // --- Flux import audit (G5) ---
+
+  async claimFluxAudit(workerId: string): Promise<FluxAuditRow | null> {
+    const r = await this.rpc<FluxAuditRow | null>("claim_flux_audit", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completeFluxAudit(id: string, workerId: string, reportPath: string, mdPath: string, sha256: string, summary: unknown,
+                          historyModel: string | null, error: string | null): Promise<string> {
+    return this.rpc<string>("complete_flux_audit", { p_audit_id: id, p_worker_id: workerId, p_report_path: reportPath, p_md_path: mdPath,
+                                                    p_sha256: sha256, p_summary: summary, p_history_model: historyModel, p_error: error });
+  }
+
+  async fluxFiles(auditId: string): Promise<{ revision_label: string; revision_date: string | null; name: string; storage_path: string; sha256: string; created_at: string }[]> {
+    const { data, error } = await this.client.from("flux_audit_files").select("revision_label, revision_date, name, storage_path, sha256, created_at")
+      .eq("audit_id", auditId).order("created_at");
+    if (error) throw new Error(`flux files: ${error.message}`);
+    return data ?? [];
+  }
+
+  /** Parts already in the VX catalog (lifecycle), by part number. */
+  async catalogParts(mpns: string[]): Promise<{ mpn: string; manufacturer: string; lifecycle: string }[]> {
+    if (!mpns.length) return [];
+    const { data, error } = await this.client.from("parts").select("mpn, manufacturer, lifecycle")
+      .in("normalized_mpn", [...new Set(mpns.map((m) => m.toUpperCase().replace(/\s+/g, "")))].slice(0, 500));
+    if (error) throw new Error(`catalog: ${error.message}`);
+    return data ?? [];
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);
@@ -470,3 +499,5 @@ export interface RfqRow {
   id: string; project_id: string; rfq_no: number; title: string; category: ManufacturingCategory;
   sharing_scope: "summary_only" | "drawings" | "full_design"; response_deadline: string; manifest: unknown;
 }
+
+export interface FluxAuditRow { id: string; project_id: string; audit_no: number; title: string; attempts: number }

@@ -31,6 +31,7 @@ import { Worker } from "./worker.ts";
 import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
+import { processFluxAudit } from "./flux.ts";
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -93,6 +94,9 @@ if (images?.configured()) {
   const dbr = new WorkerDb(url, key);
   const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
   worker.addJob("rfq packets", () => processRfqPacket(dbr, id));
+  // Flux import audits (G5): deterministic checks plus the model for the design history.
+  const dbf = new WorkerDb(url, key);
+  worker.addJob("flux audits", () => processFluxAudit(dbf, model, id));
 }
 
 let signals = 0;
