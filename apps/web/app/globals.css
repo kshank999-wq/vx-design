@@ -211,3 +211,8 @@ label.radio { flex-direction: row; align-items: center; color: var(--fg); }
 .pill-verdict-pass, .pill-unit-passed, .pill-unit-reworked { background: var(--ok-bg); }
 .pill-verdict-fail, .pill-unit-failed { background: var(--error-bg); color: var(--danger); }
 .pill-verdict-incomplete, .pill-verdict-missing, .pill-unit-in_test { background: var(--warn-bg); color: var(--warn); }
+.card-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pill-risk-low { background: var(--chip); }
+.pill-risk-medium { background: var(--warn-bg); color: var(--warn); }
+.pill-risk-high, .pill-risk-critical { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.pill-risk-critical { font-weight: 600; }

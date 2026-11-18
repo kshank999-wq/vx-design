@@ -78,7 +78,9 @@ export default async function ProjectPage({ params, searchParams }: {
         {me?.role && me.role !== "client" && <> <Link href={`/projects/${projectId}/rfqs`} className="btn">RFQs</Link>{" "}
           <Link href={`/projects/${projectId}/flux`} className="btn">Flux import</Link>{" "}
           <Link href={`/projects/${projectId}/optimize`} className="btn">Optimize</Link></>}{" "}
-        <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link></p>
+        <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link>{" "}
+        <Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link>{" "}
+        <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link></p>
 
       <section>
         <h2>1. Specification documents</h2>

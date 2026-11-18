@@ -21,15 +21,27 @@ export interface RunReport {
   next_steps: string[];
 }
 
+const STAGE_NAMES: Record<string, string> = {
+  S0: "intake and feasibility", S1: "concept and industrial design", S2: "system architecture", S3: "detailed design",
+  S4: "sourcing and DFM", S5: "prototype packages and RFQs", S6: "build and validation", S7: "compliance and production", S8: "lifecycle",
+};
+
 export async function buildRunReport(db: WorkerDb, run: RunRow, waitingFor: string[] = []): Promise<RunReport> {
   const c = db.client;
   const [{ data: tasks }, { data: execs }, { data: costs }] = await Promise.all([
-    c.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, position")
+    c.from("tasks").select("id, key, title, discipline, stage, status, attempts, blocker_reason, risk_level, position")
       .eq("plan_id", run.plan_id).order("position"),
     c.from("executions").select("id, task_id, status, error, resumed_from_id").eq("run_id", run.id).order("created_at"),
     c.from("cost_events").select("kind, cost_usd").eq("run_id", run.id),
   ]);
   const execIds = (execs ?? []).map((e) => e.id);
+  // Stage gates: ready tasks in a stage that is not unlocked wait for a sign-off.
+  const { data: project } = await c.from("projects").select("stage_gates").eq("id", run.project_id).single();
+  const stages = project?.stage_gates
+    ? ((await c.rpc("stage_status", { p_project: run.project_id })).data as { stage: string; current: boolean; unlocked: boolean }[] | null) ?? []
+    : [];
+  const locked = new Set(stages.filter((s) => !s.unlocked).map((s) => s.stage));
+  const currentStage = stages.find((s) => s.current)?.stage;
   const [{ data: versions }, { data: checks }, { data: approvals }, { data: deps }] = await Promise.all([
     execIds.length
       ? c.from("artifact_versions").select("id, version, status, validated_at, storage_path, summary, produced_by_task_id, artifacts(name)")
@@ -70,6 +82,11 @@ export async function buildRunReport(db: WorkerDb, run: RunRow, waitingFor: stri
     else if (t.status === "blocked") next.push(`${t.key} is blocked: ${t.blocker_reason ?? "see its execution log"}`);
     else if (t.status === "failed") next.push(`${t.key} failed: ${t.blocker_reason ?? "see its execution log"}. Retry it once the cause is fixed.`);
   }
+  const gated = scoped.filter((t) => t.status === "ready" && locked.has(t.stage));
+  if (gated.length && currentStage) {
+    next.push(`Sign off ${currentStage} (${STAGE_NAMES[currentStage] ?? currentStage}) on the Stages page to continue: ` +
+      `${gated.map((t) => t.key).join(", ")} ${gated.length === 1 ? "waits" : "wait"} for it, then start the run again.`);
+  }
   if (waitingFor.length) {
     const keys = scoped.filter((t) => t.status === "ready" && waitingFor.includes(t.discipline)).map((t) => t.key);
     next.push(`${keys.join(", ")} ${keys.length === 1 ? "needs" : "need"} a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks` +
@@ -93,7 +110,8 @@ export async function buildRunReport(db: WorkerDb, run: RunRow, waitingFor: stri
     headline: parts.join("; ") + ".",
     final_status: finalStatus,
     stop_reason: run.stop_reason ?? (finalStatus === "stopped" && run.status === "running"
-      ? (waitingFor.length ? `Waiting for a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks.`
+      ? (gated.length && currentStage ? `Waiting for ${currentStage} sign-off.`
+         : waitingFor.length ? `Waiting for a worker that can run ${waitingFor.join(", ").replace(/_/g, " ")} tasks.`
                            : "Nothing more can run without your input.") : null),
     tasks: scoped.map((t) => ({
       id: t.id, key: t.key, title: t.title, discipline: t.discipline, status: t.status, attempts: t.attempts,

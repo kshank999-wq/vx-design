@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { STAGE_NAME, type StageRow } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
@@ -32,12 +33,18 @@ export default async function WorkspacePage({ params, searchParams }: {
   const { supabase, userId } = await requireUser();
   const ctx = await loadContext(supabase, projectId);
   if (!ctx) notFound();
-  const [{ data: me }, { data: messages }, { data: verification }, { data: openFaults }] = await Promise.all([
+  const [{ data: me }, { data: messages }, { data: verification }, { data: openFaults }, { data: stageBoard }] = await Promise.all([
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("project_messages").select("id, author_kind, body, data, created_at").eq("project_id", projectId).order("id").limit(200),
     supabase.rpc("requirement_verification", { p_project_id: projectId }),
     supabase.from("faults").select("id").eq("project_id", projectId).in("status", ["open", "corrected"]),
+    supabase.rpc("stage_status", { p_project: projectId }),
   ]);
+  // Stage gates: the current stage and what stands before its sign-off.
+  const board = (stageBoard ?? []) as StageRow[];
+  const cur = board.find((x) => x.current);
+  const signed = board.filter((x) => x.status === "signed_off").length;
+  const stageStep = !cur ? "complete" : cur.blockers.length ? "awaiting_approval" : "running";
   // S6: build and validation, summarised from the verification matrix.
   const vm = (verification ?? []) as { status: string }[];
   const vVerified = vm.filter((x) => x.status === "verified").length, vFailing = vm.filter((x) => x.status === "failing").length;
@@ -163,6 +170,13 @@ export default async function WorkspacePage({ params, searchParams }: {
       <aside className="ws-checklist card" aria-label="Checklist" data-testid="checklist">
         <div className="row spread"><h2>Checklist</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
         <ol className="checklist">
+          <li className={`check check-${stageStep}`} data-status={stageStep} data-testid="stage-step">
+            <span className="check-icon" aria-hidden>{ICON[stageStep]}</span>
+            <div>
+              <div><Link href={`/projects/${projectId}/stages`}>{cur ? `Stage ${cur.stage}: ${STAGE_NAME[cur.stage]}` : "All stages signed off"}</Link></div>
+              <div className="small muted">{signed} of 9 stages signed off{cur ? (cur.blockers.length ? ` · ${cur.blockers.length} item(s) before sign-off` : " · ready to sign off") : ""}</div>
+            </div>
+          </li>
           <li className={`check check-${conceptStep}`} data-status={conceptStep} data-testid="concept-step">
             <span className="check-icon" aria-hidden>{ICON[conceptStep]}</span>
             <div>

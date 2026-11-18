@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { STAGE_NAME, STAGES, type Stage } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -23,7 +24,7 @@ export default async function PlanPage({ params, searchParams }: {
 
   const [{ data: plan }, { data: tasks }, { data: reqs }, { data: approvals }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("plans").select("*, projects(name)").eq("id", planId).eq("project_id", projectId).maybeSingle(),
-    supabase.from("tasks").select("id, key, title, discipline, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
+    supabase.from("tasks").select("id, key, title, discipline, stage, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
       .eq("plan_id", planId).order("position"),
     supabase.from("requirements").select("id, ref_code, text, source_section, source_excerpt, status").eq("project_id", projectId).order("ref_code"),
     supabase.from("approvals").select("id, status, reason, response_note, requested_at, responded_at").eq("plan_id", planId).order("requested_at"),
@@ -152,6 +153,7 @@ export default async function PlanPage({ params, searchParams }: {
                 <div className="row spread">
                   <h3><span className="muted mono">{i + 1}. {t.key}</span> {t.title}</h3>
                   <div className="row tight">
+                    <span className="pill" title={STAGE_NAME[t.stage as Stage]}>{t.stage}</span>
                     <span className="pill">{t.discipline.replace("_", " ")}</span>
                     <span className={`pill risk-${t.risk_level}`}>{t.risk_level} risk</span>
                     {policy.required && <span className="pill pill-gate" title={policy.reason ?? ""}>approval gate</span>}
@@ -186,6 +188,11 @@ export default async function PlanPage({ params, searchParams }: {
                           </select>
                         </label>
                         <label>Estimate (h)<input name="estimated_hours" type="number" min="0" step="0.5" defaultValue={t.estimated_hours ?? ""} /></label>
+                        <label>Stage
+                          <select name="stage" defaultValue={t.stage}>
+                            {STAGES.map((s) => <option key={s} value={s}>{s} {STAGE_NAME[s]}</option>)}
+                          </select>
+                        </label>
                         <label className="inline"><input type="checkbox" name="approval_required" defaultChecked={policy.required} /> Approval gate</label>
                       </div>
                       <label>Approval reason<input name="approval_reason" defaultValue={policy.reason ?? ""} /></label>

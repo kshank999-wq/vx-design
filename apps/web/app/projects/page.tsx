@@ -40,6 +40,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         <h2>New project</h2>
         <label>Name<input name="name" required placeholder="Smart Slate" /></label>
         <label>Description<input name="description" placeholder="Optional" /></label>
+        <label className="inline"><input type="checkbox" name="stage_gates" defaultChecked /> Stage gates: work waits for each stage (S0–S8) to be signed off</label>
         <div><SubmitButton pendingText="Creating…">Create project</SubmitButton></div>
       </form>
     </main>

@@ -109,7 +109,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 
 | Stage | Phase | Outputs / acceptance | Platform support today |
 |---|---|---|---|
-| S0 | Project intake & feasibility | Intended use, region, quantity, target cost, dimensions, battery/radio needs, risk register, target standards; high-risk or infeasible requirements flagged | **Partial**: spec intake with cited requirements and ambiguity flags. Risk register and feasibility checks are planned. |
+| S0 | Project intake & feasibility | Intended use, region, quantity, target cost, dimensions, battery/radio needs, risk register, target standards; high-risk or infeasible requirements flagged | **Built**: spec intake with cited requirements and ambiguity flags; intake facts; deterministic feasibility check filing cited, scored risks; risk register; S0 sign-off. A guided requirement wizard is planned. |
 | S1 | Concept & industrial design | 2D render or moodboard, 3D cosmetic mockup, rough internal envelope, colour and material options, customer sign-off | **Built** for generated concepts and the design freeze (§9); CAD-based mock-ups later |
 | S2 | System architecture | Block diagram, module-vs-custom comparison, interfaces, power budget, preliminary mechanical stack, tentative BOM | **Partial**: architecture and mechanical briefs, power calculator, sourced BOM. Trade studies are planned. |
 | S3 | Detailed design | Schematics, verified symbols and footprints, PCB layout with DRC and ERC, firmware architecture, MCAD assembly, harness drawings, thermal checks | **Partial**: schematic + ERC (G3), PCB + DRC + 3D (G4). MCAD is M-ENC. Firmware architecture uses briefs. |
@@ -119,7 +119,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 | S7 | Compliance & production | Lab and regulatory assessment, pilot run, production test jig, revision lock, QC and traceability, released files | **Planned**: tracking only, never certification |
 | S8 | Lifecycle | PCN and EOL tracking, redesign impact, substitute qualification, revisions, vendor performance, cost history | **Planned** |
 
-Each project's plan is generated against these stages: tasks carry a `stage` alongside their `discipline` (data change in §18). The plan view groups tasks by stage, and stage sign-off is an approval gate.
+Each task carries a `stage` alongside its `discipline` (default from the discipline, editable in a draft plan). Stage sign-off is an approval gate: with stage gates on, later stages' tasks wait for it (**Built**; see README "Stage gates and the risk register").
 
 ### 3.2 Platform build milestones (what we build) — from v0.1, extended
 
@@ -690,7 +690,6 @@ Implementation notes:
 - validations, tool_capabilities, cost_events, audit_events.
 
 **v1.1 data changes, planned:**
-- `tasks.stage` (S0–S8);
 - the knowledge catalogs (§8);
 - `offers`;
 - `process_rules` (`manufacturers` built in M-RFQ);
@@ -725,7 +724,7 @@ v1.0's backlog, merged with build status:
 |---|---|---|---|
 | P0 | Repo, Vercel app, Supabase DB/auth, file store, project model | Sign in, create a project, upload restricted documents | **Built** (Vercel deploy pending) |
 | P0 | Source registry, licensing controls, document search | Search returns official URLs, edition/licence flags and citations | M-KB |
-| P0 | Requirement wizard, risk classification, gate approvals | Smart Slate requirements entered, amended and approved | **Partial**: extraction, edit and approval built; wizard, risk register and stage gates planned |
+| P0 | Requirement wizard, risk classification, gate approvals | Smart Slate requirements entered, amended and approved | **Partial**: extraction, edit and approval, risk register and feasibility check, stage gates built; wizard planned |
 | P1 | Concept mockup/review, engineering envelope | Client selects a concept; design freeze recorded | M-CON |
 | P1 | Component master, BOM/AVL, Nexar/DigiKey/Mouser adapters | Normalized cross-vendor results, tested fallbacks, timestamps | M-SRC (needs keys) |
 | P1 | Smart Slate subsystem library + module comparisons | Architecture and trade studies with supplier evidence | Briefs built; catalogs with M-KB/M-SRC |

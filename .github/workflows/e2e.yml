@@ -35,7 +35,7 @@ jobs:
       - name: End-to-end suites
         run: |
           pnpm test:e2e
-          for s in workspace knowledge concepts rfq flux security validation staged-upload quotas; do ./scripts/test-e2e-$s.sh; done
+          for s in workspace knowledge concepts rfq flux security validation staged-upload quotas stages; do ./scripts/test-e2e-$s.sh; done
       - name: Integrity and backup drill
         run: ./scripts/check-integrity.sh && ./scripts/backup-drill.sh
       - if: failure()

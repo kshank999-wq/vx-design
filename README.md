@@ -805,6 +805,57 @@ pnpm test:e2e:quotas            # browser: account page, a project limit as the 
 
 Screenshot: `docs/quotas/screens`.
 
+## Stage gates and the risk register (S0)
+
+Project page → **Stages** and **Intake and risks**.
+
+**Stages.** Every task belongs to one of the nine product stages, S0 to S8. The stage defaults from the task's
+discipline (architecture → S2, schematic → S3, sourcing → S4, …) and can be changed while the plan is a draft. The
+plan page shows each task's stage.
+
+With **stage gates on** (the default for new projects; the owner can switch them off), a task starts only once every
+earlier stage is signed off. A run that reaches a gate ends with "Waiting for S2 sign-off" and the next step in its
+report. Owners and reviewers sign a stage off when nothing blocks it:
+
+| Stage | Blocked by |
+|---|---|
+| S0 | feasibility check not run; intended use, markets, quantity, target cost or power source missing; requirements not yet confirmed or rejected |
+| S1 | no design freeze |
+| S2–S8 | the stage's tasks in the approved plan not done (S6 also: faults not verified) |
+| any | high or critical risks of that stage still open or being mitigated |
+
+The owner can sign off past blockers with a written reason; the blockers are kept with the sign-off. Reopening a
+stage (owner, with a reason) stops later stages' tasks from starting until it is signed off again. The workspace
+checklist shows the current stage. Every step is audited.
+
+**Intake and risks.** The intake records what the product is for:
+- intended use and target markets;
+- first quantity and target unit cost;
+- size, power source, radios and target standards.
+
+The **feasibility check** applies fixed rules (no model, the same answer every time) to the intake and the
+requirements. Every finding cites the passage that triggered it:
+- lithium batteries and mains voltage (safety);
+- radios (certification);
+- regulated domains (medical, automotive, aerospace, hazardous areas);
+- sealed enclosures and wide temperature ranges;
+- displays (single-source parts) and battery-life targets;
+- wireless video and high-speed interfaces (beyond what VX Design automates);
+- ambiguous or unmeasurable requirements, and missing markets or cost targets.
+
+Findings become numbered risks (RISK-001…), scored likelihood × impact (5 × 5) into low, medium, high or critical,
+each with a suggested mitigation. Rerunning the check keeps people's scoring and decisions, closes findings no longer
+detected, and reopens ones that return. Risks can also be added by hand. Accepting or closing a risk needs a note,
+and accepting a high or critical risk is the owner's call.
+
+```bash
+pnpm --filter @vx/planning test   # feasibility rules: what fires, citations, intake gaps
+./scripts/test-db.sh              # stages_test: stage defaults, gating claims, blockers, waivers, reopen, risk register
+pnpm test:e2e:stages              # browser: intake, feasibility, S0/S1 sign-off, S2 risks, plan and workspace
+```
+
+Screenshots: `docs/stages/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -813,7 +864,7 @@ Screenshot: `docs/quotas/screens`.
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
-`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`
+`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

@@ -70,6 +70,7 @@ try {
   console.log("✓ sign up and redirect");
 
   await page.getByLabel("Name").fill("Timecode board (e2e)");
+  await page.getByLabel(/Stage gates/).uncheck();  // this flow tests runs without stage sign-offs
   await page.getByRole("button", { name: "Create project" }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
   const projectUrl = page.url();

@@ -22,6 +22,14 @@ export async function updateTask(projectId: string, planId: string, taskId: stri
     approval_policy: { required: approvalRequired, reason: String(form.get("approval_reason") ?? "").trim() || null },
   }).eq("id", taskId);
   if (error) fail(path, error);
+  const stage = String(form.get("stage") ?? "");
+  if (stage) {
+    const { data: cur } = await supabase.from("tasks").select("stage").eq("id", taskId).single();
+    if (cur && cur.stage !== stage) {
+      const { error: e2 } = await supabase.rpc("set_task_stage", { p_task: taskId, p_stage: stage });
+      if (e2) fail(path, e2);
+    }
+  }
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(`Saved "${title}".`)}#task-${taskId}`);
 }
