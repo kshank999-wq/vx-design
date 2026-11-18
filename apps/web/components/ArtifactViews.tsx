@@ -154,6 +154,10 @@ interface FabCheck {
   parts: { ref: string; value: string; footprint: string; x: number; y: number; rotation: number; side: string; smd: boolean; lcsc: string }[];
   panel: { size_mm: [number, number]; boards: number } | null;
   manifest: Record<string, string>;
+  exports?: { ok: boolean; files: Record<string, string>; labels: Record<string, string>; problems: FabProblem[];
+              summary: { ipc2581?: { copper_layers: number; components: string[]; outline_mm: number[] | null };
+                         odb?: { signal_layers: number; components: string[]; outline_mm: number[] | null };
+                         ipcd356?: { nets: number; points: number }; dxf?: { outline_mm: number[] | null } } };
 }
 
 function CheckLine({ ok, warn, label, children }: { ok: boolean; warn?: boolean; label: string; children: React.ReactNode }) {
@@ -183,6 +187,19 @@ export function FabCheckView({ check }: { check: FabCheck }) {
           holes; smallest drill {g.min_drill_mm} mm
           {[...g.problems, ...g.warnings].map((p, i) => <div key={i} className={g.problems.includes(p) ? "error-text" : "warn-text"}>{p.message}</div>)}
         </CheckLine>
+        {check.exports && (() => {
+          const x = check.exports, sm = x.summary;
+          return (
+            <CheckLine ok={x.ok} label="Exchange formats">
+              read back and compared with the board:{" "}
+              {[sm.ipc2581 && `IPC-2581 C, ${sm.ipc2581.copper_layers} copper layers, ${sm.ipc2581.components.length} components`,
+                sm.odb && `ODB++, ${sm.odb.signal_layers} signal layers, ${sm.odb.components.length} components`,
+                sm.ipcd356 && `IPC-D-356, ${sm.ipcd356.nets} nets / ${sm.ipcd356.points} test points`,
+                sm.dxf?.outline_mm && `DXF outline ${sm.dxf.outline_mm.join(" x ")} mm`].filter(Boolean).join("; ")}
+              {x.problems.map((p, i) => <div key={i} className="error-text">{p.message}</div>)}
+            </CheckLine>
+          );
+        })()}
         {(a.cpl_rows > 0 || a.bom_lines > 0) && (
           <CheckLine ok={a.ok} warn={a.warnings.length > 0} label="Assembly files">
             {a.cpl_rows} pick-and-place rows, {a.bom_lines} BOM lines

@@ -222,7 +222,8 @@ export interface FabPackageResult {
   panel?: { size_mm: [number, number]; boards: number } | null;
   lcsc_applied?: string[];
   files?: Partial<Record<"package" | "notes" | "gerbers" | "bom" | "cpl" | "assembly_top" | "assembly_bottom" | "drill_map" |
-                         "panel_gerbers" | "panel_render" | "check", string>>;
+                         "panel_gerbers" | "panel_render" | "check" | "ipc2581" | "odb" | "ipcd356" | "dxf", string>>;
+  exports?: { ok: boolean; files: Record<string, string>; labels: Record<string, string> };
 }
 
 /** Builds and checks the fab package for a routed KiCad project zip. */

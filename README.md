@@ -248,6 +248,28 @@ pnpm test:g45                       # schematic -> layout -> fab package via the
 pnpm test:e2e:g45                   # browser: order card, fab notes, independent checks, panel, approve
 ```
 
+### Exchange formats (S5)
+
+Every fab package also carries `formats/`:
+- **Files.**
+  - IPC-2581 revision C (XML).
+  - ODB++ (zip).
+  - The IPC-D-356 netlist, for bare-board electrical test.
+  - A DXF of the board outline in mm, for mechanical and enclosure suppliers.
+- **Checks.** KiCad writes them; `vx_eng/exports.py` reads each one back with its own parser and compares it with the
+  board as pcbnew reports it:
+  - copper and signal layers;
+  - every component;
+  - every net with two or more pads;
+  - the outline size, within 0.15 mm.
+
+  A mismatch fails the package, like a Gerber error does.
+- **Reproducible.** The dates KiCad stamps inside IPC-2581 and ODB++ are fixed, and the ODB++ archive is rewritten with
+  sorted entries, so the same board gives byte-identical files (checked by the KiCad regression tier).
+- **Fab notes.** They say which set to send to whom: Gerber X2 + Excellon as the primary set, IPC-2581 or ODB++ where
+  a house prefers one, IPC-D-356 for electrical test, DXF for mechanical work.
+- **Storage.** Each file is stored as its own artifact and covered by an "Exchange formats" check on the task.
+
 ## M-SRC: part sourcing
 
 Sourcing tasks take the **committed circuit design** of the upstream schematic task and produce a sourced BOM.

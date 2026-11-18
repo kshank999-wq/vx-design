@@ -320,6 +320,32 @@ class FabPackageTests(unittest.TestCase):
         self.assertIn("34.0 x 22.0 mm", notes)
         self.assertIn("MISSING for C1, C2, D1, J1, R1, U1", notes)
 
+    def test_exchange_formats_are_written_and_checked(self):
+        import zipfile
+        ex = self.check["exports"]
+        self.assertTrue(ex["ok"], ex["problems"])
+        self.assertEqual(sorted(ex["files"]), ["dxf", "ipc2581", "ipcd356", "odb"])
+        self.assertEqual(ex["summary"]["ipc2581"]["revision"], "C")
+        self.assertEqual(ex["summary"]["ipc2581"]["copper_layers"], 2)
+        self.assertEqual(ex["summary"]["odb"]["signal_layers"], 2)
+        self.assertEqual(ex["summary"]["ipc2581"]["outline_mm"], [34.0, 22.0])
+        self.assertEqual(ex["summary"]["dxf"]["outline_mm"], [34.0, 22.0])
+        self.assertIn("U1", ex["summary"]["odb"]["components"])
+        self.assertGreaterEqual(ex["summary"]["ipcd356"]["nets"], 4)
+        with zipfile.ZipFile(self.out / self.result["files"]["package"]) as z:
+            names = set(z.namelist())
+        for fn in ex["files"].values():
+            self.assertIn(f"formats/{fn}", names)
+        self.assertIn("IPC-D-356 netlist", (self.out / "FAB-NOTES.txt").read_text())
+
+    def test_exchange_format_check_catches_a_different_board(self):
+        from vx_eng.exports import check_exports
+        files = {f: self.out / "formats" / fn for f, fn in self.check["exports"]["files"].items()}
+        wrong = {"copper_layers": 4, "refs": ["C1", "U1", "U9"], "width_mm": 40.0, "height_mm": 22.0, "nets": ["GND", "/NOT_A_NET"]}
+        codes = {p["code"] for p in check_exports(files, wrong)["problems"]}
+        self.assertEqual(codes, {"ipc2581_layers", "ipc2581_components", "ipc2581_outline", "odb_layers", "odb_components", "odb_outline",
+                                 "ipcd356_nets", "dxf_outline"})
+
     def _facts(self, **changes):
         facts = copy.deepcopy({**self.check["board"], "parts": self.check["parts"]})
         facts.update(changes)

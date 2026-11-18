@@ -30,6 +30,11 @@ const FILES: { key: FileKey; suffix: string; kind: string; type: string }[] = [
   { key: "panel_gerbers", suffix: "panel-gerbers", kind: "fab_package", type: "application/zip" },
   { key: "panel_render", suffix: "panel-render", kind: "fab_package", type: "image/png" },
   { key: "check", suffix: "fab-check", kind: "report", type: "application/json" },
+  // Exchange formats (S5), each read back and checked against the board by vx_eng.
+  { key: "ipc2581", suffix: "ipc2581", kind: "fab_package", type: "application/xml" },
+  { key: "odb", suffix: "odb", kind: "fab_package", type: "application/zip" },
+  { key: "ipcd356", suffix: "ipc356-netlist", kind: "fab_package", type: "text/plain; charset=utf-8" },
+  { key: "dxf", suffix: "outline-dxf", kind: "fab_package", type: "application/dxf" },
 ];
 
 interface Stashed { path: string; name: string; sha256: string }
@@ -84,9 +89,10 @@ export function fabExecutor(tools: EngineeringTools): Executor {
               if (!name) continue;
               const bytes = await readFile(join(out, name));
               const sha256 = createHash("sha256").update(bytes).digest("hex");
-              const path = `${task.project_id}/stash/${ctx.exec.id}/${sha256.slice(0, 16)}-${name}`;
+              const base = name.split("/").pop()!;
+              const path = `${task.project_id}/stash/${ctx.exec.id}/${sha256.slice(0, 16)}-${base}`;
               await db.upload(path, bytes, f.type);
-              stash[f.key] = { path, name, sha256 };
+              stash[f.key] = { path, name: base, sha256 };
             }
           }
           const { files: _files, ...summary } = r;
@@ -128,7 +134,9 @@ export function fabExecutor(tools: EngineeringTools): Executor {
 
         const g = r.gerbers!;
         const a = r.assembly!;
-        const gerberProblems = (r.problems ?? []).filter((p) => !p.code.startsWith("cpl") && !p.code.startsWith("bom"));
+        const isExport = (code: string) => /^(ipc2581|odb|ipcd356|dxf)_/.test(code);
+        const exportProblems = (r.problems ?? []).filter((p) => isExport(p.code));
+        const gerberProblems = (r.problems ?? []).filter((p) => !p.code.startsWith("cpl") && !p.code.startsWith("bom") && !isExport(p.code));
         const assemblyProblems = (r.problems ?? []).filter((p) => p.code.startsWith("cpl") || p.code.startsWith("bom"));
         const silk = (r.warnings ?? []).filter((w) => w.code === "silk_outside_board");
         const validations: Validation[] = [
@@ -140,6 +148,12 @@ export function fabExecutor(tools: EngineeringTools): Executor {
                 `${g.min_drill_mm} mm, copper-to-edge within ${r.profile?.name} rules`,
             artifact_version_id: stored.gerbers, tool_name: "gerbonara", tool_version: "1.6.3", details: { ...g, warnings: silk } },
         ];
+        if (r.exports) {
+          validations.push({ kind: "other", result: exportProblems.length ? "fail" : "pass", evidence_category: "cad_check",
+            summary: exportProblems.length ? `Exchange formats: ${exportProblems.map((p) => p.message).join("; ")}`
+              : `Exchange formats read back and matching the board: ${Object.values(r.exports.labels).join(", ")}`,
+            artifact_version_id: stored.ipc2581 ?? stored.check, tool_name: "vx_eng", tool_version: tools.versions.vx_eng, details: r.exports });
+        }
         if (r.profile?.assembly) {
           validations.push(
             { kind: "other", result: assemblyProblems.length ? "fail" : a.rotation_corrections.length ? "warning" : "pass",

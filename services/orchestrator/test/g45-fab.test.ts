@@ -96,7 +96,7 @@ test("fab package task: board-house files from the approved board, independently
       .select("storage_path, sha256, validated_at, artifacts(name)").eq("produced_by_task_id", fab.id);
     const byName = new Map((versions ?? []).map((v) => [(v.artifacts as unknown as { name: string }).name, v]));
     for (const n of ["fab-package", "gerbers", "assembly-bom", "cpl", "fab-notes", "assembly-top", "drill-map",
-                     "panel-gerbers", "panel-render", "fab-check"]) {
+                     "panel-gerbers", "panel-render", "fab-check", "ipc2581", "odb", "ipc356-netlist", "outline-dxf"]) {
       assert.ok(byName.get(`fab-package/${n}`)?.validated_at, `fab-package/${n} stored and validated`);
     }
     assert.ok(!byName.has("fab-package/assembly-bottom"), "no bottom-side parts, so no bottom assembly drawing");
@@ -106,7 +106,10 @@ test("fab package task: board-house files from the approved board, independently
     assert.equal(by("drc")[0]!.result, "pass");
     assert.equal(by("dfm")[0]!.result, "pass", by("dfm")[0]!.summary);
     assert.match(by("dfm")[0]!.summary, /outline 34 x 22 mm, 3 plated \+ 4 non-plated holes match the board/);
-    assert.match(by("other")[0]!.summary, /Pick-and-place: 6 parts at the board's positions and sides/);
+    assert.ok(by("other").some((c) => /Pick-and-place: 6 parts at the board's positions and sides/.test(c.summary)));
+    const formats = by("other").find((c) => c.summary.startsWith("Exchange formats"))!;
+    assert.equal(formats.result, "pass", formats.summary);
+    assert.match(formats.summary, /IPC-2581 rev C \(XML\), ODB\+\+ \(zip\), IPC-D-356 netlist \(bare-board test\), DXF board outline \(mm\)/);
     assert.equal(by("bom_check")[0]!.result, "warning", "no LCSC numbers yet");
 
     // Re-check the stored package here: manifest integrity and the loose Gerbers are the packaged ones.

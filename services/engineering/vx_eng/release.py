@@ -420,7 +420,15 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
                                                                          "rotation_corrections": [], "lcsc_missing": []}
     draw = drawings(project_dir, pcb, any(p["side"] == "bottom" for p in facts["parts"]))
     pan = panelize(project_dir, pcb, profile, sch) if panel else None
+    from .exports import FORMATS, LABELS, export_formats
+    alt = export_formats(project_dir, pcb, out / "formats", FORMATS)
     notes = fab_notes(name, revision, profile, facts, gerbers, assembly, pan)
+    notes += ("\nEXCHANGE FORMATS (formats/, each read back and checked against the board)\n"
+              + "".join(f"  {LABELS[f]}: formats/{fn}\n" for f, fn in alt["files"].items())
+              + "  Board houses: Gerber X2 + Excellon (gerbers.zip) is the primary set; IPC-2581 or ODB++ where the house prefers one.\n"
+              + "  Bare-board electrical test: the IPC-D-356 netlist.\n"
+              + "  Mechanical and enclosure suppliers: the DXF outline (mm) with the board STEP.\n"
+              + "  Dates inside IPC-2581 and ODB++ are fixed (2000-01-01) so the same board gives identical files.\n")
     (out / "FAB-NOTES.txt").write_text(notes)
 
     files: dict[str, Path] = {"gerbers.zip": gerber_zip, "FAB-NOTES.txt": out / "FAB-NOTES.txt"}
@@ -430,6 +438,8 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
         files["cpl.csv"] = cpl
     for f in draw.values():
         files[f] = project_dir / f
+    for fn in alt["files"].values():
+        files[f"formats/{fn}"] = out / "formats" / fn
     if pan:
         files["panel/panel-gerbers.zip"] = project_dir / pan["gerbers"]
         if pan["render"]:
@@ -447,18 +457,22 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
             if files[arc].resolve() != target.resolve():
                 target.write_bytes(files[arc].read_bytes())
             exported[key] = target.name
+    for f, fn in alt["files"].items():
+        exported[f] = f"formats/{fn}"
     check = {"version": 1, "project": name, "revision": revision, "profile": profile.name, "drc": result["drc"],
              "gerbers": gerbers, "assembly": assembly, "board": {k: v for k, v in facts.items() if k != "parts"},
-             "parts": facts["parts"], "panel": pan, "manifest": manifest}
+             "parts": facts["parts"], "panel": pan, "manifest": manifest,
+             "exports": {"ok": alt["ok"], "files": alt["files"], "labels": alt["labels"], "summary": alt["summary"], "problems": alt["problems"]}}
     (out / "fab-check.json").write_text(json.dumps(check, indent=2))
     exported["check"] = "fab-check.json"
-    problems = gerbers["problems"] + assembly["problems"]
+    problems = gerbers["problems"] + assembly["problems"] + alt["problems"]
     result.update({
         "stage": "built", "ok": not problems, "problems": problems,
         "warnings": gerbers["warnings"] + assembly["warnings"],
         "board": check["board"], "gerbers": {k: v for k, v in gerbers.items() if k not in ("problems", "warnings")},
         "assembly": {k: v for k, v in assembly.items() if k not in ("problems", "warnings")},
         "panel": pan, "files": exported, "manifest": manifest, "lcsc_applied": lcsc_applied,
+        "exports": {"files": {f: f"formats/{fn}" for f, fn in alt["files"].items()}, "labels": alt["labels"], "ok": alt["ok"]},
     })
     return result
 
