@@ -98,7 +98,10 @@ try {
   // Chat.
   await cpage.getByLabel("Message").fill("What needs my approval?");
   await cpage.getByRole("button", { name: "Send" }).click();
-  const reply = cpage.locator(".msg-assistant").last();
+  // The reply streams into a live bubble, then the page refreshes to show the stored exchange.
+  await cpage.waitForFunction(() => document.querySelector("[data-testid=chat-streaming]")?.textContent?.includes("Waiting for your approval"));
+  await cpage.getByTestId("chat-live").waitFor({ state: "detached" });
+  const reply = cpage.getByTestId("chat").locator(".msg-assistant").last();
   await reply.waitFor();
   const text = await reply.innerText();
   assert.match(text, /Waiting for your approval \(1\):\n• Power tree and budget: /);
@@ -147,6 +150,31 @@ try {
   await page.goto(`${BASE}/projects/${project.id}/workspace`);
   await page.locator(".msg-user").getByText("What needs my approval?").waitFor();
   console.log("✓ owner sees the client's conversation");
+
+  // A plan change from the chat: proposed by the assistant, drafted by the owner as a new plan version.
+  const { data: powerTask } = await admin.from("tasks").select("key, plan_id").eq("project_id", project.id).single();
+  await page.getByLabel("Message").fill(`Add a task: Drop test of the enclosure after ${powerTask.key}`);
+  await page.getByRole("button", { name: "Send" }).click();
+  const card = page.getByTestId("plan-change").last();
+  await card.waitFor();
+  assert.match(await card.innerText(), new RegExp(`Proposed plan change: Add a task: "Drop test of the enclosure", after ${powerTask.key}`));
+  await card.getByRole("button", { name: "Draft this plan change" }).click();
+  await page.getByText(/Draft plan v\d+ made from the chat/).waitFor();
+  const { data: plans } = await admin.from("plans").select("id, version, status, generator").eq("project_id", project.id).order("version");
+  const draft = plans.at(-1);
+  assert.equal(draft.status, "draft");
+  const { data: newTasks } = await admin.from("tasks").select("id, key, title").eq("plan_id", draft.id).order("position");
+  assert.deepEqual(newTasks.map((t) => t.key), [powerTask.key, "drop-test-of-the-enclosure"]);
+  const { data: dep } = await admin.from("task_dependencies").select("depends_on_task_id").eq("task_id", newTasks[1].id).single();
+  assert.equal(dep.depends_on_task_id, newTasks[0].id);
+  assert.equal((await admin.from("plans").select("status").eq("id", powerTask.plan_id).single()).data.status, "approved", "the running plan is unchanged");
+  await page.goto(`${BASE}/projects/${project.id}/workspace`);
+  await page.getByTestId("plan-change").last().getByRole("link", { name: "Drafted as a plan version" }).waitFor();
+  await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
+  assert.match(await cpage.getByTestId("plan-change").last().innerText(), /The team can draft it/);
+  assert.equal(await cpage.getByTestId("plan-change").last().getByRole("button").count(), 0, "clients cannot draft plan changes");
+  await shot(page, "plan-change-drafted");
+  console.log("✓ a plan change from the chat became a draft plan version; the approved plan is unchanged");
   console.log("\nWorkspace end-to-end flow passed.");
 } catch (e) {
   console.error("\n✗ Workspace end-to-end flow failed:", e.message);

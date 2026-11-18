@@ -15,7 +15,7 @@ export default async function ArtifactVersionPage({ params, searchParams }: {
   const embed = (await searchParams).embed === "1";
   const { supabase } = await requireUser();
   const { data: v } = await supabase.from("artifact_versions")
-    .select("id, version, status, sha256, size_bytes, content_type, storage_path, tool_name, tool_version, tool_config, summary, created_at, committed_at, validated_at, produced_by_task_id, produced_by_execution_id, artifacts(name, kind), tasks:produced_by_task_id(key, title), projects(name)")
+    .select("id, version, status, sha256, size_bytes, content_type, storage_path, tool_name, tool_version, tool_config, summary, created_at, committed_at, validated_at, produced_by_task_id, produced_by_execution_id, artifacts(name, kind), tasks:produced_by_task_id(key, title), projects!artifact_versions_project_id_fkey(name)")
     .eq("id", versionId).eq("project_id", projectId).maybeSingle();
   if (!v) notFound();
 

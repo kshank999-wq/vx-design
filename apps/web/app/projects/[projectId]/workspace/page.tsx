@@ -6,7 +6,9 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
-import { decideFromWorkspace, sendMessage } from "./actions";
+import { decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { ChatForm } from "@/components/ChatForm";
+import { describePlanChange, type PlanChange } from "@vx/planning";
 
 export const maxDuration = 120;
 
@@ -21,7 +23,7 @@ const LABEL: Record<string, string> = {
 
 interface MessageData {
   model?: string; offline?: boolean; references?: string[]; suggested_requirement_change?: string | null; error?: boolean;
-  citations?: Citation[];
+  citations?: Citation[]; suggested_plan_change?: PlanChange | null;
 }
 
 export default async function WorkspacePage({ params, searchParams }: {
@@ -51,6 +53,10 @@ export default async function WorkspacePage({ params, searchParams }: {
   const vTested = vm.some((x) => x.status !== "no_procedure" && x.status !== "not_tested");
   const valStep = !vm.length || !vTested ? "draft" : vFailing || (openFaults ?? []).length ? "blocked" : vVerified === vm.length ? "complete" : "running";
   const role = me?.role ?? "viewer";
+  const canDraft = role === "owner" || role === "engineer";
+  // Plans already drafted from a chat message, so the button turns into a link.
+  const { data: chatPlans } = canDraft ? await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null) : { data: [] };
+  const drafted = new Map((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
   const canDecide = ["owner", "reviewer", "client"].includes(role);
   const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
   const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
@@ -92,6 +98,13 @@ export default async function WorkspacePage({ params, searchParams }: {
                 {d.suggested_requirement_change && (
                   <div className="small warn-text">Suggested requirement change, for the team to review: {d.suggested_requirement_change}</div>
                 )}
+                {d.suggested_plan_change && (
+                  <div className="small warn-text" data-testid="plan-change">Proposed plan change: {describePlanChange(d.suggested_plan_change)}.
+                    {drafted.get(String(m.id)) ? <> <Link href={`/projects/${projectId}/plans/${drafted.get(String(m.id))}`}>Drafted as a plan version</Link>.</>
+                      : canDraft ? <form action={draftPlanChange.bind(null, projectId, m.id)} className="inline">{" "}<SubmitButton variant="secondary" pendingText="Drafting…">Draft this plan change</SubmitButton></form>
+                      : " The team can draft it as a new plan version."}
+                  </div>
+                )}
                 {!!d.references?.length && (
                   <div className="small">{d.references.filter((r) => outputName.has(r)).map((r) => (
                     <Link key={r} href={href(r)} className="ref">{outputName.get(r)!.split("/").pop()}</Link>
@@ -109,10 +122,7 @@ export default async function WorkspacePage({ params, searchParams }: {
           })}
           {!messages?.length && <li className="muted small">Ask about progress, a report, or what needs your approval.</li>}
         </ol>
-        <form action={sendMessage.bind(null, projectId, selected ? selected.id : null)} className="stack">
-          <textarea name="message" rows={3} required maxLength={4000} placeholder="Ask about the project…" aria-label="Message" />
-          <div><SubmitButton pendingText="Thinking…">Send</SubmitButton></div>
-        </form>
+        <ChatForm projectId={projectId} action={sendMessage.bind(null, projectId, selected ? selected.id : null)} />
       </section>
 
       <section className="ws-view" aria-label="Results">

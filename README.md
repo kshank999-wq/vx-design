@@ -446,10 +446,22 @@ centre, and the live **checklist** on the right that stops at approval points.
   the asker's own permissions. It links the outputs it mentions (they open in the centre) and restates requested changes
   as suggested requirement changes for the team; it cannot approve or change anything. Messages are stored per project
   and every member sees the same conversation. With `VX_LLM=offline` it gives a labelled status summary instead (not AI).
+- **Streaming.**
+  - Replies appear as they are written: the reply text is read from the model's structured output while it is still
+    arriving.
+  - The page then shows the stored, signed exchange, so the streamed copy is never the record.
+  - Without JavaScript the form posts as before.
+- **Plan changes from chat.**
+  - **Proposing.** When asked to add, change or remove a task, the assistant proposes that one change; the offline
+    stand-in understands "add a task: … after <key>" and "remove task <key>".
+  - **Drafting.** Owners and engineers press **Draft this plan change**. That makes a new draft plan version: a copy
+    of the newest plan with the change applied, keeping dependency order. Added tasks require approval of their result.
+  - **Approval.** The draft is reviewed and approved like any plan; the running plan is not touched. Clients see the
+    proposal but cannot draft it.
 
 ```bash
 ./scripts/test-db.sh           # workspace_test: invitations, client visibility, who can decide, chat writes
-pnpm test:e2e:workspace        # browser: invite, client signs up, checklist stop, chat, viewer, client approves
+pnpm test:e2e:workspace        # browser: invite, client signs up, checklist stop, streamed chat, viewer, client approves, plan change from chat
 ```
 
 Screenshots: `docs/workspace/screens`.

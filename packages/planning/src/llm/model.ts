@@ -20,6 +20,8 @@ export interface GenerateRequest<T> {
   system: string;
   messages: Anthropic.Beta.BetaMessageParam[];
   schema: z.ZodType<T>;
+  /** Called with each piece of output text as it streams (the structured output's JSON, in order). */
+  onText?: (delta: string) => void;
 }
 
 export interface GenerateResult<T> {
@@ -73,6 +75,7 @@ export class ClaudeModel implements LanguageModel {
       system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
       messages: req.messages,
     });
+    if (req.onText) stream.on("text", (delta) => req.onText!(delta));
     const message = await stream.finalMessage();
 
     if (message.stop_reason === "refusal") {

@@ -1,5 +1,5 @@
 import "server-only";
-import { ClaudeModel } from "@vx/planning";
+import { ClaudeModel, PlanChange, partialStringField } from "@vx/planning";
 import { z } from "zod";
 import { citation, searchKnowledge, type KnowledgeHit } from "./knowledge";
 import type { createClient } from "./supabase/server";
@@ -111,6 +111,8 @@ export const AssistantAnswer = z.object({
   suggested_requirement_change: z.string().nullable()
     .describe("If the member asked for something that changes a requirement, the change written as a requirement for the team to review; else null."),
   citations: z.array(z.string()).describe("Refs (K1, K2, ...) of the KNOWLEDGE entries the answer relies on. Empty if none."),
+  suggested_plan_change: PlanChange.nullable()
+    .describe("If the member asks to add, change or remove a piece of work in the plan, that one change for the team to draft; else null."),
 });
 export type AssistantAnswer = z.infer<typeof AssistantAnswer>;
 
@@ -123,7 +125,9 @@ Explain engineering results in terms a product owner understands, and keep answe
 
 You cannot change the project. Approvals are made with the Approve / Return buttons in the checklist; point to them when asked.
 If the member asks for a change in what the product must do, restate it in suggested_requirement_change: the engineering team
-reviews it before it becomes a requirement. Put the ids of outputs worth opening in references; only ids from OUTPUTS.
+reviews it before it becomes a requirement. If the member asks to add, change or remove a piece of work (a task) in the plan,
+describe that one change in suggested_plan_change, using task keys from TASKS: the team turns it into a new draft plan version,
+reviewed and approved like any plan, so say that it is a proposal, not done. Put the ids of outputs worth opening in references; only ids from OUTPUTS.
 For standards, regulations and component facts, rely on KNOWLEDGE and STANDARDS FOR THIS PROJECT, and list the K refs you used
 in citations. Say when an edition is unconfirmed, when a source is unverified, and when only the reference is held (no text):
 then point to the official source rather than describing its contents from memory. A standard in the registry is not
@@ -191,8 +195,24 @@ export function offlineAnswer(ctx: ProjectContext, question: string): AssistantA
   const refs = ctx.knowledge.slice(0, 3);
   if (refs.length) parts.push(`Related references from the knowledge base are listed below (${refs.length}); open them for the text.`);
   parts.push("(Offline status summary, not AI: set ANTHROPIC_API_KEY for a real assistant.)");
+  const change = offlinePlanChange(ctx, question);
+  if (change) parts.unshift(`Proposed plan change for the team: ${change.action === "add_task" ? `add a task "${change.title}"` : `remove ${change.task_key} ("${change.title}")`}. `
+    + "It becomes a new draft plan version only when the team drafts it, and is approved like any plan.");
   return { answer: parts.join("\n\n"), references: latest.map((o) => o.id), suggested_requirement_change: null,
-           citations: refs.map((_, i) => `K${i + 1}`) };
+           citations: refs.map((_, i) => `K${i + 1}`), suggested_plan_change: change };
+}
+
+/**
+ * The offline stand-in understands two literal requests, so plan changes from chat work without a model:
+ * "add a task: <title>" (optionally "after <key>") and "remove task <key>".
+ */
+export function offlinePlanChange(ctx: ProjectContext, question: string): PlanChange | null {
+  const add = /^\s*(?:please\s+)?add (?:a )?task\s*[:\-]\s*(.+?)(?:\s+after\s+([a-z0-9][a-z0-9-]*))?\s*\.?\s*$/i.exec(question);
+  if (add) return { action: "add_task", task_key: null, title: add[1]!.trim(), discipline: null, description: "", after_key: add[2] ?? null, reason: question.trim() };
+  const rm = /^\s*(?:please\s+)?remove (?:the )?task\s+([a-z0-9][a-z0-9-]*)\s*\.?\s*$/i.exec(question);
+  const task = rm && ctx.tasks.find((t) => t.key === rm[1]);
+  if (task) return { action: "remove_task", task_key: task.key, title: task.title, discipline: null, description: "", after_key: null, reason: question.trim() };
+  return null;
 }
 
 export interface AssistantReply extends Omit<AssistantAnswer, "citations"> { label: string; offline: boolean; citations: Citation[] }
@@ -202,9 +222,14 @@ function resolveCitations(ctx: ProjectContext, refs: string[]): Citation[] {
   return [...new Set(refs)].map((r) => all.find((c) => c.ref === r)).filter((c): c is Citation => !!c);
 }
 
-export async function answer(ctx: ProjectContext, question: string): Promise<AssistantReply> {
+/**
+ * Answers a member's question. `onText` receives the reply text as it is written (the model's structured output is
+ * streamed and its answer field read as it arrives); the offline summary is sent in a few pieces the same way.
+ */
+export async function answer(ctx: ProjectContext, question: string, onText?: (delta: string) => void): Promise<AssistantReply> {
   if (process.env.VX_LLM === "offline") {
     const o = offlineAnswer(ctx, question);
+    if (onText) for (const piece of o.answer.split(/(?<=\n\n)/)) onText(piece);
     return { ...o, citations: resolveCitations(ctx, o.citations), label: "Offline status summary (not AI)", offline: true };
   }
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("The assistant is not configured: set ANTHROPIC_API_KEY (or VX_LLM=offline).");
@@ -214,8 +239,20 @@ export async function answer(ctx: ProjectContext, question: string): Promise<Ass
     system: SYSTEM,
     messages: [{ role: "user", content: `PROJECT CONTEXT\n${contextText(ctx)}\n\nQUESTION FROM THE MEMBER\n${question}` }],
     schema: AssistantAnswer,
+    onText: onText && ((() => {
+      let json = "", sent = 0;
+      return (delta: string) => {
+        json += delta;
+        const text = partialStringField(json, "answer");
+        if (text != null && text.length > sent) { onText(text.slice(sent)); sent = text.length; }
+      };
+    })()),
   });
   const known = new Set(ctx.outputs.map((o) => o.id));
+  const keys = new Set(ctx.tasks.map((t) => t.key));
+  const change = output.suggested_plan_change;
   return { ...output, references: output.references.filter((r) => known.has(r)).slice(0, 6),
+           // A change naming a task that is not in the plan is dropped rather than shown as actionable.
+           suggested_plan_change: change && (change.action === "add_task" ? !change.after_key || keys.has(change.after_key) : keys.has(change.task_key ?? "")) ? change : null,
            citations: resolveCitations(ctx, output.citations), label: usage.model, offline: false };
 }
