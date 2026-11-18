@@ -81,6 +81,15 @@ importers:
 
   packages/integrations: {}
 
+  packages/optimize:
+    dependencies:
+      '@vx/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@vx/power':
+        specifier: workspace:*
+        version: link:../power
+
   packages/planning:
     dependencies:
       '@anthropic-ai/sdk':
@@ -135,6 +144,9 @@ importers:
       '@vx/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@vx/optimize':
+        specifier: workspace:*
+        version: link:../../packages/optimize
       '@vx/planning':
         specifier: workspace:*
         version: link:../../packages/planning

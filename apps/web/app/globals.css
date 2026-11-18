@@ -198,3 +198,11 @@ mark { background: var(--warn-bg); color: inherit; padding: 0 1px; }
 .pill-rec-declined, .pill-rec-revoked { background: var(--error-bg); color: var(--danger); }
 tr.chosen td { background: var(--ok-bg); }
 code { font-size: 12px; word-break: break-all; }
+
+/* Optimization proposals */
+.proposal h3 { margin: 0; }
+.impact td.good { color: var(--accent); font-weight: 600; }
+.pill-conf-high { background: var(--ok-bg); }
+.pill-conf-medium { background: var(--warn-bg); color: var(--warn); }
+.pill-conf-low { background: var(--error-bg); color: var(--danger); }
+label.radio { flex-direction: row; align-items: center; color: var(--fg); }

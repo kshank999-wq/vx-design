@@ -14,6 +14,8 @@ import { chunkDocument, extractRequirements, generatePlan, generateConceptBrief,
          OFFLINE_FIXTURE_POWER, CONCEPT_PROMPT_VERSION } from "../../packages/planning/src/index.ts";
 import { FixtureImageProvider } from "../../packages/integrations/src/imaging/fixture.ts";
 import { inspectUpload } from "../../packages/security/src/index.ts";
+import { optimize, OPTIMIZE_VERSION } from "../../packages/optimize/src/index.ts";
+import { FixtureProvider, normalizeMpn, resolveBom } from "../../packages/integrations/src/index.ts";
 
 export const ROOT = join(import.meta.dirname, "../..");
 export const sha = (b: Uint8Array | string) => createHash("sha256").update(b).digest("hex");
@@ -89,6 +91,28 @@ export const CASES: Case[] = [
       const images = [];
       for (const v of brief.variants.slice(0, 2)) { const img = await provider.generate({ prompt: v.prompt, references: [], aspectRatio: "4:3" }); images.push({ name: v.name, sha256: sha(img.data), seed: img.seed }); }
       return { inputs: {}, versions: { prompt: CONCEPT_PROMPT_VERSION }, output: { brief, images } };
+    },
+  },
+  {
+    name: "optimize", describe: "§14 proposals from a fixture-sourced BOM and an LDO power tree",
+    async run() {
+      const fx = new FixtureProvider();
+      const bom = await resolveBom({
+        components: [
+          { ref: "R1", symbol: "Device:R", value: "1k", footprint: "Resistor_SMD:R_0603_1608Metric", mpn: null, manufacturer: null },
+          { ref: "R2", symbol: "Device:R", value: "1k", footprint: "Resistor_SMD:R_0603_1608Metric", mpn: null, manufacturer: null },
+          { ref: "C1", symbol: "Device:C", value: "1uF", footprint: "Capacitor_SMD:C_0603_1608Metric", mpn: null, manufacturer: null },
+          { ref: "U1", symbol: "Regulator", value: "AP2112K-3.3", footprint: "Package_TO_SOT_SMD:SOT-23-5", mpn: "AP2112K-3.3TRG1", manufacturer: "Diodes Incorporated" },
+        ],
+        nets: [{ name: "+5V", pins: ["C1.1", "U1.1"] }, { name: "+3V3", pins: ["R1.1", "R2.1", "U1.5"] }], quantities: [1, 10, 100, 1000],
+      }, [fx]);
+      const lookups: Record<string, Awaited<ReturnType<typeof fx.searchMpn>>> = {};
+      for (const l of bom.lines) for (const a of l.alternates) lookups[normalizeMpn(a.mpn)] = await fx.searchMpn(a.mpn);
+      const tree = { ...OFFLINE_FIXTURE_POWER, converters: OFFLINE_FIXTURE_POWER.converters.map((c) => ({ ...c, kind: "ldo" as const, efficiency: null,
+        dropout_v: 0.25, quiescent_a: 55e-6, theta_ja_c_per_w: 250 })), sources: OFFLINE_FIXTURE_POWER.sources.map((s) => ({ ...s, kind: "usb" as const,
+        voltage: { min: 4.75, nom: 5, max: 5.25 }, battery: null })) };
+      const r = optimize({ bom: { ...bom, generatedAt: "fixed" }, power: { tree, report: calculate(tree) }, requirements: [], lookups });
+      return { inputs: { tree: sha(JSON.stringify(tree)) }, versions: { optimize: OPTIMIZE_VERSION, calc: POWER_CALC_VERSION }, output: r };
     },
   },
   {

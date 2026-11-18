@@ -1,0 +1,234 @@
+{
+ "case": "optimize",
+ "describe": "§14 proposals from a fixture-sourced BOM and an LDO power tree",
+ "inputs": {
+  "tree": "430f81f3f074079bc277192f26e6340bcdca1c857a4f2cab22c68b2adf51c12b"
+ },
+ "versions": {
+  "optimize": "optimize-v1",
+  "calc": "power-calc-v1"
+ },
+ "output_sha256": "087adacde42786f180d3c29cf6be5d668cbb0f151a0163e21f4edb95e5a79f20",
+ "output": {
+  "excluded": [],
+  "inputs": {
+   "bom": true,
+   "lookups": 1,
+   "power": true
+  },
+  "proposals": [
+   {
+    "affects": {
+     "interfaces": [
+      "rail +3V3: MCU (Microcontroller), TCXO (Timecode reference oscillator), LED (Power LED)"
+     ],
+     "manufacturability": [
+      "adds an inductor and capacitors"
+     ],
+     "standards": [
+      "radiated/conducted emissions (e.g. CISPR 32 / EN 55032, FCC Part 15 Subpart B): switching noise must be checked"
+     ]
+    },
+    "basis": {
+     "assumptions": [
+      "switcher efficiency 88% and quiescent 40 µA (typical for the class; confirm with the chosen part's datasheet)"
+     ],
+     "inputs": [
+      "power tree offline_fixture_power"
+     ],
+     "method": "power calculator re-run on the changed tree (same loads, modes and sources)"
+    },
+    "change": {
+     "details": {
+      "efficiency": 0.88,
+      "quiescent_a": 0.00004
+     },
+     "from": "ldo",
+     "kind": "replace_converter",
+     "to": "buck (part to be chosen)"
+    },
+    "confidence": "medium",
+    "confidence_reason": "efficiency is assumed until a specific part is chosen",
+    "constraints": [
+     {
+      "detail": "buck chosen for input 4.75–5.25 V to 3.3 V",
+      "id": "input range",
+      "status": "met"
+     },
+     {
+      "detail": "noise-sensitive loads or requirements on +3V3: TCXO (Timecode reference oscillator) (consider a post-LDO or LC filter)",
+      "id": "noise",
+      "status": "needs_review"
+     },
+     {
+      "detail": "no new calculator errors (ratings, inputs, sequencing)",
+      "id": "power-calc",
+      "status": "met"
+     }
+    ],
+    "cost_note": "Schematic and layout change: inductor, input/output capacitors and a tight switching loop; more BOM cost and board area.",
+    "effort": "M",
+    "fingerprint": "c2bcbf45979d00e5",
+    "impact": [
+     {
+      "after": 0.1251,
+      "at": "Active (on set)",
+      "before": 0.1668,
+      "better": "lower",
+      "metric": "input power from VBAT",
+      "unit": "W"
+     },
+     {
+      "after": 0.0152,
+      "at": "Standby",
+      "before": 0.0203,
+      "better": "lower",
+      "metric": "input power from VBAT",
+      "unit": "W"
+     },
+     {
+      "after": 1.6833,
+      "before": 2.2446,
+      "better": "lower",
+      "metric": "energy per day (all modes)",
+      "unit": "Wh"
+     },
+     {
+      "after": 0.0152,
+      "before": 0.0652,
+      "better": "lower",
+      "metric": "U1 dissipation (worst case)",
+      "unit": "W"
+     },
+     {
+      "after": 48.8,
+      "before": 61.3,
+      "better": "lower",
+      "metric": "U1 junction temperature at max ambient",
+      "unit": "°C"
+     }
+    ],
+    "objective": "power",
+    "rank": 1,
+    "score": 11.67,
+    "subject": "U1",
+    "targets": [],
+    "title": "Replace LDO U1 (3.3 V buck-boost) with a buck regulator"
+   },
+   {
+    "affects": {
+     "interfaces": [],
+     "manufacturability": [
+      "no LCSC number: check assembly"
+     ],
+     "standards": []
+    },
+    "basis": {
+     "assumptions": [
+      "offer data is the offline fixture (invented numbers)"
+     ],
+     "inputs": [
+      "sourced BOM line generic:resistor|1k|Resistor_SMD:R_0603_1608Metric",
+      "offers for FX-E-R0603-1K (2)"
+     ],
+     "method": "distributor offers priced with the sourcing rules (MOQ, multiples, price breaks, stock)"
+    },
+    "change": {
+     "details": {
+      "lcsc": null,
+      "line": "generic:resistor|1k|Resistor_SMD:R_0603_1608Metric",
+      "manufacturer": "Fixture Passives"
+     },
+     "from": "FX-R0603-1K",
+     "kind": "swap_part",
+     "to": "FX-E-R0603-1K"
+    },
+    "confidence": "medium",
+    "confidence_reason": "based on fixture offer data, not live distributor data",
+    "constraints": [
+     {
+      "detail": "1k, 0603, 1% preferred stated in the distributor data",
+      "id": "specs",
+      "status": "met"
+     }
+    ],
+    "cost_note": "Same value, package and footprint: no layout change. Update the BOM and re-run sourcing.",
+    "effort": "S",
+    "fingerprint": "d9a1e02b9400f10d",
+    "impact": [
+     {
+      "after": 0.04,
+      "at": "1 boards",
+      "before": 0.18,
+      "better": "lower",
+      "metric": "R1, R2 cost per board",
+      "unit": "USD"
+     },
+     {
+      "after": 0.012,
+      "at": "10 boards",
+      "before": 0.036,
+      "better": "lower",
+      "metric": "R1, R2 cost per board",
+      "unit": "USD"
+     },
+     {
+      "after": 0.004,
+      "at": "100 boards",
+      "before": 0.012,
+      "better": "lower",
+      "metric": "R1, R2 cost per board",
+      "unit": "USD"
+     },
+     {
+      "after": 0.0016,
+      "at": "1000 boards",
+      "before": 0.0036,
+      "better": "lower",
+      "metric": "R1, R2 cost per board",
+      "unit": "USD"
+     },
+     {
+      "after": 0.162,
+      "at": "100 boards",
+      "before": 0.17,
+      "better": "lower",
+      "metric": "BOM cost per board",
+      "unit": "USD"
+     },
+     {
+      "after": 150000,
+      "before": 300000,
+      "better": "higher",
+      "metric": "boards buildable from one distributor's stock",
+      "unit": "boards"
+     },
+     {
+      "after": "active",
+      "before": "active",
+      "better": "n/a",
+      "metric": "lifecycle",
+      "unit": ""
+     }
+    ],
+    "objective": "cost",
+    "rank": 2,
+    "score": 3.29,
+    "subject": "R1, R2",
+    "targets": [],
+    "title": "Use FX-E-R0603-1K for R1, R2: 67% cheaper at 100 boards"
+   }
+  ],
+  "settings": {
+   "assemblyFeePerUniquePart": null,
+   "assemblyFeeSource": "not set",
+   "focusBoards": 100,
+   "lowIqA": 0.000001,
+   "minSavingPct": 5,
+   "switcherEfficiency": 0.88,
+   "switcherIqA": 0.00004,
+   "thetaJaReduction": 0.3
+  },
+  "version": "optimize-v1"
+ }
+}

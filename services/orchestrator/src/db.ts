@@ -506,6 +506,32 @@ export class WorkerDb {
     return new Uint8Array(await data.arrayBuffer());
   }
 
+  // --- Optimization proposals (§14) ---
+
+  async claimOptimization(workerId: string): Promise<{ id: string; project_id: string; run_no: number; settings: Record<string, unknown> } | null> {
+    const r = await this.rpc<{ id: string; project_id: string; run_no: number; settings: Record<string, unknown> } | null>("claim_optimization", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completeOptimization(id: string, workerId: string, inputs: unknown, result: unknown, error: string | null): Promise<string> {
+    return this.rpc<string>("complete_optimization", { p_run_id: id, p_worker_id: workerId, p_inputs: inputs, p_result: result, p_error: error });
+  }
+
+  /** The project's most recently committed artifact whose name ends with /<suffix> (e.g. sourced-bom, power-budget). */
+  async latestCommitted(projectId: string, suffix: string): Promise<{ versionId: string; name: string; storagePath: string; sha256: string } | null> {
+    const { data, error } = await this.client.from("artifact_versions").select("id, storage_path, sha256, committed_at, artifacts!inner(name)")
+      .eq("project_id", projectId).eq("status", "committed").like("artifacts.name", `%/${suffix}`).order("committed_at", { ascending: false }).limit(1);
+    if (error) throw new Error(`latest ${suffix}: ${error.message}`);
+    const v = data?.[0] as unknown as { id: string; storage_path: string; sha256: string; artifacts: { name: string } } | undefined;
+    return v ? { versionId: v.id, name: v.artifacts.name, storagePath: v.storage_path, sha256: v.sha256 } : null;
+  }
+
+  async projectRequirements(projectId: string): Promise<{ ref_code: string; kind: string; priority: string; text: string }[]> {
+    const { data, error } = await this.client.from("requirements").select("ref_code, kind, priority, text").eq("project_id", projectId).neq("status", "rejected");
+    if (error) throw new Error(`requirements: ${error.message}`);
+    return data ?? [];
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);

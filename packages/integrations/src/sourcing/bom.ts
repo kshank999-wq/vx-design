@@ -174,7 +174,8 @@ export function priceFor(offer: Offer, need: number): { unitPrice: number; buyQt
   return best;
 }
 
-function pricing(offers: Offer[], perBoard: number, quantities: number[], currency: string): PricePoint[] {
+/** Best single-offer purchase per board quantity (stock permitting), as the sourced BOM prices a line. */
+export function pricing(offers: Offer[], perBoard: number, quantities: number[], currency: string): PricePoint[] {
   const usable = offers.filter((o) => o.currency === currency && o.prices.length);
   return quantities.map((boards) => {
     const need = perBoard * boards;

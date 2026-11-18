@@ -31,6 +31,6 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
 done
 echo "Applying seed.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql"
-for t in schema_test planning_test worker_test workspace_test kb_test concept_test rfq_test flux_test recovery_test security_test; do
+for t in schema_test planning_test worker_test workspace_test kb_test concept_test rfq_test flux_test optimization_test recovery_test security_test; do
   "${PSQL[@]}" -f "$ROOT/supabase/tests/$t.sql"
 done

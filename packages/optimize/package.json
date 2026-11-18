@@ -1,0 +1,15 @@
+{
+  "name": "@vx/optimize",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@vx/integrations": "workspace:*",
+    "@vx/power": "workspace:*"
+  }
+}

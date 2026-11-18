@@ -45,6 +45,9 @@ export const FIXTURE_CATALOG: PartRecord[] = [
        offers("C105-6", 500000, [[1, 0.08], [10, 0.04], [100, 0.01], [1000, 0.004]])),
   part("FX-R0603-1K", "Fixture Passives", "resistor 1 kOhms 1% 0.1W 0603 thick film", "0603",
        offers("R1K", 300000, [[1, 0.1], [10, 0.03], [100, 0.01], [1000, 0.003]])),
+  // Cheaper, but no LCSC offer: sourcing keeps the LCSC part and lists this as an alternate (optimization tests).
+  part("FX-E-R0603-1K", "Fixture Passives", "resistor 1 kOhms 1% 0.1W 0603 thick film", "0603",
+       offers("R1KE", 300000, [[1, 0.02], [10, 0.006], [100, 0.002], [1000, 0.0008]], false)),
   part("FX-LED0603-G", "Fixture Optoelectronics", "LED Green 0603 20mA", "0603",
        offers("LEDG", 80000, [[1, 0.2], [10, 0.12], [100, 0.06], [1000, 0.03]])),
   part("FX-HDR-1X02-2.54", "Fixture Connectors", "pin header 1x2 positions 2.54mm vertical through hole", null,

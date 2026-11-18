@@ -34,6 +34,7 @@ import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
 import { processVirusScans } from "./scan.ts";
+import { processOptimization } from "./optimize.ts";
 import { scannerFromEnv } from "@vx/security";
 
 function env(name: string, fallback?: string): string {
@@ -100,6 +101,9 @@ if (images?.configured()) {
   // Flux import audits (G5): deterministic checks plus the model for the design history.
   const dbf = new WorkerDb(url, key);
   worker.addJob("flux audits", () => processFluxAudit(dbf, model, id));
+  // Optimization proposals (§14): deterministic; alternates are looked up with the configured sourcing providers.
+  const dbo = new WorkerDb(url, key);
+  worker.addJob("optimization", () => processOptimization(dbo, sourcing, id));
 }
 
 // Virus scanning (G6): any worker that can reach a ClamAV daemon (CLAMD_HOST, CLAMD_PORT) scans uploaded files.

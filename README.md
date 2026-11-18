@@ -692,6 +692,50 @@ Setup for a deployment:
   server (the local stack uses a labelled dev key from `seed.sql`).
 - Give workers `CLAMD_HOST`.
 
+## Optimization proposals (§14)
+
+Project page → **Optimize**: ranked changes to the design. Owners and engineers run the analysis; owners and
+reviewers decide; staff can read; clients cannot.
+
+The worker reads the project's latest **approved** sourced BOM and power budget, then looks up the alternates and
+passive parts at the configured distributors to get current offers and specs. `@vx/optimize` then produces proposals.
+No model is involved: every before/after is computed.
+
+| Objective | How the before/after is computed |
+|---|---|
+| Cost | Alternate parts priced at 1/10/100/1000 boards with the sourced BOM's own rules (MOQ, multiples, price breaks, stock) |
+| Availability, lifecycle, second source | Distributor stock and lifecycle; parts with no qualified alternate become "replace: engineer to choose" (low confidence) |
+| Fewer parts | Passives with the same value and package merged onto one part that meets every line (optional assembly fee per unique part) |
+| Power (LDO → switcher), standby (low-Iq), thermal (θJA) | The power tree is changed and the power calculator re-run: input power per mode, energy per day or battery runtime, dissipation, junction temperature |
+
+Each proposal carries:
+- the change and the requirements it touches;
+- the before/after table;
+- the basis and any assumptions, by name (for example "switcher efficiency 88%");
+- confidence and the reason for it;
+- effort, and a cost/NRE note;
+- affected interfaces, manufacturing effects and standards (e.g. EMC for a switcher);
+- constraint checks.
+
+**Hard constraints are never traded.** Before anything is offered, a replacement part is re-checked against the
+line's value, package and voltage rating. A requirement that names the current part, or that forbids the change
+(e.g. "shall use a linear regulator"), excludes the proposal. Excluded ideas are listed with the reason.
+Constraints that need judgment (e.g. noise-sensitive loads on a rail that would get a switcher) are marked
+*needs review*, and must be confirmed before accepting.
+
+Ranking: benefit × confidence ÷ effort. Benefit is the share of BOM cost saved at the chosen quantity, the gain in
+energy per day or battery runtime, or a fixed weight for lifecycle and supply risk. **Accepting** records a project
+decision (change control) for the next design revision. **Rejecting** needs a reason. A later analysis carries both
+over by fingerprint, so a rejected idea is not offered again.
+
+```bash
+pnpm --filter @vx/optimize test      # analyzers, constraint exclusions, power recomputation, ranking
+./scripts/test-db.sh                 # optimization_test: who may run/decide, lease, carried-over decisions, change control
+pnpm test:e2e:optimize               # browser: run, review, accept with confirmation, reject, re-run
+```
+
+Screenshots: `docs/optimize/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -699,7 +743,7 @@ Setup for a deployment:
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
-`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`
+`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

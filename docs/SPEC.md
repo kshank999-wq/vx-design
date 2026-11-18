@@ -144,7 +144,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Next:** optimization proposals (§14), S6 evidence capture, deployment (Vercel, Supabase project, worker host).
+**Next:** S6 evidence capture, deployment (Vercel, Supabase project, worker host).
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;
@@ -506,7 +506,7 @@ Order:
 
 Existing Smart Slate work in Flux is imported and audited by G5 (§16).
 
-## 14. Optimization and recommendation engine — from v1.0 (Planned, P2)
+## 14. Optimization and recommendation engine — from v1.0 (Built, first version)
 
 Ranked change proposals. Each one carries:
 - the targeted requirement and the proposed change;
@@ -528,6 +528,24 @@ Accepted proposals become decisions and go through change control (§7).
 
 Hard constraints are never traded for appearance or price. Example: a pre-certified wireless module instead of discrete RF, accepting the board-area and BOM cost.
 
+**Built (18 Nov 2026):**
+- **Inputs:** proposals come from the latest approved sourced BOM and power budget, with alternates looked up fresh at
+  the distributors.
+- **Objectives covered:**
+  - unit cost at 1/10/100/1,000 boards;
+  - availability and lifecycle, second sources and fewer unique parts;
+  - power (LDO → switcher), standby (quiescent current) and thermal margin.
+- **Computed, not estimated:** cost from offers priced with the sourced BOM's rules; power by re-running the power
+  calculator on the changed tree. Assumptions are named and lower the confidence.
+- **Constraints:** each part is re-checked against value, package and rating. Requirements that name or forbid a
+  change exclude it. Judgment calls are marked *needs review* and must be confirmed before accepting.
+- **Approval:** owners or reviewers accept or reject. An accepted proposal becomes a decision; a rejection needs a
+  reason. Decisions carry over between analyses.
+- **Not yet:**
+  - NRE and tooling, volume and weight, stackup and routing, yield, repair time;
+  - pre-certified-module trade studies;
+  - automatic application of an accepted change to the design (today a decision for the next revision);
+  - a written narrative from Claude next to the computed numbers.
 ## 15. Quality, compliance, safety, security, privacy and IP
 
 **Evidence categories** *(Built)*:
@@ -690,6 +708,7 @@ v1.0's endpoints are **logical interfaces**. Today they are SQL functions under 
 | Parts/BOM | `GET /parts/search`, `POST /bom/resolve`, `POST /bom/alternates` | Planned |
 | Design | `POST /design/jobs`, `GET /design/jobs/:id`, `POST /revisions/:id/approve` | A design job is a task in an authorized run; approval via `decide_task` |
 | Manufacturing | `GET /manufacturers/match`, `POST /rfq/draft`, `POST /rfq/:id/approve-disclosure` | **Built** as RPCs: `create_rfq`, `update_rfq`, `set_rfq_attachments`, `add_rfq_recipient`, `request_rfq_packet`, `approve_rfq_disclosure`, `send_rfq`, `close_rfq`; supplier side `supplier_rfqs`, `supplier_open_rfq`, `submit_quote`, `decline_rfq`. Matching is a category filter for now |
+| Optimization | (§14 proposals with an approval control) | **Built** as RPCs: `request_optimization`, `decide_proposal`; workers `claim_optimization` / `complete_optimization` |
 | Compliance | `POST /assessments`, `POST /test-results`, `GET /projects/:id/gate-status` | Planned |
 
 Every response carries source references, timestamps, job state, error codes, permissions and a trace id.
@@ -714,7 +733,7 @@ v1.0's backlog, merged with build status:
 | P1 | KiCad worker, ERC/DRC, export verification | Reproducible, tested generated PCB starter project | **Built** (G3, G4); exports in G4.5 |
 | P2 | Mechanical CAD worker + process rules | Editable source + STEP/STL/drawings + checks | M-ENC |
 | P2 | Manufacturer CRM, NDA/RFQ packets | Approved request → complete attachments + audit log | **Built** (M-RFQ) |
-| P2 | Power/thermal validation, BOM optimization proposals | Ranked recommendations with evidence and approvals | M-SRC (calculator) + §14 |
+| P2 | Power/thermal validation, BOM optimization proposals | Ranked recommendations with evidence and approvals | **Built** (power calculator; §14 proposals) |
 | P3 | Production test, compliance docs, price analytics | Pilot package traceable to revisions and results | Later |
 
 **Next order** (owner decisions, §21):
@@ -776,6 +795,8 @@ Still open:
   pairing), or whether full-text search is enough for now. Also who the first knowledge editors are.
 - Whether clients see RFQs and quotes (today they do not), and who besides library editors may approve vendors.
 - Whether VX Design should send RFQ emails itself (needs a transactional email provider; today the owner sends them).
+- Whether clients see optimization proposals (today staff only) and may accept cost proposals, and the assembly
+  house's per-part setup fee to use in "fewer parts" proposals.
 
 ## 22. Success metrics and launch boundaries
 
