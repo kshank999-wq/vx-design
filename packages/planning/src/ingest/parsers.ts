@@ -12,13 +12,14 @@ export async function parseDocument(data: Uint8Array, mimeType: string, filename
   const type = mimeType || guessMime(filename);
   if (type === DOCX_MIME) return parseDocx(data);
   if (type === PDF_MIME) return parsePdf(data);
+  if (type === "text/html" || type === "application/xhtml+xml") return parseHtmlPage(data);
   if (type.startsWith("text/")) return parseText(new TextDecoder().decode(data), type, data);
   throw new UnsupportedDocumentError(`Unsupported document type "${type}". Upload DOCX, PDF, Markdown or plain text.`);
 }
 
 export function guessMime(filename: string): string {
   const ext = filename.toLowerCase().split(".").pop();
-  return ext === "docx" ? DOCX_MIME : ext === "pdf" ? PDF_MIME : ext === "md" ? "text/markdown" : ext === "txt" ? "text/plain" : "";
+  return ext === "docx" ? DOCX_MIME : ext === "pdf" ? PDF_MIME : ext === "md" ? "text/markdown" : ext === "txt" ? "text/plain" : ext === "html" || ext === "htm" ? "text/html" : "";
 }
 
 // --- DOCX ------------------------------------------------------------------------
@@ -60,6 +61,44 @@ export async function parseDocx(data: Uint8Array): Promise<ParsedDocument> {
   walk(root);
   const warnings = result.messages.filter((m) => !/Unrecognised paragraph style/.test(m.message)).map((m) => m.message);
   return buildDocument(items, data, DOCX_MIME, warnings);
+}
+
+// --- HTML pages (fetched from an official link) ----------------------------------
+
+/**
+ * A web page's readable content: the main or article element when there is one, without scripts, styles,
+ * navigation, headers, footers or forms; headings become sections, paragraphs, list items, table rows and
+ * preformatted text become blocks.
+ */
+export function parseHtmlPage(data: Uint8Array): ParsedDocument {
+  const root = parseHtml(new TextDecoder().decode(data), { blockTextElements: { pre: true } });
+  for (const junk of root.querySelectorAll("script, style, noscript, nav, header, footer, form, svg, iframe, template, aside")) junk.remove();
+  const body = root.querySelector("main") ?? root.querySelector("article") ?? root.querySelector("body") ?? root;
+  const items: RawItem[] = [];
+  const title = normalizeText(root.querySelector("title")?.textContent ?? "");
+  if (title) items.push({ type: "title", text: title });
+  const walk = (el: HTMLElement): void => {
+    for (const child of el.childNodes as HTMLElement[]) {
+      const tag = child.tagName?.toLowerCase();
+      if (!tag) {
+        const t = normalizeText(child.textContent ?? "");
+        if (t.length > 1) items.push({ type: "block", kind: "paragraph", text: t });
+        continue;
+      }
+      const text = normalizeText(child.textContent ?? "");
+      if (/^h[1-6]$/.test(tag)) { if (text) items.push({ type: "heading", text, level: Number(tag[1]) }); }
+      else if (tag === "p" || tag === "pre" || tag === "blockquote" || tag === "dd" || tag === "dt") { if (text) items.push({ type: "block", kind: "paragraph", text }); }
+      else if (tag === "li") { if (text) items.push({ type: "block", kind: "list_item", text }); }
+      else if (tag === "table") {
+        for (const tr of child.querySelectorAll("tr")) {
+          const cells = tr.querySelectorAll("td, th").map((c) => normalizeText(c.textContent ?? ""));
+          if (cells.some(Boolean)) items.push({ type: "block", kind: "table_row", text: cells.join(" | ") });
+        }
+      } else walk(child);
+    }
+  };
+  walk(body as HTMLElement);
+  return buildDocument(items, data, "text/html");
 }
 
 // --- Plain text / Markdown --------------------------------------------------------

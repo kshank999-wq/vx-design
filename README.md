@@ -510,6 +510,55 @@ pnpm test:e2e:knowledge        # browser: registry search, add/verify sources, l
 
 Screenshots: `docs/knowledge/screens`. The test documents in `tests/fixtures/kb` are original text.
 
+**Fetching from the official link.**
+- **When it applies.** A source's **Fetch from the official link** (or "Fetch the document now" when adding it) reads
+  the document at its link, only when the licence allows excerpts.
+- **Safety.** The fetch is guarded against reaching inside the network: https only, every resolved address checked at
+  connect time (private, loopback, link-local and metadata ranges refused), redirects re-checked, 20 MB and 20 s
+  limits.
+- **Web pages.** HTML is read for its main content (headings, paragraphs, lists, tables; no scripts, navigation or
+  footers) and never stored. PDFs and documents get the upload check, and a copy is kept only where the licence
+  allows.
+- **Change checks.** **Check the official link for changes** compares the content's sha256. Unchanged content only
+  records the check; changed content is re-indexed, and a verified source returns to draft with a note to check the
+  edition.
+
+**OCR.**
+- **Queueing.** A PDF with no text layer (a scan) is no longer refused: it is stored in the source's folder and queued
+  for the worker.
+- **Reading.** The worker renders each page at 300 dpi (`pdftoppm`) and reads it with Tesseract. Excerpts are located
+  "p. N (OCR)", the source is marked OCR text, and the mean word confidence is shown.
+- **Checks and copies.** Files are checked against their upload sha256 and, where required, a clean virus scan. A copy
+  the licence does not allow is deleted afterwards.
+- **Image.** The worker image now includes poppler and Tesseract; a worker without them skips OCR jobs.
+
+**Modules catalog.**
+- **What it holds.** Knowledge base → **Modules catalog**: radio modules, systems on module, development boards and
+  other modules, with:
+  - interfaces and radios;
+  - supply range and currents;
+  - size and lifecycle;
+  - performance as the datasheet states it;
+  - CAD links;
+  - certifications.
+- **Sources.** Each certification needs a regime, an identifier, and an https link to the grant or a note of where it
+  was read. Directory users (owners and engineers of any project, and library editors) add and edit entries. Library
+  editors verify, and an edit clears the verification.
+- **Uses.** A module can be added to a trade study as an option, with its certifications in the description. The
+  compliance page lists certified modules found in the project's loaded BOM, with a reminder that a grant covers the
+  transmitter only under its integration conditions.
+
+```bash
+./scripts/test-db.sh              # kb_polish_test: fetch records and change detection, OCR jobs, modules
+pnpm --filter @vx/security test   # the fetch address filter
+pnpm --filter @vx/orchestrator test   # OCR: TSV parsing, excerpts, a real scanned page read back
+pnpm test:e2e:kb-polish           # browser: fetch + change check, OCR by the worker, modules, trade option, compliance note
+```
+
+The browser test serves its "official site" locally: the app must run with
+`VX_TEST_FETCH_REWRITE=https://docs.example.test=http://127.0.0.1:4599`. That is a test-only setting, ignored on
+Vercel. Screenshots: `docs/kb-polish/screens`.
+
 ## M-CON: concepts and design freeze
 
 The first step of a product (S1): pick a look before detailed engineering. On a project's **Concepts** page (also the
@@ -1112,7 +1161,7 @@ Screenshots: `docs/mechanical/screens`.
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
 `units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`,
 `releases`, `compliance_items`, `compliance_results`, `production_lots`, `lot_inspections`, `part_notices`, `project_bom_parts`,
-`lifecycle_cases`, `substitutes`, `mech_analyses`
+`lifecycle_cases`, `substitutes`, `mech_analyses`, `ocr_jobs`, `modules`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

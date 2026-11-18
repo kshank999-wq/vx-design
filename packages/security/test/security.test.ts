@@ -69,3 +69,12 @@ test("clamd: an unreachable scanner is an error, never clean", async () => {
   assert.equal(r.status, "error");
   assert.ok(r.detail);
 });
+
+test("fetch address filter: private, loopback, link-local, mapped and reserved addresses are blocked", async () => {
+  const { blockedAddress } = await import("../src/net.ts");
+  for (const ip of ["10.1.2.3", "127.0.0.1", "169.254.169.254", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "0.0.0.0",
+                    "224.0.0.1", "::1", "::", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "not-an-ip"]) {
+    assert.equal(blockedAddress(ip), true, ip);
+  }
+  for (const ip of ["93.184.216.34", "8.8.8.8", "172.32.0.1", "100.128.0.1", "2606:4700::1111"]) assert.equal(blockedAddress(ip), false, ip);
+});

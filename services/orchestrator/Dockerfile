@@ -4,6 +4,9 @@
 # Behind a TLS-intercepting proxy, pass its CA as a build secret (not baked into the image):
 #   docker build --secret id=extra_ca,src=/path/to/ca.crt -f services/orchestrator/Dockerfile -t vx-worker .
 FROM node:22-slim
+# OCR of scanned knowledge-base PDFs: poppler (pdftoppm) renders pages, Tesseract reads them.
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages ./packages

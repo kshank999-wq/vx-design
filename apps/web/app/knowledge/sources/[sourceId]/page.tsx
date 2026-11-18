@@ -5,7 +5,7 @@ import { LicenseFlag } from "@/components/Knowledge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { LICENSES, type License } from "@/lib/knowledge";
-import { changeLicense, verifySource, withdrawSource } from "../../actions";
+import { changeLicense, fetchSource, verifySource, withdrawSource } from "../../actions";
 
 export default async function SourcePage({ params, searchParams }: {
   params: Promise<{ sourceId: string }>;
@@ -14,13 +14,14 @@ export default async function SourcePage({ params, searchParams }: {
   const { sourceId } = await params;
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
-  const { data: s } = await supabase.from("sources").select("*, projects(name)").eq("id", sourceId).maybeSingle();
+  const { data: s } = await supabase.from("sources").select("*, projects!sources_project_id_fkey(name)").eq("id", sourceId).maybeSingle();
   if (!s) notFound();
-  const [{ data: chunks }, { data: editor }, { data: me }] = await Promise.all([
+  const [{ data: chunks }, { data: editor }, { data: me }, { data: ocr }] = await Promise.all([
     supabase.from("source_chunks").select("ordinal, locator, text").eq("source_id", sourceId).order("ordinal").limit(60),
     supabase.from("knowledge_editors").select("user_id").eq("user_id", userId).maybeSingle(),
     s.project_id ? supabase.from("project_members").select("role").eq("project_id", s.project_id).eq("user_id", userId).maybeSingle()
                  : Promise.resolve({ data: null }),
+    supabase.from("ocr_jobs").select("status, pages, excerpts, mean_confidence, error, requested_at").eq("source_id", sourceId).order("requested_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const role = me?.role as string | undefined;
   const canWrite = s.project_id ? role === "owner" || role === "engineer" : !!editor;
@@ -46,10 +47,22 @@ export default async function SourcePage({ params, searchParams }: {
         <dt>Official source</dt><dd>{s.official_url ? <a href={s.official_url} target="_blank" rel="noreferrer">{s.official_url}</a> : "none given"}</dd>
         <dt>Licence</dt><dd><LicenseFlag license={s.license} /> {lic.help}{s.license_note && <div className="muted">Terms: {s.license_note}</div>}</dd>
         <dt>Held here</dt><dd data-testid="held">{s.indexed_chunks} excerpt(s){fileUrl ? <> · <a href={fileUrl}>stored copy</a></> : " · no file kept"}</dd>
+        <dt>Text</dt><dd data-testid="text-origin">{s.text_origin === "ocr" ? <><span className="pill pill-awaiting_approval">OCR</span> read from a scan by OCR: check figures against the original</> : "from the document's own text"}
+          {ocr && <div className="muted" data-testid="ocr-status">OCR {ocr.status}{ocr.status === "done" ? `: ${ocr.pages} page(s), ${ocr.excerpts} excerpt(s), mean confidence ${Math.round(Number(ocr.mean_confidence))}%` : ""}
+            {ocr.status === "queued" && " (waiting for the worker)"}{ocr.error && `: ${ocr.error}`}</div>}</dd>
+        <dt>Fetched</dt><dd data-testid="fetched">{s.fetched_at ? <>from {s.fetched_url} on {new Date(s.fetched_at).toLocaleString()}
+          {s.fetch_checked_at && `; last checked ${new Date(s.fetch_checked_at).toLocaleString()}`}{s.changed_at && <strong>; changed {new Date(s.changed_at).toLocaleDateString()}</strong>}</>
+          : "not fetched from the link"}</dd>
         <dt>Verified</dt><dd>{s.last_verified_at ? `${new Date(s.last_verified_at).toLocaleString()}: ${s.verification_note}` : <span className="warn-text">not yet</span>}</dd>
         {s.summary && <><dt>Summary</dt><dd>{s.summary}</dd></>}
       </dl>
 
+      {canWrite && s.status !== "withdrawn" && s.official_url && lic.excerpts && (
+        <form action={fetchSource.bind(null, s.id)} className="row tight">
+          <SubmitButton variant="secondary" pendingText="Fetching…">{s.fetched_at ? "Check the official link for changes" : "Fetch from the official link"}</SubmitButton>
+          <span className="small muted">Reads the document at the link; a changed document is re-indexed and needs verifying again.</span>
+        </form>
+      )}
       {(canVerify || canWrite) && s.status !== "withdrawn" && (
         <div className="grid2">
           {canVerify && (

@@ -33,7 +33,8 @@ export default async function KnowledgePage({ searchParams }: {
       <p className="crumbs"><Link href="/projects">Projects</Link> /</p>
       <h1>Knowledge base</h1>
       <p className="muted">Standards, regulations, datasheets and application notes, each with its official link, edition and licence.
-        Text is held only where the licence allows it; everything else is a pointer to the official copy.</p>
+        Text is held only where the licence allows it; everything else is a pointer to the official copy.
+        {" "}<Link href="/knowledge/modules">Modules catalog</Link> (radio modules, SoMs, dev boards).</p>
       <Banner error={error ?? searchError ?? undefined} notice={notice} />
 
       <form className="row card" role="search">

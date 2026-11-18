@@ -4,7 +4,7 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { KINDS, studyCode, type Study } from "@/lib/trades";
-import { decideStudy, fillFromCatalog, saveStudy, withdrawStudy } from "../actions";
+import { addModuleOption, decideStudy, fillFromCatalog, saveStudy, withdrawStudy } from "../actions";
 
 const BLANK = 2;
 
@@ -14,10 +14,11 @@ export default async function StudyPage({ params, searchParams }: {
   const { projectId, studyId } = await params;
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
-  const [{ data: project }, { data: me }, { data: row }] = await Promise.all([
+  const [{ data: project }, { data: me }, { data: row }, { data: modules }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("trade_studies").select("*").eq("id", studyId).eq("project_id", projectId).maybeSingle(),
+    supabase.from("modules").select("id, name, manufacturer, mpn, kind").order("name"),
   ]);
   if (!project || !row) notFound();
   const s = row as Study;
@@ -124,6 +125,11 @@ export default async function StudyPage({ params, searchParams }: {
         {canEdit && <div className="row tight">
           <SubmitButton pendingText="Saving…">Save and rank</SubmitButton>
           <SubmitButton variant="secondary" formAction={fillFromCatalog.bind(null, projectId, studyId)} pendingText="Looking up…">Fill from parts catalog</SubmitButton>
+          {!!modules?.length && <>
+            <select name="module_id" defaultValue="" aria-label="Module to add"><option value="">(module from the catalog)</option>
+              {modules.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.manufacturer} {m.mpn})</option>)}</select>
+            <SubmitButton variant="secondary" formAction={addModuleOption.bind(null, projectId, studyId)} pendingText="Adding…">Add module as option</SubmitButton>
+          </>}
         </div>}
       </form>
 

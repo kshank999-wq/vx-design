@@ -33,6 +33,8 @@ import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
+import { processOcrJob } from "./ocr.ts";
+import { execFileSync } from "node:child_process";
 import { processVirusScans, sweepStagedUploads } from "./scan.ts";
 import { processOptimization } from "./optimize.ts";
 import { scannerFromEnv } from "@vx/security";
@@ -104,6 +106,17 @@ if (images?.configured()) {
   // Optimization proposals (§14): deterministic; alternates are looked up with the configured sourcing providers.
   const dbo = new WorkerDb(url, key);
   worker.addJob("optimization", () => processOptimization(dbo, sourcing, id));
+}
+
+// OCR of scanned knowledge-base PDFs: any worker with Tesseract and pdftoppm installed (the worker image has both).
+{
+  const has = (cmd: string, flag: string) => { try { execFileSync(cmd, [flag], { stdio: "ignore" }); return true; } catch { return false; } };
+  if (has("tesseract", "--version") && has("pdftoppm", "-v")) {
+    const dbocr = new WorkerDb(url, key);
+    worker.addJob("ocr", () => processOcrJob(dbocr, env("WORKER_ID", `${hostname()}-${process.pid}`)));
+  } else {
+    console.log("tesseract or pdftoppm not installed: this worker will not take OCR jobs");
+  }
 }
 
 // Virus scanning (G6): any worker that can reach a ClamAV daemon (CLAMD_HOST, CLAMD_PORT) scans uploaded files.

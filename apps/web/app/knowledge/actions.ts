@@ -6,6 +6,7 @@ import { fail, requireUser } from "@/lib/auth";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { LICENSES, SOURCE_KINDS, type License } from "@/lib/knowledge";
 import { formFile } from "@/lib/staged";
+import { fetchIntoSource, queueOcr } from "@/lib/kb-ingest";
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const str = (form: FormData, k: string) => String(form.get(k) ?? "").trim();
@@ -44,11 +45,13 @@ export async function addSource(form: FormData) {
     } catch (e) {
       fail(path, e instanceof UnsupportedDocumentError ? e.message : `Could not read the file: ${(e as Error).message}`);
     }
-    if (!parsed.sections.some((s) => s.blocks.length)) fail(path, "No text found in the file (a scanned PDF needs OCR first).");
   }
+  // A PDF with no text layer is a scan: it is registered, then queued for OCR instead of refused.
+  const scanned = !!parsed && !parsed.sections.some((s) => s.blocks.length);
+  if (scanned && parsed!.mimeType !== "application/pdf") fail(path, "No text found in the file.");
 
   const { data: id, error } = await supabase.rpc("register_source", {
-    p_project_id: projectId, p_kind: kind, p_title: str(form, "title") || parsed?.title || (hasFile ? file!.name : ""),
+    p_project_id: projectId, p_kind: kind, p_title: str(form, "title") || parsed?.title || (hasFile ? file!.name : "") || str(form, "identifier") || str(form, "official_url"),
     p_publisher: str(form, "publisher"), p_official_url: str(form, "official_url") || null,
     p_identifier: str(form, "identifier") || null, p_edition: str(form, "edition") || null, p_license: license,
     p_license_note: str(form, "license_note") || null, p_summary: str(form, "summary") || null,
@@ -57,7 +60,13 @@ export async function addSource(form: FormData) {
   if (error) fail(path, error);
 
   let notice = "Source added (details and link only).";
-  if (parsed && bytes && hasFile) {
+  if (scanned) {
+    try { notice = await queueOcr(supabase, { id: id as string, project_id: projectId, license, official_url: null, sha256: null }, bytes!, file!.name); }
+    catch (e) { fail(`/knowledge/sources/${id}`, `Saved the details, but ${(e as Error).message}`); }
+  } else if (!hasFile && form.get("fetch") === "on" && str(form, "official_url")) {
+    try { notice = await fetchIntoSource(supabase, id as string); }
+    catch (e) { notice = `Source added. ${(e as Error).message}`; }
+  } else if (parsed && bytes && hasFile) {
     const excerpts = chunkDocument(parsed);
     let storagePath: string | null = null;
     if (rule.file) {
@@ -142,4 +151,13 @@ export async function confirmStandard(projectId: string, id: string) {
   if (error) fail(path, error);
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent("Confirmed.")}`);
+}
+
+export async function fetchSource(sourceId: string) {
+  const path = `/knowledge/sources/${sourceId}`;
+  const { supabase } = await requireUser();
+  let notice: string;
+  try { notice = await fetchIntoSource(supabase, sourceId); } catch (e) { fail(path, (e as Error).message); }
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
 }

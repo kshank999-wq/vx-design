@@ -108,3 +108,16 @@ function minimalPdf(pages: string[][]): Uint8Array {
   out += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return new TextEncoder().encode(out);
 }
+
+test("HTML pages: main content by heading, without navigation or scripts", async () => {
+  const { parseDocument } = await import("../src/ingest/parsers.ts");
+  const html = `<!doctype html><html><head><title>LDO-1 product page</title><script>track()</script><style>p{}</style></head>
+    <body><nav><a>Home</a><a>Products</a></nav><main><h1>LDO-1</h1><p>Low-dropout regulator, 300 mA.</p>
+    <h2>Key specs</h2><ul><li>Dropout 250 mV</li><li>Iq 1 µA</li></ul><table><tr><th>Vin</th><td>2.2–5.5 V</td></tr></table></main>
+    <footer>© Example</footer></body></html>`;
+  const doc = await parseDocument(new TextEncoder().encode(html), "text/html", "ldo.html");
+  const text = JSON.stringify(doc);
+  assert.equal(doc.title, "LDO-1 product page");
+  assert.ok(text.includes("Dropout 250 mV") && text.includes("Vin | 2.2-5.5 V") && text.includes("Key specs"));
+  assert.ok(!text.includes("track()") && !text.includes("Products") && !text.includes("© Example"));
+});

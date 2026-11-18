@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { suggestCompliance } from "@vx/planning";
+import { normalizeMpn } from "@vx/integrations";
 import { Banner } from "@/components/Banner";
 import { ScanBadge } from "@/components/ScanBadge";
 import { StagedFileInput } from "@/components/StagedFileInput";
@@ -45,6 +46,13 @@ export default async function CompliancePage({ params, searchParams }: {
     : [{ data: [] }, { data: [] }];
   const url = new Map((urls ?? []).map((u) => [u.path, u.signedUrl]));
   const scan = new Map((scans ?? []).map((s) => [s.path, s]));
+  // Certified modules in the BOM (from the lifecycle watch's loaded BOM), matched to the modules catalog.
+  const [{ data: bomParts }, { data: catalog }] = await Promise.all([
+    supabase.from("project_bom_parts").select("mpn, refs, part_id").eq("project_id", projectId),
+    supabase.from("modules").select("id, name, manufacturer, mpn, normalized_mpn, part_id, certifications, status"),
+  ]);
+  const inBom = (catalog ?? []).filter((m) => (m.certifications as unknown[]).length && (bomParts ?? []).some((b) =>
+    (b.part_id && b.part_id === m.part_id) || normalizeMpn(b.mpn) === m.normalized_mpn));
   const today = new Date().toISOString().slice(0, 10);
   const soon = new Date(Date.now() + 90 * 86400e3).toISOString().slice(0, 10);
   const counts = (items ?? []).reduce<Record<string, number>>((a, i) => ({ ...a, [i.status]: (a[i.status] ?? 0) + 1 }), {});
@@ -77,6 +85,18 @@ export default async function CompliancePage({ params, searchParams }: {
             </li>
           ))}</ul>
           {todo.length > 1 && <form action={addSuggested.bind(null, projectId)}><SubmitButton pendingText="Adding…">Add all {todo.length}</SubmitButton></form>}
+        </section>
+      )}
+
+      {inBom.length > 0 && (
+        <section className="card" data-testid="bom-modules">
+          <h2>Certified modules in the BOM</h2>
+          <ul className="small">{inBom.map((m) => (
+            <li key={m.id}><Link href={`/knowledge/modules/${m.id}`}>{m.name}</Link> ({m.manufacturer} {m.mpn}):{" "}
+              {(m.certifications as { regime: string; id: string }[]).map((c) => `${c.regime} ${c.id}`).join(" · ")}{m.status !== "verified" && " (catalog entry not yet verified)"}</li>
+          ))}</ul>
+          <p className="small muted">A module&apos;s grant can cover its transmitter in your product only if its integration conditions are met (antenna,
+            label, RF exposure, host testing). Record that assessment on the relevant item; the product still needs its own tests.</p>
         </section>
       )}
 

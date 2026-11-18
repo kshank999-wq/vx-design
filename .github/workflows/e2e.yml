@@ -23,19 +23,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Playwright browser
         run: npm install -g playwright@1 && npx playwright install --with-deps chromium
+      - name: OCR tools for the worker
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils python3-pil
       - name: Start Supabase
         run: npx -y supabase@3.2.0 start
       - name: Build and start the web app
         run: |
           eval "$(npx -y supabase@3.2.0 status -o env | sed 's/^/export /')"
-          printf 'NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\nVX_LLM=offline\nVX_ASSISTANT_SIGNING_KEY=local-dev-assistant-signing-key-not-for-production\n' "$API_URL" "$ANON_KEY" > apps/web/.env.local
+          printf 'NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\nVX_LLM=offline\nVX_ASSISTANT_SIGNING_KEY=local-dev-assistant-signing-key-not-for-production\nVX_TEST_FETCH_REWRITE=https://docs.example.test=http://127.0.0.1:4599\n' "$API_URL" "$ANON_KEY" > apps/web/.env.local
           pnpm --filter @vx/web build
           (cd apps/web && nohup pnpm start > ../../web.log 2>&1 &)
           npx -y wait-on http://localhost:3000/login
       - name: End-to-end suites
         run: |
           pnpm test:e2e
-          for s in workspace knowledge concepts rfq flux security validation staged-upload quotas stages trades production lifecycle mechanical embeds; do ./scripts/test-e2e-$s.sh; done
+          for s in workspace knowledge concepts rfq flux security validation staged-upload quotas stages trades production lifecycle mechanical kb-polish embeds; do ./scripts/test-e2e-$s.sh; done
       - name: Integrity and backup drill
         run: ./scripts/check-integrity.sh && ./scripts/backup-drill.sh
       - if: failure()

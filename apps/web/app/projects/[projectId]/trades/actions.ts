@@ -157,3 +157,27 @@ export async function withdrawStudy(projectId: string, studyId: string, form: Fo
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent("Withdrawn.")}`);
 }
+
+/** Adds a module from the catalog as an option (name, part number, manufacturer, and what the catalog says about it). */
+export async function addModuleOption(projectId: string, studyId: string, form: FormData) {
+  const path = base(projectId, studyId);
+  const { supabase, study } = await load(projectId, studyId);
+  if (study.status !== "draft") fail(path, "The study is no longer a draft.");
+  const { data: m } = await supabase.from("modules").select("name, manufacturer, mpn, radios, interfaces, certifications, lifecycle, status").eq("id", str(form, "module_id")).maybeSingle();
+  if (!m) fail(path, "Choose a module.");
+  if (study.options.some((o) => o.mpn && normalizeMpn(o.mpn) === normalizeMpn(m.mpn))) fail(path, `${m.name} is already an option.`);
+  const certs = (m.certifications as { regime: string; id: string }[]).map((c) => `${c.regime} ${c.id}`).join(", ");
+  const description = [[...m.radios, ...m.interfaces].join(", "), certs && `certified: ${certs}`, `lifecycle ${m.lifecycle}`, m.status === "verified" ? "" : "catalog entry not yet verified"]
+    .filter(Boolean).join("; ");
+  const option: TradeOption = { key: slug(m.name), name: m.name, mpn: m.mpn, manufacturer: m.manufacturer, description };
+  let n = 2; while (study.options.some((o) => o.key === option.key)) option.key = `${slug(m.name)}-${n++}`;
+  const options = [...study.options, option];
+  const result = study.criteria.length ? rankOptions(study.criteria, options, study.scores) : null;
+  const { error } = await supabase.rpc("save_trade_study", {
+    p_id: studyId, p_question: study.question, p_context: study.context ?? "", p_requirement_refs: study.requirement_refs,
+    p_criteria: study.criteria, p_options: options, p_scores: study.scores, p_result: result,
+  });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(`${m.name} added as an option from the modules catalog. Fill its costs from the parts catalog and score the rest.`)}`);
+}

@@ -72,7 +72,9 @@ export function SourceForm({ projectId, heading }: { projectId: string | null; h
       </fieldset>
       <label>Summary (your own words)<input name="summary" /></label>
       <StagedFileInput name="file" bucket={projectId ? "project-files" : "knowledge-files"} prefix={projectId ? `${projectId}/uploads` : "staging"}
-        accept=".pdf,.docx,.md,.txt" label="File (PDF, DOCX, Markdown or text; only for licences that allow excerpts)" />
+        accept=".pdf,.docx,.md,.txt" label="File (PDF, DOCX, Markdown or text; only for licences that allow excerpts; scanned PDFs are read by OCR)" />
+      <label className="inline small"><input type="checkbox" name="fetch" aria-label="Fetch the document now" /> With no file: fetch the
+        document from the official URL now (only for licences that allow excerpts)</label>
       <div><SubmitButton pendingText="Adding…">Add source</SubmitButton></div>
     </form>
   );

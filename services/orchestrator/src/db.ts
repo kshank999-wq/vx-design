@@ -490,6 +490,23 @@ export class WorkerDb {
     return new Map((data ?? []).map((r) => [r.path as string, r.status as string]));
   }
 
+  async scanStatusIn(bucket: string, path: string): Promise<string | null> {
+    const { data, error } = await this.client.from("file_scans").select("status").eq("bucket", bucket).eq("path", path).maybeSingle();
+    if (error) throw new Error(`scan status: ${error.message}`);
+    return (data?.status as string | undefined) ?? null;
+  }
+
+  // --- OCR of scanned sources (M-KB) ---
+
+  async claimOcrJob(workerId: string): Promise<OcrJobRow | null> {
+    const r = await this.rpc<OcrJobRow | null>("claim_ocr_job", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completeOcrJob(id: string, workerId: string, chunks: unknown[], pages: number, confidence: number | null, error: string | null): Promise<void> {
+    await this.rpc("complete_ocr_job", { p_job_id: id, p_worker_id: workerId, p_chunks: chunks, p_pages: pages, p_confidence: confidence, p_error: error });
+  }
+
   async requireVirusScan(): Promise<boolean> {
     const { data } = await this.client.from("platform_settings").select("value").eq("key", "require_virus_scan").maybeSingle();
     return data?.value === true;
@@ -547,6 +564,11 @@ export class WorkerDb {
     if (error) throw new Error(`download ${path}: ${error.message}`);
     return data.text();
   }
+}
+
+export interface OcrJobRow {
+  id: string; source_id: string; project_id: string | null; bucket: string; storage_path: string; sha256: string; size_bytes: number;
+  keep_file: boolean; attempts: number;
 }
 
 export interface ConceptRoundRow {
