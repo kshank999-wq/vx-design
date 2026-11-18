@@ -28,16 +28,17 @@ These are yours to make before deployment:
 1. Create a project (dashboard → New project) in the chosen region. Keep the database password.
 2. Project settings → Storage → **Upload file size limit**: 100 MB. 3D models and Flux exports are uploaded straight
    from the browser.
-3. Apply the database and the sign-in settings:
+3. Apply the database and the sign-in settings. This goes over HTTPS through the Supabase Management API, so it needs
+   only an access token (supabase.com → Account → Access tokens), no database password or direct connection:
 
    ```bash
-   SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_REF=... SUPABASE_DB_PASSWORD=... VX_SITE_URL=https://<your-domain> \
-     ./scripts/deploy-db.sh
+   SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_REF=... VX_SITE_URL=https://<your-domain> ./scripts/deploy-db.sh
    ```
 
-   It shows the migrations it would apply, asks, applies them with the seed rows, then turns on email confirmation. It
-   allows confirmation links back to `VX_SITE_URL/auth/callback` only and switches off anonymous sign-ins. Re-run it
-   after each release; it applies only new migrations.
+   It lists the migrations not yet applied and asks before applying them. Each one runs in its own transaction and is
+   recorded in the project's migration history, as the Supabase CLI does. Seed rows go into a fresh database only.
+   Then it turns on email confirmation, allows confirmation links back to `VX_SITE_URL/auth/callback` only (plus
+   `VX_EXTRA_REDIRECTS`, e.g. Vercel preview URLs) and switches off anonymous sign-ins. Re-run it after each release.
 4. Create the signing key for assistant messages. Keep the printed value for the web app:
 
    ```bash
@@ -108,6 +109,17 @@ refused. It also checks that email confirmation is required.
 
 Then by hand: sign up, confirm the email, create a project, upload a specification, and watch a worker pick up the run.
 With the service role key, `pnpm check:integrity` re-hashes stored files and verifies the audit chains.
+
+## Current environment
+
+Set up on 2026-11-18. Nothing here is secret.
+
+| Part | Where |
+|---|---|
+| Supabase | project `vx-design` (ref `xowysbjfroklrankpxqe`), us-west-1. All migrations and seed rows applied; static security lint passed; email confirmation on; assistant signing key set. |
+| Vercel | project `vx-design`, functions in sfo1, Node 22, linked to this repository. `https://vx-design.vercel.app` (first build, from `claude/practical-davinci-r0wfap`). Vercel login protects every URL until launch. Pushes to the branch make preview deployments; the default branch deploys to production. |
+| Smoke check | passed against `https://vx-design.vercel.app` before login protection was turned on. |
+| Not yet | Resend SMTP for confirmation emails; `ANTHROPIC_API_KEY` on Vercel (until then, requirement extraction reports that no model is configured); the worker host. |
 
 ## Updating
 
