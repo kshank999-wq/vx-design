@@ -1042,6 +1042,54 @@ pnpm test:e2e:lifecycle           # browser: watch, EOL notice, case + qualified
 
 Screenshots: `docs/lifecycle/screens`.
 
+## Mechanical checks
+
+Project page → **Mechanical checks**. The calculations are in `@vx/mech`, with no model. Each input keeps its basis,
+inputs that are assumptions rather than a supplier's or datasheet figure are counted, and an owner or reviewer
+reviews each analysis with a note (saving changes clears it).
+
+**Tolerance stacks.**
+- **Contributors.** Each has a nominal, plus and minus tolerances, a direction (adds to or takes from the gap), a
+  basis, and an "assumed" mark.
+- **Results:**
+  - the nominal gap;
+  - the worst-case range;
+  - the statistical range (root sum square, each tolerance taken as ±3σ, asymmetric tolerances shifting the mean);
+  - each contributor's share of the variation.
+- **Verdicts:** pass in the worst case, pass statistically only (most builds fit, some can interfere), or fail.
+- **Stacks from the enclosure.** Built from the committed fit report:
+  - board edge to enclosure wall;
+  - tallest component to lid;
+  - each edge connector's opening alignment.
+
+  The enclosure tolerance is the loosest stated in any supplier's process rules for that process, named with the
+  supplier and date; with no rules recorded, the typical template figure is used and marked as assumed. Board
+  outline (±0.1 mm), thickness (±10%), screw clearance and placement tolerances are marked as assumptions to replace.
+
+**Gaskets.**
+- **What is checked.** O-ring or foam compression at the extremes (thinnest gasket in the deepest gap, thickest in
+  the shallowest), and O-ring groove fill.
+- **Limits.** Presets give typical design-guide limits (O-ring static face seal 15–30% with fill ≤ 85%;
+  closed-cell foam 25–50%), labelled to be confirmed with the gasket supplier, or you enter your own.
+
+**Thermal estimate.**
+- **Inputs from the project.** The heat inside the box is the heaviest operating mode's input power from the
+  committed power budget; the box size comes from the fit report.
+- **Calculation.**
+  - The internal air rise is power ÷ (h × outer surface area).
+  - h defaults to 5 W/m²·K, a sealed-box rule of thumb, counted as an assumption.
+  - Each converter's junction temperature is recomputed at the internal air temperature, using the θJA the
+    budget used.
+- **Limits.** It is a first-order estimate for a sealed box; confirm with a thermocouple on a prototype.
+
+```bash
+pnpm --filter @vx/mech test       # stacks by hand, gasket extremes and fill, thermal, starting points
+./scripts/test-db.sh              # mechanical_test: save, review, edits clear review, roles
+pnpm test:e2e:mechanical          # browser: enclosure stacks with supplier tolerance, gasket, thermal, review
+```
+
+Screenshots: `docs/mechanical/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -1052,7 +1100,7 @@ Screenshots: `docs/lifecycle/screens`.
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
 `units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`,
 `releases`, `compliance_items`, `compliance_results`, `production_lots`, `lot_inspections`, `part_notices`, `project_bom_parts`,
-`lifecycle_cases`, `substitutes`
+`lifecycle_cases`, `substitutes`, `mech_analyses`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

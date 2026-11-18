@@ -38,6 +38,9 @@ importers:
       '@vx/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@vx/mech':
+        specifier: workspace:*
+        version: link:../../packages/mech
       '@vx/planning':
         specifier: workspace:^
         version: link:../../packages/planning
@@ -85,6 +88,8 @@ importers:
         version: 0.8.3
 
   packages/integrations: {}
+
+  packages/mech: {}
 
   packages/optimize:
     dependencies:

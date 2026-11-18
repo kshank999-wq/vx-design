@@ -42,6 +42,7 @@
     "test:e2e:trades": "./scripts/test-e2e-trades.sh",
     "test:e2e:production": "./scripts/test-e2e-production.sh",
     "test:e2e:lifecycle": "./scripts/test-e2e-lifecycle.sh",
+    "test:e2e:mechanical": "./scripts/test-e2e-mechanical.sh",
     "check:integrity": "./scripts/check-integrity.sh",
     "drill:backup": "./scripts/backup-drill.sh",
     "test:regression": "node tests/regression/run.ts",
