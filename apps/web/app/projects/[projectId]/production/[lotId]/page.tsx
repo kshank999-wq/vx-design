@@ -4,6 +4,9 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { LOT_STATUS, lotCode, pct, type LotSummary } from "@/lib/production";
+import type { InspectionItem } from "@vx/planning";
+import { planCode, STAGE_LABEL } from "@/lib/inspection";
+import { setLotPlan } from "../../inspection/actions";
 import { addUnits, recordInspection, setDelivery, setLotStatus } from "../actions";
 
 export default async function LotPage({ params, searchParams }: {
@@ -12,7 +15,7 @@ export default async function LotPage({ params, searchParams }: {
   const { projectId, lotId } = await params;
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
-  const [{ data: project }, { data: me }, { data: l }, { data: units }, { data: inspections }, { data: summary }] = await Promise.all([
+  const [{ data: project }, { data: me }, { data: l }, { data: units }, { data: inspections }, { data: summary }, { data: plans }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("production_lots").select("*, releases(id, revision, status), test_procedures(id, code, version, title), manufacturers(display_name)")
@@ -20,6 +23,8 @@ export default async function LotPage({ params, searchParams }: {
     supabase.from("units").select("id, serial, status").eq("lot_id", lotId).order("serial"),
     supabase.from("lot_inspections").select("*").eq("lot_id", lotId).order("inspected_at", { ascending: false }),
     supabase.rpc("lot_summary", { p_lot: lotId }),
+    supabase.from("inspection_plans").select("id, plan_no, version, kind, title, status, items").eq("project_id", projectId).in("status", ["approved", "superseded"])
+      .order("plan_no").order("version"),
   ]);
   if (!project || !l) notFound();
   const role = me?.role ?? "viewer";
@@ -39,6 +44,8 @@ export default async function LotPage({ params, searchParams }: {
   for (const r of runs ?? []) if (!latest.has(r.unit_id)) latest.set(r.unit_id, r);
   const maker = (l.manufacturers as unknown as { display_name: string } | null)?.display_name ?? l.built_by;
   const n = (units ?? []).length;
+  const plan = (plans ?? []).find((x) => x.id === l.inspection_plan_id);
+  const planItems = (plan?.items ?? []) as InspectionItem[];
   const prefix = `${project.name.replace(/[^A-Za-z0-9]+/g, "").slice(0, 6).toUpperCase() || "SN"}-${rel.revision}-`;
 
   return (
@@ -52,6 +59,8 @@ export default async function LotPage({ params, searchParams }: {
         <dt>Revision</dt><dd><Link href={`/projects/${projectId}/releases/${rel.id}`}>Rev {rel.revision}</Link>{rel.status !== "released" && <strong> (this release is {rel.status})</strong>}</dd>
         <dt>Production test</dt><dd>{proc ? <Link href={`/projects/${projectId}/validation/procedures/${proc.id}`}>{proc.code} v{proc.version} {proc.title}</Link> : "none set"}</dd>
         <dt>Delivery</dt><dd data-testid="lot-delivery">{l.promised_on ? `promised ${l.promised_on}` : "no promised date"}{l.delivered_on ? `, delivered ${l.delivered_on}${l.promised_on ? (l.delivered_on <= l.promised_on ? " (on time)" : " (late)") : ""}` : ""}</dd>
+        <dt>Inspection plan</dt><dd data-testid="lot-plan">{plan ? <><Link href={`/projects/${projectId}/inspection/${plan.id}`}>{planCode(plan.plan_no, plan.version)} {plan.title}</Link>
+          {plan.status !== "approved" && <strong> (superseded by a newer version)</strong>}</> : "none set"}</dd>
         <dt>Sampling plan</dt><dd>inspect {l.sample_size}, accept with at most {l.accept_max_defects} defect(s)</dd>
         {l.status_note && <><dt>Note</dt><dd>{l.status_note}</dd></>}
       </dl>
@@ -98,6 +107,21 @@ export default async function LotPage({ params, searchParams }: {
 
       <section>
         <h2>Inspections</h2>
+        {plan && (
+          <details className="small" data-testid="lot-plan-items"><summary>{planItems.length} check(s) in {planCode(plan.plan_no, plan.version)}</summary>
+            <table><thead><tr><th>Stage</th><th>Characteristic</th><th>Method</th><th>Sample</th><th>Acceptance</th></tr></thead>
+              <tbody>{planItems.map((i) => <tr key={i.key}><td>{STAGE_LABEL[i.stage]}</td>
+                <td>{i.characteristic}{i.critical && <> <span className="pill pill-failed">critical</span></>}</td><td>{i.method}</td><td>{i.sample}</td><td>{i.acceptance}</td></tr>)}</tbody></table>
+          </details>
+        )}
+        {canEdit && !closed && (
+          <form action={setLotPlan.bind(null, projectId, lotId)} className="row tight small">
+            <label className="inline">Inspect against<select name="plan" defaultValue={l.inspection_plan_id ?? ""} aria-label="Inspection plan">
+              <option value="">no plan</option>
+              {(plans ?? []).filter((x) => x.status === "approved").map((x) => <option key={x.id} value={x.id}>{planCode(x.plan_no, x.version)} {x.title}</option>)}</select></label>
+            <SubmitButton variant="secondary" pendingText="…">Set plan</SubmitButton>
+          </form>
+        )}
         <ul className="list small" data-testid="inspections">{(inspections ?? []).map((i) => (
           <li key={i.id} data-verdict={i.verdict}><span className={`pill pill-${i.verdict === "accept" ? "complete" : i.verdict === "reject" ? "failed" : "awaiting_approval"}`}>{i.verdict}</span>
             {" "}{i.stage.replace("_", "-")} · {i.inspected} inspected, {i.defects} defect(s) (plan: {i.sample_size}, ≤ {i.accept_max}) · {new Date(i.inspected_at).toLocaleString()}

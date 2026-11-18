@@ -270,6 +270,38 @@ Every fab package also carries `formats/`:
   a house prefers one, IPC-D-356 for electrical test, DXF for mechanical work.
 - **Storage.** Each file is stored as its own artifact and covered by an "Exchange formats" check on the task.
 
+### Inspection plans (S5)
+
+**Inspection plans** (`/projects/<id>/inspection`) say what to check on bare boards, assembled boards and enclosures.
+Each item gives the characteristic, the method, the stage (incoming, in-process or final), the sample
+(100%, sample or first article), the acceptance criterion, a reference, and whether it is critical.
+- **Drafting.** `packages/planning/src/inspection.ts` builds drafts deterministically:
+  - **Board plans** come from the latest committed fab check. They cover outline, thickness (from the fab profile),
+    layers, holes and smallest drill, IPC-A-600 workmanship, and electrical test against the IPC-D-356 netlist.
+    PCBA plans add:
+    - placement;
+    - polarity of the polarized parts it names;
+    - IPC-A-610 joints;
+    - bridges on parts of 0.5 mm pitch or finer;
+    - X-ray for QFN, DFN, BGA and other bottom-terminated parts;
+    - through-hole fill;
+    - bottom-side parts;
+    - the approved production test;
+    - serial labels.
+
+    DNP parts, mounting holes, fiducials and test points are not counted as components.
+  - **Enclosure plans** come from the fit report: overall size, wall, each boss and each opening, material, finish and fit.
+    Their tolerance is the loosest one recorded in any supplier's rules for the enclosure's process, with that supplier
+    named. Otherwise it is a typical figure, marked as assumed.
+  - **Typical figures** that do not come from a supplier say "confirm with the fab".
+- **Editing and approval.** Owners and engineers edit drafts: change any field, remove items, add items. The database
+  rejects unknown stages and samples, duplicate keys, and empty methods or acceptance criteria. Owners or reviewers
+  approve, which freezes the version; a trigger refuses later edits.
+- **Revisions.** Revising makes v2 as a new draft. Approving it supersedes the previously approved plan of the same kind.
+- **CSV.** Each plan downloads as CSV for the supplier (`…/inspection/<plan>/csv`).
+- **Production lots.** A lot names the approved plan it is inspected against, and the lot page lists the plan's checks
+  next to the inspection record.
+
 ## M-SRC: part sourcing
 
 Sourcing tasks take the **committed circuit design** of the upstream schematic task and produce a sourced BOM.

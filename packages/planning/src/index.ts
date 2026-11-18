@@ -20,3 +20,4 @@ export * from "./compliance.ts";
 export * from "./lifecycle.ts";
 export * from "./plan-change.ts";
 export * from "./wizard.ts";
+export * from "./inspection.ts";
