@@ -1,0 +1,379 @@
+{
+ "case": "spec-to-plan",
+ "describe": "G1 offline path: parse the sample spec, extract requirements, plan",
+ "inputs": {
+  "spec": "3bbf69edad87b0783aff0f53bdf4f32a9911cec8c9c1f9afcf6878142ebc742e"
+ },
+ "versions": {
+  "planning": "@vx/planning@0.0.0"
+ },
+ "output_sha256": "3ee7ef98cd165a657792d2ccfbb55fde8bc3e0181cda624d27b50a73fff4a9ad",
+ "output": {
+  "plan": {
+   "adjustments": [],
+   "assumptions": [],
+   "attempts": 1,
+   "deferred": [],
+   "promptVersion": "plan-v1",
+   "summary": "Offline heuristic plan (not AI-generated).",
+   "tasks": [
+    {
+     "acceptanceTests": [
+      {
+       "description": "System and component architecture reviewed",
+       "id": "AT1",
+       "method": "human_review"
+      }
+     ],
+     "approvalReason": "component architecture",
+     "approvalRequired": true,
+     "description": "System and component architecture (offline plan).",
+     "discipline": "architecture",
+     "estimatedHours": 4,
+     "key": "architecture",
+     "requiredTools": [],
+     "requirementRefs": [
+      "REQ-FUN-004",
+      "REQ-FUN-012",
+      "REQ-POW-001",
+      "REQ-POW-002",
+      "REQ-POW-003",
+      "REQ-INT-005",
+      "REQ-INT-006",
+      "REQ-INT-007",
+      "REQ-INT-011",
+      "REQ-MAN-013"
+     ],
+     "riskLevel": "high",
+     "timeoutSeconds": 3600,
+     "title": "System and component architecture",
+     "upstreamKeys": []
+    },
+    {
+     "acceptanceTests": [
+      {
+       "description": "Preliminary power budget reviewed",
+       "id": "AT1",
+       "method": "human_review"
+      }
+     ],
+     "approvalReason": null,
+     "approvalRequired": false,
+     "description": "Preliminary power budget (offline plan).",
+     "discipline": "power",
+     "estimatedHours": 4,
+     "key": "power-budget",
+     "requiredTools": [],
+     "requirementRefs": [],
+     "riskLevel": "medium",
+     "timeoutSeconds": 3600,
+     "title": "Preliminary power budget",
+     "upstreamKeys": [
+      "architecture"
+     ]
+    },
+    {
+     "acceptanceTests": [
+      {
+       "description": "Mechanical envelope reviewed",
+       "id": "AT1",
+       "method": "human_review"
+      }
+     ],
+     "approvalReason": null,
+     "approvalRequired": false,
+     "description": "Mechanical envelope (offline plan).",
+     "discipline": "mechanical",
+     "estimatedHours": 4,
+     "key": "enclosure-envelope",
+     "requiredTools": [],
+     "requirementRefs": [
+      "REQ-MEC-008",
+      "REQ-MEC-009",
+      "REQ-MEC-010"
+     ],
+     "riskLevel": "medium",
+     "timeoutSeconds": 3600,
+     "title": "Mechanical envelope",
+     "upstreamKeys": [
+      "architecture"
+     ]
+    },
+    {
+     "acceptanceTests": [
+      {
+       "description": "ERC passes with zero errors",
+       "id": "AT1",
+       "method": "validation",
+       "validationKind": "erc"
+      }
+     ],
+     "approvalReason": null,
+     "approvalRequired": false,
+     "description": "Schematic capture (offline plan).",
+     "discipline": "schematic",
+     "estimatedHours": 4,
+     "key": "schematic",
+     "requiredTools": [
+      "kicad"
+     ],
+     "requirementRefs": [],
+     "riskLevel": "medium",
+     "timeoutSeconds": 3600,
+     "title": "Schematic capture",
+     "upstreamKeys": [
+      "power-budget",
+      "enclosure-envelope"
+     ]
+    },
+    {
+     "acceptanceTests": [
+      {
+       "description": "DRC passes with zero errors",
+       "id": "AT1",
+       "method": "validation",
+       "validationKind": "drc"
+      }
+     ],
+     "approvalReason": null,
+     "approvalRequired": false,
+     "description": "PCB stackup and layout (offline plan).",
+     "discipline": "pcb_layout",
+     "estimatedHours": 4,
+     "key": "pcb-layout",
+     "requiredTools": [
+      "kicad",
+      "freerouting"
+     ],
+     "requirementRefs": [],
+     "riskLevel": "medium",
+     "timeoutSeconds": 3600,
+     "title": "PCB stackup and layout",
+     "upstreamKeys": [
+      "schematic"
+     ]
+    },
+    {
+     "acceptanceTests": [
+      {
+       "description": "Verification and manufacturing outputs reviewed",
+       "id": "AT1",
+       "method": "human_review"
+      }
+     ],
+     "approvalReason": null,
+     "approvalRequired": false,
+     "description": "Verification and manufacturing outputs (offline plan).",
+     "discipline": "verification",
+     "estimatedHours": 4,
+     "key": "verification",
+     "requiredTools": [
+      "kicad",
+      "kikit"
+     ],
+     "requirementRefs": [],
+     "riskLevel": "medium",
+     "timeoutSeconds": 3600,
+     "title": "Verification and manufacturing outputs",
+     "upstreamKeys": [
+      "pcb-layout"
+     ]
+    }
+   ],
+   "usage": [
+    {
+     "cacheReadTokens": 0,
+     "cacheWriteTokens": 0,
+     "inputTokens": 0,
+     "model": "offline-heuristic",
+     "outputTokens": 0
+    }
+   ]
+  },
+  "requirements": [
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.p1",
+    "excerpt": "The board shall run from the motherboard 5 V rail with an input range of 4.5 V to 5.5 V.",
+    "kind": "power",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-PWR-001",
+    "sectionId": "S2",
+    "sectionTitle": "2 Electrical requirements",
+    "status": "extracted",
+    "text": "The board shall run from the motherboard 5 V rail with an input range of 4.5 V to 5.5 V."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.p2",
+    "excerpt": "Total current draw shall not exceed 60 mA in normal operation.",
+    "kind": "power",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-PWR-002",
+    "sectionId": "S2",
+    "sectionTitle": "2 Electrical requirements",
+    "status": "extracted",
+    "text": "Total current draw shall not exceed 60 mA in normal operation."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.p3",
+    "excerpt": "The board shall generate a 3.3 V rail for all logic using a low-dropout regulator.",
+    "kind": "power",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-PWR-003",
+    "sectionId": "S2",
+    "sectionTitle": "2 Electrical requirements",
+    "status": "extracted",
+    "text": "The board shall generate a 3.3 V rail for all logic using a low-dropout regulator."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.p4",
+    "excerpt": "The timecode reference oscillator shall have a frequency stability of ±1 ppm or better from 0 °C to 40 °C.",
+    "kind": "functional",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-FUN-001",
+    "sectionId": "S2",
+    "sectionTitle": "2 Electrical requirements",
+    "status": "extracted",
+    "text": "The timecode reference oscillator shall have a frequency stability of ±1 ppm or better from 0 °C to 40 °C."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.1.p1",
+    "excerpt": "The board shall output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps.",
+    "kind": "interface",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-IFC-001",
+    "sectionId": "S2.1",
+    "sectionTitle": "2.1 Timecode interface",
+    "status": "extracted",
+    "text": "The board shall output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.1.p2",
+    "excerpt": "LTC output level shall be adjustable from -10 dBu to +4 dBu into a 10 kΩ load.",
+    "kind": "interface",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-IFC-002",
+    "sectionId": "S2.1",
+    "sectionTitle": "2.1 Timecode interface",
+    "status": "extracted",
+    "text": "LTC output level shall be adjustable from -10 dBu to +4 dBu into a 10 kΩ load."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S2.1.p3",
+    "excerpt": "The board shall read external LTC and jam-sync its internal clock within 2 frames.",
+    "kind": "interface",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-IFC-003",
+    "sectionId": "S2.1",
+    "sectionTitle": "2.1 Timecode interface",
+    "status": "extracted",
+    "text": "The board shall read external LTC and jam-sync its internal clock within 2 frames."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S3.p2",
+    "excerpt": "Board outline | 40 mm x 25 mm maximum",
+    "kind": "mechanical",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-MEC-001",
+    "sectionId": "S3",
+    "sectionTitle": "3 Mechanical requirements",
+    "status": "extracted",
+    "text": "Board outline | 40 mm x 25 mm maximum"
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S3.p3",
+    "excerpt": "Layer count | 4 layers",
+    "kind": "mechanical",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-MEC-002",
+    "sectionId": "S3",
+    "sectionTitle": "3 Mechanical requirements",
+    "status": "extracted",
+    "text": "Layer count | 4 layers"
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S3.p4",
+    "excerpt": "Component height | 6 mm maximum on top side",
+    "kind": "mechanical",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-MEC-003",
+    "sectionId": "S3",
+    "sectionTitle": "3 Mechanical requirements",
+    "status": "extracted",
+    "text": "Component height | 6 mm maximum on top side"
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S3.p5",
+    "excerpt": "The LTC connector shall be a Lemo 5-pin socket mounted on the board edge.",
+    "kind": "interface",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-IFC-004",
+    "sectionId": "S3",
+    "sectionTitle": "3 Mechanical requirements",
+    "status": "extracted",
+    "text": "The LTC connector shall be a Lemo 5-pin socket mounted on the board edge."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S4.p1",
+    "excerpt": "Timecode drift shall be measured over 8 hours against a reference generator and must stay within 1 frame.",
+    "kind": "functional",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-FUN-002",
+    "sectionId": "S4",
+    "sectionTitle": "4 Verification",
+    "status": "extracted",
+    "text": "Timecode drift shall be measured over 8 hours against a reference generator and must stay within 1 frame."
+   },
+   {
+    "acceptanceCriteria": null,
+    "blockId": "S4.p2",
+    "excerpt": "All boards shall pass ERC and DRC with zero unwaived errors before ordering.",
+    "kind": "manufacturing",
+    "notes": null,
+    "page": null,
+    "priority": "must",
+    "refCode": "REQ-MFG-001",
+    "sectionId": "S4",
+    "sectionTitle": "4 Verification",
+    "status": "extracted",
+    "text": "All boards shall pass ERC and DRC with zero unwaived errors before ordering."
+   }
+  ],
+  "sections": 6
+ }
+}

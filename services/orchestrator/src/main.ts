@@ -20,6 +20,7 @@
  *   GEMINI_API_KEY / OPENAI_API_KEY            concept images (Gemini "Nano Banana" preferred when both are set)
  *   VX_IMAGE_PROVIDER         gemini | openai;  VX_IMAGE_MODEL  override the provider's default model
  *   VX_IMAGES=fixture         offline placeholder images (labelled on the image); =off to disable
+ *   CLAMD_HOST / CLAMD_PORT   ClamAV daemon for virus-scanning uploaded files (G6)
  */
 import { hostname } from "node:os";
 import { ClaudeModel, OfflineModel } from "@vx/planning";
@@ -32,6 +33,8 @@ import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
+import { processVirusScans } from "./scan.ts";
+import { scannerFromEnv } from "@vx/security";
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -97,6 +100,17 @@ if (images?.configured()) {
   // Flux import audits (G5): deterministic checks plus the model for the design history.
   const dbf = new WorkerDb(url, key);
   worker.addJob("flux audits", () => processFluxAudit(dbf, model, id));
+}
+
+// Virus scanning (G6): any worker that can reach a ClamAV daemon (CLAMD_HOST, CLAMD_PORT) scans uploaded files.
+const scanner = scannerFromEnv();
+if (scanner) {
+  const dbs = new WorkerDb(url, key);
+  const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
+  try { console.log(`virus scanning: ${await scanner.version()}`); } catch (e) { console.error(`virus scanner not reachable yet: ${(e as Error).message}`); }
+  worker.addJob("virus scans", () => processVirusScans(dbs, scanner, id));
+} else {
+  console.log("no virus scanner configured (CLAMD_HOST): uploaded files are not scanned");
 }
 
 let signals = 0;

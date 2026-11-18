@@ -1,0 +1,77 @@
+{
+ "case": "kb-chunks",
+ "describe": "Knowledge-base excerpts from the KB fixtures",
+ "inputs": {
+  "README.md": "9ea40cd00479f09cba0765b7aaa1f46dd065a17ed3132e0bc428e6631654cb6e",
+  "customer-sensor-module.md": "51ef4e5bf86a5d173d395238acbdea445d7daf74d377a1fc7bde6a6711e9ee83",
+  "oscillator-layout-note.md": "dab2e527e1c9edd0c76b3089ae69fd2957ea62d4982dcb959be7f20ba60fd6d2"
+ },
+ "versions": {
+  "planning": "@vx/planning@0.0.0"
+ },
+ "output_sha256": "667be95139d125a7970b6c8713976b8c3eb081c76e1fc558422bc6a40463f1bc",
+ "output": {
+  "README.md": [
+   {
+    "block_ids": [
+     "S0.p1"
+    ],
+    "locator": "Preamble",
+    "ordinal": 1,
+    "section_path": "Preamble",
+    "text": "Knowledge base test documents. Both are original text written for VX Design's tests; neither is copied from a published document. `customer-sensor-module.md` stands in for a confidential customer document."
+   }
+  ],
+  "customer-sensor-module.md": [
+   {
+    "block_ids": [
+     "S4.p1"
+    ],
+    "locator": "§4 Shield connection",
+    "ordinal": 1,
+    "section_path": "Shield connection",
+    "text": "Tie the module shield to the host ground at a single point next to connector J1. Do not route the guard ring under the module."
+   },
+   {
+    "block_ids": [
+     "S5.p1"
+    ],
+    "locator": "§5 Supply",
+    "ordinal": 2,
+    "section_path": "Supply",
+    "text": "Supply the module from a 3.3 V rail with at most 30 mV ripple."
+   }
+  ],
+  "oscillator-layout-note.md": [
+   {
+    "block_ids": [
+     "S1.p1"
+    ],
+    "locator": "§1 Scope",
+    "ordinal": 1,
+    "section_path": "Scope",
+    "text": "This note covers board layout around the timecode reference oscillator. It is original VX Design text, published under CC BY 4.0, written for tests and as a starting checklist."
+   },
+   {
+    "block_ids": [
+     "S2.p1",
+     "S2.p2",
+     "S2.p3"
+    ],
+    "locator": "§2 Guard ring",
+    "ordinal": 2,
+    "section_path": "Guard ring",
+    "text": "Surround the crystal and its two load capacitors with a grounded guard ring on the top layer.\nKeep switching regulator traces and their inductors at least 2 mm from the guard ring.\nStitch the guard ring to the ground plane with vias every 3 mm."
+   },
+   {
+    "block_ids": [
+     "S3.p1"
+    ],
+    "locator": "§3 Battery charging temperature",
+    "ordinal": 3,
+    "section_path": "Battery charging temperature",
+    "text": "Charge a lithium-ion cell only between 0 °C and 45 °C. Stop charging when the thermistor reads outside that window and report it to the user."
+   }
+  ]
+ }
+}

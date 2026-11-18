@@ -1,0 +1,241 @@
+{
+ "case": "power-calc",
+ "describe": "Power calculator on the offline power tree",
+ "inputs": {
+  "tree": "7c1253dfe9d9c1def33da21e0fde726f70d753af548e71d2d8550ead3c0d6413"
+ },
+ "versions": {
+  "calc": "power-calc-v1"
+ },
+ "output_sha256": "d9b2899382c2386542db9b6260b42db8cfc2bfaaf7a473811426aef53fa115d4",
+ "output": {
+  "ambientC": {
+   "max": 45,
+   "nominal": 25
+  },
+  "basis": {
+   "assumption": 5
+  },
+  "converters": [
+   {
+    "efficiencyUsed": 0.9,
+    "id": "U1",
+    "iinA": {
+     "active": {
+      "max": 0.029101,
+      "min": 0.04073,
+      "nom": 0.03303
+     },
+     "standby": {
+      "max": 0.003522,
+      "min": 0.004919,
+      "nom": 0.003994
+     }
+    },
+    "input": "VBAT",
+    "inrushA": 0.1551,
+    "ioutA": {
+     "active": 0.0333,
+     "standby": 0.004
+    },
+    "ioutPeakA": 0.0633,
+    "kind": "buck_boost",
+    "label": "3.3 V buck-boost",
+    "output": "+3V3",
+    "pdissMaxW": 0.012336,
+    "pdissW": {
+     "active": {
+      "max": 0.012336,
+      "min": 0.0123,
+      "nom": 0.012321
+     },
+     "standby": {
+      "max": 0.001593,
+      "min": 0.001557,
+      "nom": 0.001578
+     }
+    },
+    "tjMaxC": 45.7,
+    "utilization": 0.0633,
+    "vin": {
+     "max": 4.2,
+     "min": 3
+    },
+    "vout": {
+     "max": 3.3,
+     "min": 3.3,
+     "nom": 3.3
+    }
+   }
+  ],
+  "counts": {
+   "errors": 0,
+   "infos": 0,
+   "warnings": 0
+  },
+  "efficiency": {
+   "active": 0.899183,
+   "standby": 0.89322
+  },
+  "findings": [],
+  "loads": [
+   {
+    "basis": "assumption: Offline stand-in: small MCU",
+    "currentA": {
+     "active": 0.03,
+     "standby": 0.002
+    },
+    "id": "MCU",
+    "label": "Microcontroller",
+    "peakA": 0.06,
+    "rail": "+3V3"
+   },
+   {
+    "basis": "assumption: Offline stand-in: TCXO",
+    "currentA": {
+     "active": 0.002,
+     "standby": 0.002
+    },
+    "id": "TCXO",
+    "label": "Timecode reference oscillator",
+    "peakA": null,
+    "rail": "+3V3"
+   },
+   {
+    "basis": "assumption: Offline stand-in: (3.3 V - 2 V) / 1 kOhm",
+    "currentA": {
+     "active": 0.0013,
+     "standby": 0
+    },
+    "id": "LED",
+    "label": "Power LED",
+    "peakA": null,
+    "rail": "+3V3"
+   }
+  ],
+  "modes": [
+   {
+    "hoursPerDay": 12,
+    "id": "active",
+    "label": "Active (on set)"
+   },
+   {
+    "hoursPerDay": 12,
+    "id": "standby",
+    "label": "Standby"
+   }
+  ],
+  "name": "offline_fixture_power",
+  "ok": true,
+  "rails": [
+   {
+    "converters": [
+     "U1"
+    ],
+    "current": {
+     "active": {
+      "max": 0.029101,
+      "min": 0.04073,
+      "nom": 0.03303
+     },
+     "standby": {
+      "max": 0.003522,
+      "min": 0.004919,
+      "nom": 0.003994
+     }
+    },
+    "fedBy": "VBAT",
+    "id": "VBAT",
+    "label": "1S Li-ion pack",
+    "loads": [],
+    "peakA": 0.077397,
+    "voltage": {
+     "max": 4.2,
+     "min": 3,
+     "nom": 3.7
+    }
+   },
+   {
+    "converters": [],
+    "current": {
+     "active": {
+      "max": 0.0333,
+      "min": 0.0333,
+      "nom": 0.0333
+     },
+     "standby": {
+      "max": 0.004,
+      "min": 0.004,
+      "nom": 0.004
+     }
+    },
+    "fedBy": "U1",
+    "id": "+3V3",
+    "label": "3.3 V system",
+    "loads": [
+     "MCU",
+     "TCXO",
+     "LED"
+    ],
+    "peakA": 0.0633,
+    "voltage": {
+     "max": 3.3,
+     "min": 3.3,
+     "nom": 3.3
+    }
+   }
+  ],
+  "runtime": [
+   {
+    "dailyEnergyWh": 1.643868,
+    "days": 3.6,
+    "energyWh": 5.92,
+    "perMode": [
+     {
+      "hours": 48.4,
+      "mode": "active",
+      "powerW": 0.122211
+     },
+     {
+      "hours": 400.6,
+      "mode": "standby",
+      "powerW": 0.014778
+     }
+    ],
+    "source": "VBAT"
+   }
+  ],
+  "sources": [
+   {
+    "currentA": {
+     "active": {
+      "max": 0.029101,
+      "min": 0.04073,
+      "nom": 0.03303
+     },
+     "standby": {
+      "max": 0.003522,
+      "min": 0.004919,
+      "nom": 0.003994
+     }
+    },
+    "id": "VBAT",
+    "kind": "battery",
+    "label": "1S Li-ion pack",
+    "maxCurrentA": 2,
+    "peakA": 0.077397,
+    "powerW": {
+     "active": 0.122211,
+     "standby": 0.014778
+    },
+    "voltage": {
+     "max": 4.2,
+     "min": 3,
+     "nom": 3.7
+    }
+   }
+  ],
+  "title": "Offline stand-in: 1S Li-ion to 3.3 V power tree (fixture, not from your requirements)",
+  "version": "power-calc-v1"
+ }
+}

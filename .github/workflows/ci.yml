@@ -1,0 +1,42 @@
+# Continuous integration (G6). Runs on every push and pull request: typecheck, unit tests, database tests
+# (migrations + RLS/security lint + recovery), the regression suite, a secret scan, a dependency audit and a web build.
+# The browser end-to-end suites and the KiCad regression tier need Docker and Supabase: see e2e.yml.
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Secret scan
+        run: ./scripts/check-secrets.sh
+      - name: Typecheck
+        run: pnpm -r --filter "./packages/*" --filter "./services/*" --filter "./apps/*" typecheck
+      - name: Unit tests
+        run: pnpm -r --filter "./packages/*" --filter "./services/*" test
+      - name: Regression suite (repeatable and unchanged)
+        run: pnpm test:regression
+      - name: Database tests (migrations, RLS, security lint, recovery)
+        run: ./scripts/test-db.sh
+      - name: Web build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+        run: pnpm --filter @vx/web build
+      - name: Dependency audit (high and critical)
+        run: pnpm audit --prod --audit-level high

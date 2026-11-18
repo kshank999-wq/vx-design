@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Banner } from "@/components/Banner";
+import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
@@ -33,7 +34,7 @@ export default async function ProjectPage({ params, searchParams }: {
 
   const [{ data: project }, { data: docs }, { data: reqs }, { data: plans }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("projects").select("id, name, description").eq("id", projectId).maybeSingle(),
-    supabase.from("documents").select("id, title, filename, mime_type, extraction_status, extraction_report, created_at")
+    supabase.from("documents").select("id, title, filename, storage_path, mime_type, extraction_status, extraction_report, created_at")
       .eq("project_id", projectId).order("created_at"),
     supabase.from("requirements").select("id, ref_code, kind, priority, status, text, source_section, source_page, source_excerpt, block_id, notes, document_id")
       .eq("project_id", projectId).order("ref_code"),
@@ -56,6 +57,9 @@ export default async function ProjectPage({ params, searchParams }: {
     supabase.from("sources").select("id, title, identifier, publisher, license, status, indexed_chunks").eq("project_id", projectId).order("created_at"),
   ]);
   const roleCounts = Object.entries((members ?? []).reduce<Record<string, number>>((m, x) => ({ ...m, [x.role]: (m[x.role] ?? 0) + 1 }), {}));
+  const { data: scans } = await supabase.from("file_scans").select("path, status, signature").eq("bucket", "project-files")
+    .in("path", (docs ?? []).map((d) => d.storage_path));
+  const scanOf = new Map((scans ?? []).map((x) => [x.path, x]));
   const canEdit = me?.role === "owner" || me?.role === "engineer";
   const docTitle = new Map((docs ?? []).map((d) => [d.id, d.title]));
   const counts = { total: reqs?.length ?? 0, rejected: reqs?.filter((r) => r.status === "rejected").length ?? 0,
@@ -82,7 +86,7 @@ export default async function ProjectPage({ params, searchParams }: {
               const report = (d.extraction_report ?? {}) as ExtractionReport;
               return (
                 <tr key={d.id}>
-                  <td><strong>{d.title}</strong><div className="muted small">{d.filename}</div></td>
+                  <td><strong>{d.title}</strong><div className="muted small">{d.filename} <ScanBadge status={scanOf.get(d.storage_path)?.status} signature={scanOf.get(d.storage_path)?.signature} /></div></td>
                   <td>
                     <span className={`pill pill-${d.extraction_status}`}>{d.extraction_status}</span>
                     {d.extraction_status === "done" && (

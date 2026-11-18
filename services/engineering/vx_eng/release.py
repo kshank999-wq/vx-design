@@ -18,6 +18,7 @@ import hashlib
 import io
 import json
 import subprocess
+import sys
 import warnings
 import zipfile
 from pathlib import Path
@@ -306,15 +307,22 @@ def fab_notes(name: str, revision: str, profile: FabProfile, facts: dict[str, An
     return "\n".join(l for l in lines if l is not None) + "\n"
 
 
+def _kikit(work: Path, pcb: str) -> list[str]:
+    """KiKit, with KiCad's UUID generator seeded from the board file so panels and fab outputs repeat exactly (G6)."""
+    seed = int(hashlib.sha256((work / pcb).read_bytes()).hexdigest()[:8], 16)
+    return [sys.executable, "-c", "import sys, pcbnew; pcbnew.KIID.SeedGenerator(int(sys.argv.pop(1))); "
+            "from kikit.ui import cli; sys.argv[0] = 'kikit'; sys.exit(cli())", str(seed)]
+
+
 def panelize(work: Path, pcb: str, profile: FabProfile, sch: str) -> dict[str, Any]:
-    args = ["kikit", "panelize"]
+    args = _kikit(work, pcb) + ["panelize"]
     for k, v in PANEL.items():
         args += [f"--{k}", v]
     _run(args + [pcb, "panel.kicad_pcb"], work, timeout=900)
     import pcbnew
     panel = pcbnew.LoadBoard(str(work / "panel.kicad_pcb"))
     bb = panel.GetBoardEdgesBoundingBox()
-    fab_args = ["kikit", "fab", profile.house, "--no-drc", "--no-autoname"]
+    fab_args = _kikit(work, "panel.kicad_pcb") + ["fab", profile.house, "--no-drc", "--no-autoname"]
     _run(fab_args + ["panel.kicad_pcb", "panel-fab"], work)
     render = subprocess.run(["kicad-cli", "pcb", "render", "--width", "1600", "--height", "1000", "--quality", "basic",
                              "--background", "opaque", "--side", "top", "-o", "panel-render.png", "panel.kicad_pcb"],
@@ -396,7 +404,7 @@ def build_package(project_dir: Path, out: Path, panel: bool = True, profile_name
     facts = board_facts(project_dir, pcb)
     out.mkdir(parents=True, exist_ok=True)
     fab_dir = out / "fab"
-    args = ["kikit", "fab", profile.house, "--no-drc", "--no-autoname"]
+    args = _kikit(project_dir, pcb) + ["fab", profile.house, "--no-drc", "--no-autoname"]
     if profile.assembly and sch:
         args += ["--assembly", "--schematic", sch, "--field", "LCSC,LCSC Part,JLCPCB Part", "--missingWarn"]
     _run(args + [pcb, str(fab_dir)], project_dir)

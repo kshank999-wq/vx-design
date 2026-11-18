@@ -138,13 +138,13 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | M-UI — Client workspace | Project workspace with chat, live checklist with approval stops, and a central viewer; client logins (§17.1) | A client signs in, talks to the project in a running chat, watches the checklist, approves at a stop, and sees outputs in the viewer | **Built**: client role, invitations, staff-only RLS on runs/executions/costs/audit/logs, workspace (chat, centre viewer, live checklist with approval stops), Claude assistant grounded in the project with an offline summary fallback. Not yet: streaming replies, chat-created plan changes, email delivery of invitations. |
 | M-RFQ — Manufacturers & RFQ | Manufacturer CRM, NDA/RFQ packet generator, disclosure approvals | An approved request produces complete attachments and an audit log | **Built**: directory with candidate → verified → approved vendor states and "verify contact"; §12 manifest with completeness checks; reproducible supplier-neutral packet (cover letter, manifest, NDA template, chosen requirements and committed files, checksums); owner approval bound to the packet hash; supplier portal with access windows, quotes and decline; award recorded as a decision; full audit trail. Not yet: email sending, structured quote adapters for vendor portals, quote currency conversion, process-rule matching. |
 | G5 — Smart Slate Flux audit | Flux import and revision trace | Actionable migration plan, verified vs unknown | **Built**: import of Flux exports (project JSON, EDIF, IPC-D-356, Gerbers, BOM, placement, STEP, chat/report exports) per revision; inventory and missing dependencies; cross-export consistency and schematic-vs-layout connectivity; current-state map; revision comparison with undone changes; quoted decisions and claims (always unverifiable); migration plan. Tested on a synthetic export; the formal pass needs the real Smart Slate Flux export. |
-| G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | Planned |
+| G6 — Hardening | Security, recovery, regression fixture suite | Repeat runs give traceable, consistent results | **Built**: security lint over the whole schema (found and fixed anon grants, two ID-based leaks, client access to RFQ/Flux storage, forgeable assistant messages); tamper-evident audit hash chain; upload inspection and ClamAV scanning with storage-level blocking; CSP and headers; secret scan and CI; lease recovery for every job type, integrity check, backup/restore drill; regression suite (repeatable and unchanged, with input and version tracing) including a KiCad tier. See `docs/SECURITY.md`. |
 
 ## 4. Scope
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Next:** optimization proposals (§14), S6 evidence capture, G6 hardening.
+**Next:** optimization proposals (§14), S6 evidence capture, deployment (Vercel, Supabase project, worker host).
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;
@@ -166,7 +166,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 | AI gateway | Provider-neutral model adapter (Claude by default; offline stand-in for tests) | Extraction, planning, design proposals, structured outputs | **Built** |
 | Engineering workers | Docker image: KiCad 10, Freerouting, KiKit, CadQuery, ngspice, SKiDL; plus `vx_eng` | Schematic, PCB, DRC/ERC, 3D, exports; later enclosure and simulation | **Built** for schematic and PCB |
 | Knowledge store | Postgres catalogs + pgvector + Storage, licence-aware | Sources, standards, parts, offers, modules, manufacturers, process rules | **Partial**: sources, excerpts, standards, project standards, parts and offers built; full-text search (pgvector pending an embedding provider); modules, manufacturers and process rules not yet |
-| Source control | GitHub | Code, migrations, rules, fixtures, CI | **Built** (CI planned in G6) |
+| Source control | GitHub | Code, migrations, rules, fixtures, CI | **Built** (CI: `.github/workflows/ci.yml`; nightly e2e: `e2e.yml`) |
 
 Constraints:
 - Vercel handlers never host long CAD jobs. Workers do.
@@ -561,7 +561,10 @@ Today's datasheet evidence is a text match and is labelled so.
 **Security:**
 - RLS tenant isolation, roles, signed URLs, an immutable audit log and secrets kept out of the database *(Built)*;
 - sandboxed tools with no model-originated commands *(Built: the model returns data, never commands)*;
-- file virus scanning, upload archive validation, encryption policy review, and supplier access windows *(Planned, G6; supplier access windows built in M-RFQ)*.
+- file virus scanning (ClamAV), upload and archive validation, an encryption and data-handling review, and supplier
+  access windows *(Built, G6 / M-RFQ; `docs/SECURITY.md`)*;
+- a security lint over the schema, a tamper-evident audit hash chain, signed assistant messages, CSP and security
+  headers, and a secret scan *(Built, G6)*.
 
 **Provenance:**
 - Every artifact has a sha256 and tool version/config *(Built)*.
@@ -748,6 +751,12 @@ Weeks 7–9 are already largely delivered.
 12. **NDA template review**: have counsel review (or replace) the RFQ packet's mutual NDA template before the first
     full-design RFQ. Enter the first real suppliers in the directory with how each identity and contact email was
     confirmed (M-RFQ is built and waiting).
+13. **Security settings for deployment** (G6, `docs/SECURITY.md`):
+    - run `scripts/set-assistant-key.sh` and set `VX_ASSISTANT_SIGNING_KEY` on the web server;
+    - give the workers a ClamAV daemon (`CLAMD_HOST`) and decide whether uploads must be scanned clean before anyone
+      can read them (`require_virus_scan`);
+    - decide the data region, the retention period and whether any project needs customer-managed encryption;
+    - schedule `check:integrity` and a storage-bucket backup.
 
 ## 21. Owner decisions
 

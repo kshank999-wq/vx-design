@@ -1,0 +1,258 @@
+{
+ "case": "eng-schematic",
+ "describe": "KiCad schematic from the offline fixture circuit (engineering-worker image)",
+ "inputs": {
+  "circuit": "5197f39e2c68f521e36ca9de36ebaf43e6bdd3e2d2ad3df338b1a1bd623c0e57",
+  "layout": "d39ed0d257886e21a1b77c7ed5c1b557a56bae772065c16505b9d308595e5fc6"
+ },
+ "versions": {
+  "vx_eng": "0.5.0",
+  "kicad": "10.0.8"
+ },
+ "output_sha256": "9680bd619e3e34a0ba61bffa78d9920ee128e5f2b7a7c2b3147578a3d7afdf0c",
+ "output": {
+  "files": {
+   "bom.csv": "fb05d7b574579859f1f5f96f469d923b845d4a5b6627d4b71ef3dc8a1c3c6e47",
+   "erc-report.json": "31cfe1c9b3f785bdb64ebdbe3de00b693edf67f94a3f9cf7565cb57a5404b98b",
+   "fp-lib-table": "97c1921f7e946fcd1ded45f872b8ec1bdcd87143327de71029327f17a65cd646",
+   "netlist.net": "4592317095f1c0c1cf8046d953efca3e0e416920a80b34f53c0e309fccc7e804",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/fp-lib-table": "97c1921f7e946fcd1ded45f872b8ec1bdcd87143327de71029327f17a65cd646",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/offline_fixture_ldo_led.kicad_pro": "f4f6dd884c09499282822e827c758aa58231dfecc4f6bfa53bde05e8cb1318b8",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/offline_fixture_ldo_led.kicad_sch": "ebdd445f413c265f4078b471713ea712dbc13e58bdde4ed1ecafefd01e1a6b32",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/sym-lib-table": "f841a429d3cc7091364b62d00ccdb38375d6acc5cee46f8fed22be2b73b93fae",
+   "offline_fixture_ldo_led.kicad_prl": "5ef4699422fcbee94be843fa39d1cdf07c376cff5895b60dddb53e8ccf5a17f3",
+   "offline_fixture_ldo_led.kicad_pro": "f4f6dd884c09499282822e827c758aa58231dfecc4f6bfa53bde05e8cb1318b8",
+   "offline_fixture_ldo_led.kicad_sch": "ebdd445f413c265f4078b471713ea712dbc13e58bdde4ed1ecafefd01e1a6b32",
+   "schematic.pdf": "present",
+   "schematic.svg": "67ff3e61e8627ad53f083495184f702fb3fd7e9f9e2f0c72bc988006ac92a1c3",
+   "sym-lib-table": "f841a429d3cc7091364b62d00ccdb38375d6acc5cee46f8fed22be2b73b93fae"
+  },
+  "result": {
+   "erc": {
+    "errors": 0,
+    "violations": [],
+    "warnings": 0
+   },
+   "generator_version": "0.5.0",
+   "kicad_version": "10.0.8",
+   "netlist": {
+    "match": true,
+    "missing": [],
+    "nets": 4,
+    "unexpected": []
+   },
+   "ok": true,
+   "project": "offline_fixture_ldo_led",
+   "sheet": "A5",
+   "stage": "built",
+   "validation": {
+    "components": [
+     {
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": null,
+      "library_description": "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)",
+      "pads": [
+       "1",
+       "2"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "Pin_1",
+        "number": "1",
+        "type": "passive",
+        "unit": 1
+       },
+       {
+        "name": "Pin_2",
+        "number": "2",
+        "type": "passive",
+        "unit": 1
+       }
+      ],
+      "ref": "J1",
+      "symbol": "Connector_Generic:Conn_01x02",
+      "symbol_found": true,
+      "units": 1
+     },
+     {
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": null,
+      "library_description": "Unpolarized capacitor",
+      "pads": [
+       "1",
+       "2"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "",
+        "number": "1",
+        "type": "passive",
+        "unit": 1
+       },
+       {
+        "name": "",
+        "number": "2",
+        "type": "passive",
+        "unit": 1
+       }
+      ],
+      "ref": "C1",
+      "symbol": "Device:C",
+      "symbol_found": true,
+      "units": 1
+     },
+     {
+      "footprint": "Package_TO_SOT_SMD:SOT-23-5",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+      "library_description": "600mA low dropout linear regulator, with enable pin, 3.8V-6V input voltage range, 3.3V fixed positive output, SOT-23-5",
+      "pads": [
+       "1",
+       "2",
+       "3",
+       "4",
+       "5"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "VIN",
+        "number": "1",
+        "type": "power_in",
+        "unit": 1
+       },
+       {
+        "name": "GND",
+        "number": "2",
+        "type": "power_in",
+        "unit": 1
+       },
+       {
+        "name": "EN",
+        "number": "3",
+        "type": "input",
+        "unit": 1
+       },
+       {
+        "name": "NC",
+        "number": "4",
+        "type": "no_connect",
+        "unit": 1
+       },
+       {
+        "name": "VOUT",
+        "number": "5",
+        "type": "power_out",
+        "unit": 1
+       }
+      ],
+      "ref": "U1",
+      "symbol": "Regulator_Linear:AP2112K-3.3",
+      "symbol_found": true,
+      "units": 1
+     },
+     {
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": null,
+      "library_description": "Unpolarized capacitor",
+      "pads": [
+       "1",
+       "2"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "",
+        "number": "1",
+        "type": "passive",
+        "unit": 1
+       },
+       {
+        "name": "",
+        "number": "2",
+        "type": "passive",
+        "unit": 1
+       }
+      ],
+      "ref": "C2",
+      "symbol": "Device:C",
+      "symbol_found": true,
+      "units": 1
+     },
+     {
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": null,
+      "library_description": "Resistor",
+      "pads": [
+       "1",
+       "2"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "",
+        "number": "1",
+        "type": "passive",
+        "unit": 1
+       },
+       {
+        "name": "",
+        "number": "2",
+        "type": "passive",
+        "unit": 1
+       }
+      ],
+      "ref": "R1",
+      "symbol": "Device:R",
+      "symbol_found": true,
+      "units": 1
+     },
+     {
+      "footprint": "LED_SMD:LED_0603_1608Metric",
+      "footprint_found": true,
+      "fp_filter_match": true,
+      "library_datasheet": null,
+      "library_description": "Light emitting diode",
+      "pads": [
+       "1",
+       "2"
+      ],
+      "pads_match": true,
+      "pins": [
+       {
+        "name": "K",
+        "number": "1",
+        "type": "passive",
+        "unit": 1
+       },
+       {
+        "name": "A",
+        "number": "2",
+        "type": "passive",
+        "unit": 1
+       }
+      ],
+      "ref": "D1",
+      "symbol": "Device:LED",
+      "symbol_found": true,
+      "units": 1
+     }
+    ],
+    "errors": [],
+    "ok": true,
+    "warnings": []
+   }
+  }
+ }
+}

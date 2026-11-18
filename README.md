@@ -650,6 +650,48 @@ pnpm test:e2e:flux                # browser: upload three revisions, run, read t
 
 Screenshot: `docs/flux/screens`.
 
+## G6: hardening
+
+Security, recovery and a regression suite. The full description is in [`docs/SECURITY.md`](docs/SECURITY.md).
+
+- **Security lint** (`supabase/tests/security_test.sql`): fails if any table lacks RLS, anon has any privilege, a
+  `SECURITY DEFINER` function is unpinned or does not check its caller, or a worker-only function is open to users.
+  Running it found and fixed these:
+  - anon grants;
+  - two ID-based leaks (`rfq_missing`, `plan_status_of_task`);
+  - clients able to list and read RFQ and Flux storage folders;
+  - members able to post chat messages as the assistant (answers now need the web server's HMAC signature).
+- **Tamper-evident audit log**: a per-project SHA-256 hash chain, checked with `verify_audit_chain(project)`.
+- **Uploads**: content inspection at every upload form and in the Flux worker (`@vx/security`), and ClamAV
+  scanning by any worker with `CLAMD_HOST`. Infected files are unreadable at the storage layer and audited.
+  Optionally, uploads can be required to be scanned clean before anyone can read them.
+- **Web**: CSP and security headers.
+- **Repository**: a secret scan, and CI in `.github/workflows` (`ci.yml` on every push; `e2e.yml` nightly or on demand).
+- **Recovery**:
+  - lease takeover and fencing for every job type (`recovery_test.sql`);
+  - `pnpm check:integrity`, which re-hashes every stored file and verifies every audit chain;
+  - `pnpm drill:backup`, which backs up, restores and proves the copy.
+- **Regression**: `pnpm test:regression` (plus `:engineering` for KiCad) runs each pipeline twice and compares
+  against committed snapshots that record input hashes and versions.
+
+  On its first run it found that KiCad boards were not repeatable (random item UUIDs). vx_eng now seeds them from
+  the inputs, so the same design gives the same board and Gerbers.
+
+```bash
+./scripts/test-db.sh                  # + security_test, recovery_test
+pnpm test:regression                  # repeatable, unchanged deterministic pipelines
+pnpm test:regression:engineering      # KiCad schematic/layout/fab, twice, in fresh containers
+pnpm test:e2e:security                # headers, upload refusal, ClamAV (EICAR), forged assistant, staff folders, audit chain
+pnpm check:integrity                  # stored files and audit chains
+pnpm drill:backup                     # backup, restore, verify
+./scripts/check-secrets.sh            # credentials in tracked files
+```
+
+Setup for a deployment:
+- `./scripts/set-assistant-key.sh` stores the chat signing key and prints `VX_ASSISTANT_SIGNING_KEY` for the web
+  server (the local stack uses a labelled dev key from `seed.sql`).
+- Give workers `CLAMD_HOST`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -657,7 +699,8 @@ Screenshot: `docs/flux/screens`.
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
-`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, plus private `project-files` and `knowledge-files` storage buckets.
+`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`
+(and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
 

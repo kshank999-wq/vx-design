@@ -476,6 +476,36 @@ export class WorkerDb {
     return data ?? [];
   }
 
+  // --- Virus scanning (G6) ---
+
+  async nextFilesToScan(limit = 20): Promise<{ bucket: string; path: string; size_bytes: number | null }[]> {
+    return (await this.rpc<{ bucket: string; path: string; size_bytes: number | null }[] | null>("next_files_to_scan", { p_limit: limit })) ?? [];
+  }
+
+  async recordFileScan(bucket: string, path: string, sha256: string | null, size: number | null, status: "clean" | "infected" | "error",
+                       engine: string | null, signature: string | null, detail: string | null): Promise<void> {
+    await this.rpc("record_file_scan", { p_bucket: bucket, p_path: path, p_sha256: sha256, p_size: size, p_status: status,
+                                         p_engine: engine, p_signature: signature, p_detail: detail });
+  }
+
+  async scanStatus(paths: string[]): Promise<Map<string, string>> {
+    if (!paths.length) return new Map();
+    const { data, error } = await this.client.from("file_scans").select("path, status").eq("bucket", BUCKET).in("path", paths);
+    if (error) throw new Error(`scan status: ${error.message}`);
+    return new Map((data ?? []).map((r) => [r.path as string, r.status as string]));
+  }
+
+  async requireVirusScan(): Promise<boolean> {
+    const { data } = await this.client.from("platform_settings").select("value").eq("key", "require_virus_scan").maybeSingle();
+    return data?.value === true;
+  }
+
+  async downloadFrom(bucket: string, path: string): Promise<Uint8Array> {
+    const { data, error } = await this.client.storage.from(bucket).download(path);
+    if (error) throw new Error(`download ${bucket}/${path}: ${error.message}`);
+    return new Uint8Array(await data.arrayBuffer());
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);

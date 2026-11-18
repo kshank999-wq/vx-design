@@ -72,8 +72,24 @@ select pg_temp.act_as('00000000-0000-0000-0000-00000000000e');   -- viewer
 select pg_temp.expect_error($$select public.decide_task(pg_temp.task('arch'), true, 'ok')$$, '%not permitted%');
 
 -- 4. Project chat.
+-- Assistant answers are signed by the web server (G6); sign here the way lib/sign.ts does.
+select pg_temp.act_as(null);
+create temp table sig as select (extract(epoch from now()) * 1000)::bigint as at_ms;
+alter table sig add column s text;
+update sig set s = vx_private.hmac_sha256(convert_to('local-dev-assistant-signing-key-not-for-production', 'UTF8'), convert_to(concat_ws(E'\n',
+  'vx-assistant-v1', 'bbbbbbbb-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000f', at_ms::text,
+  encode(sha256(convert_to('What is waiting for me?', 'UTF8')), 'hex'), encode(sha256(convert_to('Nothing right now.', 'UTF8')), 'hex'),
+  encode(sha256(convert_to('{"offline": true}', 'UTF8')), 'hex')), 'UTF8'));
+grant select on sig to authenticated;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000f');
-select public.post_message('bbbbbbbb-0000-0000-0000-000000000001', 'What is waiting for me?', 'Nothing right now.', '{"offline": true}');
+select pg_temp.expect_error($$select public.post_message('bbbbbbbb-0000-0000-0000-000000000001', 'What is waiting for me?', 'Nothing right now.', '{"offline": true}')$$,
+                            '%must be signed by the server%');
+select pg_temp.expect_error($$select public.post_message('bbbbbbbb-0000-0000-0000-000000000001', 'What is waiting for me?', 'Everything is approved!', '{"offline": true}',
+                              (select at_ms from sig), (select s from sig))$$, '%signature does not match%');
+select public.post_message('bbbbbbbb-0000-0000-0000-000000000001', 'What is waiting for me?', 'Nothing right now.', '{"offline": true}',
+                           (select at_ms from sig), (select s from sig));
+select pg_temp.expect_error($$select public.post_message('bbbbbbbb-0000-0000-0000-000000000001', 'What is waiting for me?', 'Nothing right now.', '{"offline": true}',
+                              (select at_ms from sig), (select s from sig))$$, '%already posted%');
 select pg_temp.check((select array_agg(author_kind::text order by id) = '{user,assistant}' and bool_and(author_id = '00000000-0000-0000-0000-00000000000f')
                       from public.project_messages where project_id = 'bbbbbbbb-0000-0000-0000-000000000001'),
   'question and answer stored, both attributed to the client who asked');

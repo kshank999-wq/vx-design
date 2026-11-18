@@ -1,0 +1,13 @@
+{
+  "name": "@vx/regression",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run.ts",
+    "update": "node run.ts --update"
+  },
+  "dependencies": {
+    "fflate": "0.8.3"
+  }
+}

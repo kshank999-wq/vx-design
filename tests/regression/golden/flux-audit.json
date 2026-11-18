@@ -1,0 +1,1041 @@
+{
+ "case": "flux-audit",
+ "describe": "G5 audit of the synthetic three-revision Flux export",
+ "inputs": {
+  "timecode-revA.zip": "347a3357e0bc766b0ab087ebe0f920534bd3b844dbda4db5314b716a8de3c1bd",
+  "timecode-revB.zip": "ec4fb422ba2bd8858b3cbbc4402280c15053136284c8dc584805f139ab3857de",
+  "timecode-revC.zip": "2c91accbfe34ec085dcb3be43f5e62d173f5c55008d2c0cc5b314a09528226de"
+ },
+ "versions": {
+  "audit": "flux-audit-v1",
+  "flux": "@vx/flux@0.0.0"
+ },
+ "output_sha256": "fe0cf9cd6f82eb199c6c3b110b14b14b605c2f1f6007a1769d12ffcd0a09e5b8",
+ "output": {
+  "comparisons": [
+   {
+    "added": [],
+    "board": [],
+    "changed": [
+     {
+      "designator": "R2",
+      "field": "mpn",
+      "from": "RC0402FR-071KL",
+      "to": "RC0402FR-0710KL"
+     },
+     {
+      "designator": "R2",
+      "field": "value",
+      "from": "1k",
+      "to": "10k"
+     },
+     {
+      "designator": "U2",
+      "field": "mpn",
+      "from": "AP2112K-3.3TRG1",
+      "to": "MCP1700T-3302E/TT"
+     }
+    ],
+    "from": "Rev A",
+    "nets_added": [],
+    "nets_changed": [],
+    "nets_removed": [],
+    "removed": [],
+    "to": "Rev B"
+   },
+   {
+    "added": [],
+    "board": [],
+    "changed": [
+     {
+      "designator": "D1",
+      "field": "mpn",
+      "from": "150040GS73240",
+      "to": null
+     },
+     {
+      "designator": "U2",
+      "field": "mpn",
+      "from": "MCP1700T-3302E/TT",
+      "to": "AP2112K-3.3TRG1"
+     }
+    ],
+    "from": "Rev B",
+    "nets_added": [],
+    "nets_changed": [],
+    "nets_removed": [],
+    "removed": [],
+    "to": "Rev C"
+   }
+  ],
+  "current": {
+   "board": {
+    "copper_layers": 2,
+    "height_mm": 30,
+    "layer_names": [
+     "Top",
+     "Bottom"
+    ],
+    "min_space_mm": 0.15,
+    "min_trace_mm": 0.15,
+    "sources": [
+     "Flux JSON",
+     "Gerbers"
+    ],
+    "thickness_mm": 1.6,
+    "width_mm": 50
+   },
+   "components": [
+    {
+     "catalog": null,
+     "designator": "C1",
+     "dnp": false,
+     "manufacturer": "Murata",
+     "mpn": "GRM188R61E106KA73D",
+     "package": "0603",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "10u"
+    },
+    {
+     "catalog": null,
+     "designator": "C2",
+     "dnp": false,
+     "manufacturer": "Murata",
+     "mpn": "GRM155R71C104KA88D",
+     "package": "0402",
+     "reasons": [
+      "not in the BOM"
+     ],
+     "sources": [
+      "flux_json",
+      "pnp",
+      "edif"
+     ],
+     "status": "uncertain",
+     "value": "100n"
+    },
+    {
+     "catalog": null,
+     "designator": "D1",
+     "dnp": false,
+     "manufacturer": null,
+     "mpn": null,
+     "package": "0402",
+     "reasons": [
+      "no manufacturer part number"
+     ],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "uncertain",
+     "value": "green"
+    },
+    {
+     "catalog": null,
+     "designator": "H1",
+     "dnp": false,
+     "manufacturer": null,
+     "mpn": null,
+     "package": "MountingHole_2.2mm",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "M2"
+    },
+    {
+     "catalog": null,
+     "designator": "H2",
+     "dnp": false,
+     "manufacturer": null,
+     "mpn": null,
+     "package": "MountingHole_2.2mm",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "M2"
+    },
+    {
+     "catalog": null,
+     "designator": "J1",
+     "dnp": false,
+     "manufacturer": "GCT",
+     "mpn": "USB4105-GF-A",
+     "package": "USB-C-16P",
+     "reasons": [
+      "part numbers disagree: USB4105-GF-A vs USB4110-GF-A"
+     ],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "uncertain",
+     "value": "USB-C"
+    },
+    {
+     "catalog": null,
+     "designator": "J2",
+     "dnp": false,
+     "manufacturer": "TE",
+     "mpn": "1-1337540-0",
+     "package": "3.5mm jack",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "LTC in"
+    },
+    {
+     "catalog": null,
+     "designator": "R1",
+     "dnp": false,
+     "manufacturer": "Yageo",
+     "mpn": "RC0402FR-071KL",
+     "package": "0402",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "1k"
+    },
+    {
+     "catalog": null,
+     "designator": "R2",
+     "dnp": false,
+     "manufacturer": "Yageo",
+     "mpn": "RC0402FR-0710KL",
+     "package": "0402",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "10k"
+    },
+    {
+     "catalog": null,
+     "designator": "U1",
+     "dnp": false,
+     "manufacturer": "STMicroelectronics",
+     "mpn": "STM32G031K8T6",
+     "package": "LQFP-32",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "STM32G031"
+    },
+    {
+     "catalog": null,
+     "designator": "U2",
+     "dnp": false,
+     "manufacturer": "Diodes Inc",
+     "mpn": "AP2112K-3.3TRG1",
+     "package": "SOT-23-5",
+     "reasons": [],
+     "sources": [
+      "flux_json",
+      "bom",
+      "pnp",
+      "edif"
+     ],
+     "status": "consistent",
+     "value": "3V3 LDO"
+    }
+   ],
+   "connectors": [
+    {
+     "designator": "J1",
+     "edge": "left edge (1.5 mm in)",
+     "mpn": "USB4105-GF-A",
+     "pins": [
+      {
+       "net": "GND",
+       "pin": "A1"
+      },
+      {
+       "net": "VBUS",
+       "pin": "A4"
+      }
+     ]
+    },
+    {
+     "designator": "J2",
+     "edge": "right edge (2.0 mm in)",
+     "mpn": "1-1337540-0",
+     "pins": [
+      {
+       "net": "LTC_IN",
+       "pin": "1"
+      },
+      {
+       "net": "GND",
+       "pin": "2"
+      }
+     ]
+    }
+   ],
+   "enclosure": {
+    "edge_connectors": [
+     "J1: left edge (1.5 mm in)",
+     "J2: right edge (2.0 mm in)"
+    ],
+    "mounting_holes": [
+     "H1",
+     "H2"
+    ],
+    "outline_mm": "50 × 30 × 1.6 mm",
+    "tallest_parts_note": "Part heights are not in these exports; they come from the 3D models (model library) or datasheets."
+   },
+   "nets": 6,
+   "power_rails": [
+    {
+     "components": [
+      "C1",
+      "C2",
+      "D1",
+      "J1",
+      "J2",
+      "U1",
+      "U2"
+     ],
+     "net": "GND",
+     "pins": 7
+    },
+    {
+     "components": [
+      "C1",
+      "J1",
+      "U2"
+     ],
+     "net": "VBUS",
+     "pins": 4
+    },
+    {
+     "components": [
+      "C2",
+      "R1",
+      "U1",
+      "U2"
+     ],
+     "net": "3V3",
+     "pins": 4
+    }
+   ],
+   "revision": "Rev C"
+  },
+  "findings": [
+   {
+    "category": "connectivity",
+    "detail": "Compared by which pins are joined, not by net names (schematic: EDIF; layout: IPC-D-356).",
+    "evidence": [
+     "timecode-revC.zip!/schematic.edif",
+     "timecode-revC.zip!/layout.d356"
+    ],
+    "id": "F007",
+    "items": [
+     "net LTC_RX is split in the layout into LTC_RX, LTC_RX_STUB",
+     "pin J2.2 (GND) is not connected in the layout"
+    ],
+    "revision": "Rev C",
+    "severity": "blocker",
+    "title": "The layout does not match the schematic"
+   },
+   {
+    "category": "dependency",
+    "detail": "The project lists these assets (3D models, datasheets, images) but they are not in the uploaded files. Export with \"JSON and asset files\".",
+    "evidence": [
+     "timecode-revC.zip!/project.json"
+    ],
+    "id": "F003",
+    "items": [
+     "models/USB4105-GF-A.step (sha256 abababababab…)"
+    ],
+    "revision": "Rev C",
+    "severity": "warning",
+    "title": "1 referenced file(s) missing from the export"
+   },
+   {
+    "category": "sourcing",
+    "detail": "These cannot be sourced or checked until a part is chosen.",
+    "evidence": [],
+    "id": "F004",
+    "items": [
+     "D1 green 0402"
+    ],
+    "revision": "Rev C",
+    "severity": "warning",
+    "title": "1 part(s) without a manufacturer part number"
+   },
+   {
+    "category": "consistency",
+    "detail": "The BOM, the project data and the netlist name different parts for the same designator.",
+    "evidence": [],
+    "id": "F005",
+    "items": [
+     "J1: USB4105-GF-A vs USB4110-GF-A"
+    ],
+    "revision": "Rev C",
+    "severity": "warning",
+    "title": "1 part(s) with conflicting part numbers between exports"
+   },
+   {
+    "category": "consistency",
+    "detail": "Each part should appear in the schematic data, the BOM and the placement file.",
+    "evidence": [],
+    "id": "F006",
+    "items": [
+     "C2: not in the BOM"
+    ],
+    "revision": "Rev C",
+    "severity": "warning",
+    "title": "Designators do not match across the exports"
+   },
+   {
+    "category": "history",
+    "detail": "A value went A → B → A across revisions: the same decision was taken twice. Record the reason so it is not reopened.",
+    "evidence": [],
+    "id": "F008",
+    "items": [
+     "U2 mpn: AP2112K-3.3TRG1 → MCP1700T-3302E/TT → AP2112K-3.3TRG1 (Rev A → Rev B → Rev C)"
+    ],
+    "revision": null,
+    "severity": "warning",
+    "title": "1 change(s) were made and then undone"
+   },
+   {
+    "category": "inventory",
+    "detail": "Not found: 3D models (STEP).",
+    "evidence": [],
+    "id": "F001",
+    "revision": "Rev C",
+    "severity": "info",
+    "title": "Missing from the export: 3D models"
+   },
+   {
+    "category": "inventory",
+    "detail": "Images are inventoried but not interpreted.",
+    "evidence": [],
+    "id": "F002",
+    "items": [
+     "timecode-revC.zip!/screenshot.png"
+    ],
+    "revision": "Rev C",
+    "severity": "info",
+    "title": "1 screenshot(s) or image(s) need a person to read"
+   },
+   {
+    "category": "history",
+    "detail": "Candidates for an explicit decision with its evidence.",
+    "evidence": [],
+    "id": "F009",
+    "items": [
+     "R2: changed in 2 revisions",
+     "U2: changed in 2 revisions"
+    ],
+    "revision": null,
+    "severity": "info",
+    "title": "Parts that keep changing"
+   }
+  ],
+  "history": {
+   "claims": [],
+   "decisions": [],
+   "dropped_quotes": 0,
+   "model": null,
+   "offline": false
+  },
+  "inventory": [
+   {
+    "kind": "archive",
+    "path": "timecode-revA.zip",
+    "revision": "Rev A",
+    "sha256": "347a3357e0bc766b0ab087ebe0f920534bd3b844dbda4db5314b716a8de3c1bd",
+    "size": 3972
+   },
+   {
+    "kind": "ipc356",
+    "path": "timecode-revA.zip!/layout.d356",
+    "revision": "Rev A",
+    "sha256": "b09a87dc9586b1b926f18387eda0b3dfc03b559fbd503bde90a49c8891af6a1a",
+    "size": 1712
+   },
+   {
+    "kind": "archive",
+    "path": "timecode-revA.zip!/manufacturing.zip",
+    "revision": "Rev A",
+    "sha256": "a0eddb11b425a5d0da016938a30552a922825374c44076610039a082d3ccd492",
+    "size": 2001
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revA.zip!/manufacturing.zip!/bom/bom-JLCPCB.csv",
+    "revision": "Rev A",
+    "sha256": "f03becc5ae3e1a4f31d075d448ed59f22758fa7da8b003846716571a5d8e21ad",
+    "size": 453
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revA.zip!/manufacturing.zip!/bom/bom.csv",
+    "revision": "Rev A",
+    "sha256": "dd5196cc46c0b3499589398eae9df3da877058be12a70dd03442717fc875c023",
+    "size": 445
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revA.zip!/manufacturing.zip!/gerbers/timecode-B_Cu.gbr",
+    "revision": "Rev A",
+    "sha256": "164d6979660513f34cf5682b09da5b4cb45e4bd65d5a53581040d9bf57f228cf",
+    "size": 155
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revA.zip!/manufacturing.zip!/gerbers/timecode-Edge_Cuts.gbr",
+    "revision": "Rev A",
+    "sha256": "2a63a7876cae8383c15be3df9d463fdc197b1eb9c26b8b733c33ed2308135bfa",
+    "size": 204
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revA.zip!/manufacturing.zip!/gerbers/timecode-F_Cu.gbr",
+    "revision": "Rev A",
+    "sha256": "80c1aeaa96fe8c8e0cc32d776c78dd0e965414486ef3648ff8915210a32013f0",
+    "size": 155
+   },
+   {
+    "kind": "drill",
+    "path": "timecode-revA.zip!/manufacturing.zip!/gerbers/timecode.drl",
+    "revision": "Rev A",
+    "sha256": "ecb5e4c6f6ec6da33e61fa1aafe31f1988a920097fb23ab46c06c305bb27d845",
+    "size": 38
+   },
+   {
+    "kind": "pnp_csv",
+    "path": "timecode-revA.zip!/manufacturing.zip!/pick_and_place.csv",
+    "revision": "Rev A",
+    "sha256": "012130a280d7413fc079c2a36016e571e095e48b58eef01eeb9a95c5bec23e22",
+    "size": 213
+   },
+   {
+    "kind": "flux_json",
+    "path": "timecode-revA.zip!/project.json",
+    "revision": "Rev A",
+    "sha256": "fc1609359ba8fd2fc0ec2fd63d68bf5f654c742e72ceece65b44f6dae12a8cce",
+    "size": 5975
+   },
+   {
+    "kind": "edif",
+    "path": "timecode-revA.zip!/schematic.edif",
+    "revision": "Rev A",
+    "sha256": "fe3bc2dabdd2df8c251379b25707218e299c309ef0529b59bc43a819748c3e0b",
+    "size": 2803
+   },
+   {
+    "kind": "image",
+    "path": "timecode-revA.zip!/screenshot.png",
+    "revision": "Rev A",
+    "sha256": "1b56b50ac4e976f488f128cabdcdffb2fc9331d6974bb9968131a415d14ade24",
+    "size": 12
+   },
+   {
+    "kind": "archive",
+    "path": "timecode-revB.zip",
+    "revision": "Rev B",
+    "sha256": "ec4fb422ba2bd8858b3cbbc4402280c15053136284c8dc584805f139ab3857de",
+    "size": 3966
+   },
+   {
+    "kind": "ipc356",
+    "path": "timecode-revB.zip!/layout.d356",
+    "revision": "Rev B",
+    "sha256": "b09a87dc9586b1b926f18387eda0b3dfc03b559fbd503bde90a49c8891af6a1a",
+    "size": 1712
+   },
+   {
+    "kind": "archive",
+    "path": "timecode-revB.zip!/manufacturing.zip",
+    "revision": "Rev B",
+    "sha256": "1ce15d2839873753f07928a5c488afea540d7e5f5f22976648b6b24748b20a83",
+    "size": 2003
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revB.zip!/manufacturing.zip!/bom/bom-JLCPCB.csv",
+    "revision": "Rev B",
+    "sha256": "56b478b793f2ac26708b49535573e43048c8c4263d959e27dd14f30d18869ab6",
+    "size": 456
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revB.zip!/manufacturing.zip!/bom/bom.csv",
+    "revision": "Rev B",
+    "sha256": "23c01062e9184e324c2e6ecdd850d456de74aff59ed2264d3f01d91d4b23a0f1",
+    "size": 448
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revB.zip!/manufacturing.zip!/gerbers/timecode-B_Cu.gbr",
+    "revision": "Rev B",
+    "sha256": "164d6979660513f34cf5682b09da5b4cb45e4bd65d5a53581040d9bf57f228cf",
+    "size": 155
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revB.zip!/manufacturing.zip!/gerbers/timecode-Edge_Cuts.gbr",
+    "revision": "Rev B",
+    "sha256": "2a63a7876cae8383c15be3df9d463fdc197b1eb9c26b8b733c33ed2308135bfa",
+    "size": 204
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revB.zip!/manufacturing.zip!/gerbers/timecode-F_Cu.gbr",
+    "revision": "Rev B",
+    "sha256": "80c1aeaa96fe8c8e0cc32d776c78dd0e965414486ef3648ff8915210a32013f0",
+    "size": 155
+   },
+   {
+    "kind": "drill",
+    "path": "timecode-revB.zip!/manufacturing.zip!/gerbers/timecode.drl",
+    "revision": "Rev B",
+    "sha256": "ecb5e4c6f6ec6da33e61fa1aafe31f1988a920097fb23ab46c06c305bb27d845",
+    "size": 38
+   },
+   {
+    "kind": "pnp_csv",
+    "path": "timecode-revB.zip!/manufacturing.zip!/pick_and_place.csv",
+    "revision": "Rev B",
+    "sha256": "012130a280d7413fc079c2a36016e571e095e48b58eef01eeb9a95c5bec23e22",
+    "size": 213
+   },
+   {
+    "kind": "flux_json",
+    "path": "timecode-revB.zip!/project.json",
+    "revision": "Rev B",
+    "sha256": "a0cedac62d7aea4bd0aa6ae0817cca789c3da2a682ab8bf51d4aacc43f2550a0",
+    "size": 5978
+   },
+   {
+    "kind": "edif",
+    "path": "timecode-revB.zip!/schematic.edif",
+    "revision": "Rev B",
+    "sha256": "7633ff849e77519f7cc65e059d74a43c0100d9ab1edff948cf14d5fd747f21dd",
+    "size": 2807
+   },
+   {
+    "kind": "image",
+    "path": "timecode-revB.zip!/screenshot.png",
+    "revision": "Rev B",
+    "sha256": "1b56b50ac4e976f488f128cabdcdffb2fc9331d6974bb9968131a415d14ade24",
+    "size": 12
+   },
+   {
+    "kind": "archive",
+    "path": "timecode-revC.zip",
+    "revision": "Rev C",
+    "sha256": "2c91accbfe34ec085dcb3be43f5e62d173f5c55008d2c0cc5b314a09528226de",
+    "size": 4473
+   },
+   {
+    "kind": "text",
+    "path": "timecode-revC.zip!/drc_report.txt",
+    "revision": "Rev C",
+    "sha256": "d00b6a9e38805e9d477719fc1bd78748941034c079e0057e169ee816d396bdee",
+    "size": 52
+   },
+   {
+    "kind": "ipc356",
+    "path": "timecode-revC.zip!/layout.d356",
+    "revision": "Rev C",
+    "sha256": "fb505aa4ab6cf9d120c60592f9938714d5f7f091d0ce348e172d5490e71e3293",
+    "size": 1712
+   },
+   {
+    "kind": "archive",
+    "path": "timecode-revC.zip!/manufacturing.zip",
+    "revision": "Rev C",
+    "sha256": "d0e9ba41906f4b86783c326085de839c9289bd10211638dc878e5afea7deb669",
+    "size": 1947
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revC.zip!/manufacturing.zip!/bom/bom-JLCPCB.csv",
+    "revision": "Rev C",
+    "sha256": "54f68288d108b17f7c30daa21c79e322cd98b03f6da0e5f3c12314b5271beaa3",
+    "size": 393
+   },
+   {
+    "kind": "bom_csv",
+    "path": "timecode-revC.zip!/manufacturing.zip!/bom/bom.csv",
+    "revision": "Rev C",
+    "sha256": "d4a6c4e6bc894c94e292f3424f0bed4c381dbdcd3f09112ec0ebade69b572c4a",
+    "size": 385
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revC.zip!/manufacturing.zip!/gerbers/timecode-B_Cu.gbr",
+    "revision": "Rev C",
+    "sha256": "164d6979660513f34cf5682b09da5b4cb45e4bd65d5a53581040d9bf57f228cf",
+    "size": 155
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revC.zip!/manufacturing.zip!/gerbers/timecode-Edge_Cuts.gbr",
+    "revision": "Rev C",
+    "sha256": "2a63a7876cae8383c15be3df9d463fdc197b1eb9c26b8b733c33ed2308135bfa",
+    "size": 204
+   },
+   {
+    "kind": "gerber",
+    "path": "timecode-revC.zip!/manufacturing.zip!/gerbers/timecode-F_Cu.gbr",
+    "revision": "Rev C",
+    "sha256": "80c1aeaa96fe8c8e0cc32d776c78dd0e965414486ef3648ff8915210a32013f0",
+    "size": 155
+   },
+   {
+    "kind": "drill",
+    "path": "timecode-revC.zip!/manufacturing.zip!/gerbers/timecode.drl",
+    "revision": "Rev C",
+    "sha256": "ecb5e4c6f6ec6da33e61fa1aafe31f1988a920097fb23ab46c06c305bb27d845",
+    "size": 38
+   },
+   {
+    "kind": "pnp_csv",
+    "path": "timecode-revC.zip!/manufacturing.zip!/pick_and_place.csv",
+    "revision": "Rev C",
+    "sha256": "012130a280d7413fc079c2a36016e571e095e48b58eef01eeb9a95c5bec23e22",
+    "size": 213
+   },
+   {
+    "kind": "text",
+    "path": "timecode-revC.zip!/notes/chat-export.md",
+    "revision": "Rev C",
+    "sha256": "f9fc3e0eaaec146c84e1a74886b3fd53bab9fd7183065797a8d9dff0b9855f32",
+    "size": 399
+   },
+   {
+    "kind": "flux_json",
+    "path": "timecode-revC.zip!/project.json",
+    "revision": "Rev C",
+    "sha256": "a0c51eb8f1c159b087633510641b6b4cb88cf7398872eb7d32e1d3bb37f8f791",
+    "size": 6125
+   },
+   {
+    "kind": "edif",
+    "path": "timecode-revC.zip!/schematic.edif",
+    "revision": "Rev C",
+    "sha256": "f4c9100582b7e29094bfb933cae2d4e1f7f23321efd04076494961ffac978333",
+    "size": 2765
+   },
+   {
+    "kind": "image",
+    "path": "timecode-revC.zip!/screenshot.png",
+    "revision": "Rev C",
+    "sha256": "1b56b50ac4e976f488f128cabdcdffb2fc9331d6974bb9968131a415d14ade24",
+    "size": 12
+   }
+  ],
+  "migration": [
+   {
+    "discipline": "documentation",
+    "done_when": "This audit reports no missing export items.",
+    "effort": "S",
+    "findings": [
+     "F001"
+    ],
+    "id": "M1",
+    "inputs": [
+     "Flux project"
+    ],
+    "scope": "Export the missing items from Flux and re-run this audit.",
+    "title": "Complete the Flux export"
+   },
+   {
+    "discipline": "documentation",
+    "done_when": "No referenced file is missing.",
+    "effort": "S",
+    "findings": [
+     "F003"
+    ],
+    "id": "M2",
+    "inputs": [
+     "Flux project"
+    ],
+    "scope": "Export \"JSON and asset files\", or upload the referenced 3D models and datasheets.",
+    "title": "Recover missing referenced files"
+   },
+   {
+    "discipline": "pcb_layout",
+    "done_when": "The layout netlist matches the schematic netlist with no differences.",
+    "effort": "M",
+    "findings": [
+     "F007"
+    ],
+    "id": "M3",
+    "inputs": [
+     "EDIF",
+     "IPC-D-356"
+    ],
+    "scope": "Decide for each listed difference whether the schematic or the layout is right; fix the other in Flux (or in the KiCad rebuild).",
+    "title": "Resolve the schematic/layout differences"
+   },
+   {
+    "discipline": "components",
+    "done_when": "No designator or part-number conflicts remain.",
+    "effort": "S",
+    "findings": [
+     "F005",
+     "F006"
+    ],
+    "id": "M4",
+    "inputs": [
+     "BOM",
+     "pick and place",
+     "project JSON"
+    ],
+    "scope": "Make every designator appear consistently, with one part number, in all exports (mark do-not-populate parts as such).",
+    "title": "Reconcile the BOM, placement and schematic"
+   },
+   {
+    "discipline": "sourcing",
+    "done_when": "Every fitted part has a part number with a current offer and an active lifecycle.",
+    "effort": "M",
+    "findings": [
+     "F004"
+    ],
+    "id": "M5",
+    "inputs": [
+     "BOM"
+    ],
+    "scope": "Pick manufacturer part numbers where missing and check lifecycle and stock in M-SRC.",
+    "title": "Choose and source the uncertain parts"
+   },
+   {
+    "discipline": "schematic",
+    "done_when": "KiCad ERC and DRC pass and the KiCad netlist matches the Flux netlist with no differences.",
+    "effort": "L",
+    "findings": [
+     "F007",
+     "F005",
+     "F006"
+    ],
+    "id": "M6",
+    "inputs": [
+     "project JSON or EDIF",
+     "BOM",
+     "pick and place",
+     "Gerbers"
+    ],
+    "scope": "Flux does not export KiCad projects. Recreate the schematic from the netlist and parts list, then place from the pick-and-place data; keep the Flux Gerbers as the reference until the rebuild matches.",
+    "title": "Rebuild the design in KiCad from the export"
+   },
+   {
+    "discipline": "mechanical",
+    "done_when": "Every fitted part has a verified 3D model.",
+    "effort": "M",
+    "findings": [
+     "F003"
+    ],
+    "id": "M7",
+    "inputs": [
+     "BOM"
+    ],
+    "scope": "Add STEP models for the parts to the model library and verify their alignment.",
+    "title": "Collect manufacturer 3D models"
+   },
+   {
+    "discipline": "power",
+    "done_when": "The power calculator's checks pass for every rail.",
+    "effort": "M",
+    "findings": [],
+    "id": "M8",
+    "inputs": [
+     "current-state map"
+    ],
+    "scope": "Enter the rails (VBUS, 3V3) and loads in the power calculator; the export has no currents.",
+    "title": "Write the power budget"
+   },
+   {
+    "discipline": "enclosure",
+    "done_when": "Outline, holes and connector openings are confirmed and recorded.",
+    "effort": "S",
+    "findings": [],
+    "id": "M9",
+    "inputs": [
+     "current-state map"
+    ],
+    "scope": "Board 50 × 30 × 1.6 mm; 2 mounting hole(s); 2 edge connector(s). Confirm against the design freeze before M-ENC.",
+    "title": "Record the enclosure constraints"
+   },
+   {
+    "discipline": "documentation",
+    "done_when": "Each repeated change has a recorded decision with its reason.",
+    "effort": "S",
+    "findings": [
+     "F008"
+    ],
+    "id": "M10",
+    "inputs": [
+     "revision comparison"
+    ],
+    "scope": "For each change that was undone, record the final choice and why, as a project decision.",
+    "title": "Record the repeated decisions"
+   }
+  ],
+  "parse_notes": [],
+  "problems": [],
+  "repeated": [
+   {
+    "designator": "U2",
+    "field": "mpn",
+    "revisions": [
+     "Rev A",
+     "Rev B",
+     "Rev C"
+    ],
+    "values": [
+     "AP2112K-3.3TRG1",
+     "MCP1700T-3302E/TT",
+     "AP2112K-3.3TRG1"
+    ]
+   }
+  ],
+  "revisions": [
+   {
+    "date": "2026-10-02",
+    "files": 11,
+    "kinds": {
+     "archive": 2,
+     "bom_csv": 2,
+     "drill": 1,
+     "edif": 1,
+     "flux_json": 1,
+     "gerber": 3,
+     "image": 1,
+     "ipc356": 1,
+     "pnp_csv": 1
+    },
+    "label": "Rev A",
+    "note": null,
+    "project": {
+     "exported_at": "2026-10-02",
+     "name": "Smart Slate timecode board",
+     "top_level_keys": [
+      "project",
+      "components",
+      "nets",
+      "boards",
+      "assets"
+     ],
+     "url": null,
+     "version": "rev A"
+    }
+   },
+   {
+    "date": "2026-11-02",
+    "files": 11,
+    "kinds": {
+     "archive": 2,
+     "bom_csv": 2,
+     "drill": 1,
+     "edif": 1,
+     "flux_json": 1,
+     "gerber": 3,
+     "image": 1,
+     "ipc356": 1,
+     "pnp_csv": 1
+    },
+    "label": "Rev B",
+    "note": null,
+    "project": {
+     "exported_at": "2026-11-02",
+     "name": "Smart Slate timecode board",
+     "top_level_keys": [
+      "project",
+      "components",
+      "nets",
+      "boards",
+      "assets"
+     ],
+     "url": null,
+     "version": "rev B"
+    }
+   },
+   {
+    "date": "2026-11-09",
+    "files": 13,
+    "kinds": {
+     "archive": 2,
+     "bom_csv": 2,
+     "drill": 1,
+     "edif": 1,
+     "flux_json": 1,
+     "gerber": 3,
+     "image": 1,
+     "ipc356": 1,
+     "pnp_csv": 1,
+     "text": 2
+    },
+    "label": "Rev C",
+    "note": null,
+    "project": {
+     "exported_at": "2026-11-09",
+     "name": "Smart Slate timecode board",
+     "top_level_keys": [
+      "project",
+      "components",
+      "nets",
+      "boards",
+      "assets"
+     ],
+     "url": null,
+     "version": "rev C"
+    }
+   }
+  ],
+  "statement": "An imported design is never assumed verified. \"Consistent\" means the exports agree with each other; it is not a design review, and no check has been re-run.",
+  "summary": {
+   "blockers": 1,
+   "claims": 0,
+   "claims_unverifiable": 0,
+   "components": 11,
+   "consistent": 8,
+   "files": 35,
+   "revisions": 3,
+   "uncertain": 3,
+   "warnings": 5
+  },
+  "version": "flux-audit-v1"
+ }
+}

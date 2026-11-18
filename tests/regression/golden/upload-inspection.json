@@ -1,0 +1,61 @@
+{
+ "case": "upload-inspection",
+ "describe": "G6 upload verdicts over a fixed corpus",
+ "inputs": {
+  "spec.pdf": "d5db70fbccdd8ccc6a553604b79a09cd33083b401340d546efa08a52142c972e",
+  "evil.pdf": "3b5b3f10d270e202a89e8e3258c236ad27d1d4a473f746d6befcf0ec07e24b77",
+  "notes.md": "333c0e8f1cfcc3d5faf1225d3a6c4c69ddd790ba8586cdcc014bb36af0749ae5",
+  "run.sh": "1f98d211493d073aa52b8bd37e9b70d344e22c4942eff358f471179b12524cae",
+  "logo.svg": "f3f08b7554c9d9cfe44016ed63145b9d673c1dccecba4f9f17d0c12c2b957786"
+ },
+ "versions": {
+  "security": "@vx/security@0.0.0"
+ },
+ "output_sha256": "62ee30a05719c411eca87c81173a02ac2f051cd96b41ba9f76321505bee73e46",
+ "output": [
+  {
+   "detected": "pdf",
+   "name": "spec.pdf",
+   "notes": [],
+   "ok": true,
+   "problems": []
+  },
+  {
+   "detected": "executable",
+   "name": "evil.pdf",
+   "notes": [],
+   "ok": false,
+   "problems": [
+    "this is a program (executable), not a document",
+    "named .pdf but the content is executable",
+    "executable files are not accepted here (accepted: pdf, docx, text, svg)"
+   ]
+  },
+  {
+   "detected": "text",
+   "name": "notes.md",
+   "notes": [],
+   "ok": true,
+   "problems": []
+  },
+  {
+   "detected": "script",
+   "name": "run.sh",
+   "notes": [],
+   "ok": false,
+   "problems": [
+    "this is a script (starts with #!), not a document",
+    "script files are not accepted here (accepted: pdf, docx, text, svg)"
+   ]
+  },
+  {
+   "detected": "svg",
+   "name": "logo.svg",
+   "notes": [],
+   "ok": false,
+   "problems": [
+    "the SVG contains script or embedded content"
+   ]
+  }
+ ]
+}

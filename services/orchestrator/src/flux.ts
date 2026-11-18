@@ -6,7 +6,12 @@
 import { createHash } from "node:crypto";
 import { extractFluxHistory, type LanguageModel } from "@vx/planning";
 import { buildInventory, historyDocuments, keepQuoted, normMpn, renderReport, runAudit, type CatalogEntry, type HistoryInput, type Upload } from "@vx/flux";
+import { inspectUpload, type UploadPolicy } from "@vx/security";
 import type { WorkerDb } from "./db.ts";
+
+/** What a Flux export may contain: anything but programs and scripts. */
+const FLUX_POLICY: UploadPolicy = { maxBytes: 300 * 1048576,
+  accept: ["pdf", "zip", "docx", "xlsx", "png", "jpeg", "gif", "webp", "step", "gzip", "svg", "html", "text", "binary"] };
 
 async function pdfText(data: Uint8Array): Promise<string> {
   const { extractText, getDocumentProxy } = await import("unpdf");
@@ -21,12 +26,24 @@ export async function processFluxAudit(db: WorkerDb, model: { model: LanguageMod
   const tag = `[${workerId}] flux audit ${audit.id.slice(0, 8)} (#${audit.audit_no})`;
   try {
     const rows = await db.fluxFiles(audit.id);
+    // Security (G6): no infected file is read; with scans required, every file must have been scanned clean.
+    const scans = await db.scanStatus(rows.map((r) => r.storage_path));
+    const infected = rows.filter((r) => scans.get(r.storage_path) === "infected");
+    if (infected.length) throw new Error(`virus scan found infected files: ${infected.map((r) => r.name).join(", ")}; remove them and upload clean copies`);
+    if (await db.requireVirusScan()) {
+      const waiting = rows.filter((r) => scans.get(r.storage_path) !== "clean");
+      if (waiting.length) throw new Error(`waiting for the virus scan of ${waiting.map((r) => r.name).join(", ")}; run the audit again in a minute`);
+    }
     const uploads: Upload[] = [];
+    const refused: string[] = [];
     for (const r of rows) {
       const data = await db.downloadBytes(r.storage_path);
       if (createHash("sha256").update(data).digest("hex") !== r.sha256) throw new Error(`${r.name} does not match the sha256 recorded at upload`);
+      const check = inspectUpload(r.name, data, FLUX_POLICY);
+      if (!check.ok) refused.push(`${r.name}: ${check.problems.join("; ")}`);
       uploads.push({ name: r.name, revision: r.revision_label, data });
     }
+    if (refused.length) throw new Error(`files refused by the upload check: ${refused.join(" | ")}`);
     // Revisions oldest first: by the date given at upload (undated last), then upload order.
     const first = new Map<string, { date: string | null; at: string }>();
     for (const r of rows) {

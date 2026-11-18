@@ -1,0 +1,80 @@
+{
+ "case": "concept-offline",
+ "describe": "M-CON offline brief and placeholder images",
+ "inputs": {},
+ "versions": {
+  "prompt": "concept-v1"
+ },
+ "output_sha256": "351eefc75894012160dc4a3d3ceb85268cd881f86815b89f1179f4833a881268",
+ "output": {
+  "brief": {
+   "assumptions": [
+    "Offline stand-in: no industrial design reasoning was performed."
+   ],
+   "constraints": [
+    "Offline stand-in: no requirement analysis was performed."
+   ],
+   "envelope": {
+    "basis": "assumption: offline fixture",
+    "height_mm": 28,
+    "length_mm": 160,
+    "width_mm": 90
+   },
+   "product_summary": "Offline stand-in: a handheld timecode slate (fixture brief, not derived from your requirements).",
+   "variants": [
+    {
+     "cmf": {
+      "colours": [
+       "black",
+       "safety orange"
+      ],
+      "finishes": [
+       "matte texture"
+      ],
+      "materials": [
+       "PC/ABS",
+       "TPE"
+      ],
+      "summary": "matte black PC/ABS with orange TPE bumpers"
+     },
+     "design_language": "Rugged, chamfered edges, exposed screws",
+     "name": "Field Brick",
+     "prompt": "Product concept render of a rugged handheld timecode slate, chamfered matte black body with orange rubber corner bumpers, large display on the front, two round buttons, three-quarter view, studio lighting, plain light background.",
+     "rationale": "Offline fixture variant: survives drops on set."
+    },
+    {
+     "cmf": {
+      "colours": [
+       "silver",
+       "white"
+      ],
+      "finishes": [
+       "bead blast",
+       "anodised"
+      ],
+      "materials": [
+       "aluminium 6061"
+      ],
+      "summary": "bead-blasted aluminium, white accents"
+     },
+     "design_language": "Thin, soft radii, flush display",
+     "name": "Slim Clap",
+     "prompt": "Product concept render of a slim handheld timecode slate, bead-blasted aluminium body with soft radii and a flush display, white accent buttons, three-quarter view, studio lighting, plain light background.",
+     "rationale": "Offline fixture variant: light and pocketable."
+    }
+   ]
+  },
+  "images": [
+   {
+    "name": "Field Brick",
+    "seed": "4976cece",
+    "sha256": "791cf54fac28942e8ed707370252165579df391916e11ae1fdf08651b0f9c290"
+   },
+   {
+    "name": "Slim Clap",
+    "seed": "10eda8ea",
+    "sha256": "6627c3197390bfe59004aa15cd633270888ee229019d6ba1ba35da39e7301589"
+   }
+  ]
+ }
+}

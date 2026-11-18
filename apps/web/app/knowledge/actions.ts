@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { chunkDocument, parseDocument, UnsupportedDocumentError, type ParsedDocument } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
+import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { LICENSES, SOURCE_KINDS, type License } from "@/lib/knowledge";
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -34,6 +35,8 @@ export async function addSource(form: FormData) {
   let bytes: Uint8Array | null = null;
   if (hasFile) {
     bytes = new Uint8Array(await file.arrayBuffer());
+    const refused = uploadProblem(file.name, bytes, POLICIES.source);
+    if (refused) fail(path, refused);
     try {
       parsed = await parseDocument(bytes, file.type, file.name);
     } catch (e) {

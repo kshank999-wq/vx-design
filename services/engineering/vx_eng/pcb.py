@@ -579,10 +579,23 @@ def install_models(project_dir: Path, models: dict[str, dict[str, Any]]) -> dict
     return out
 
 
+def seed_ids(*parts: object) -> None:
+    """KiCad gives every new board item a random UUID and saves items in UUID order, so two builds of the same design
+    would give different files (and different Gerbers). Seeding KiCad's UUID generator from the inputs makes the same
+    inputs give the same board (G6 regression suite)."""
+    import dataclasses
+    import hashlib
+    import json
+    norm = [dataclasses.asdict(p) if dataclasses.is_dataclass(p) and not isinstance(p, type) else p for p in parts]
+    digest = hashlib.sha256(json.dumps(norm, sort_keys=True, default=str).encode()).hexdigest()
+    _pcbnew().KIID.SeedGenerator(int(digest[:8], 16))
+
+
 def build_board(circuit: Circuit, layout: Layout, project_dir: Path, name: str, title: str,
                 route: bool = True, models: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Creates <name>.kicad_pcb in a project directory that already holds the generated schematic and netlist."""
     pcbnew = _pcbnew()
+    seed_ids("board", name, title, circuit, layout, sorted((models or {}).items()))
     profile = PROFILES[layout.fab_profile]
     paths, pin_net_names, fields = _read_netlist(project_dir / "netlist.net")
     board = pcbnew.CreateEmptyBoard()

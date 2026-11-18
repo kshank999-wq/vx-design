@@ -1,0 +1,42 @@
+# Browser end-to-end suites against a local Supabase stack, plus the security suite with a real ClamAV daemon.
+# Manual or nightly (they take several minutes). The KiCad regression tier needs the engineering-worker image, which
+# is built separately (services/engineering); run it where that image exists: pnpm test:regression:engineering.
+name: E2E
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Playwright browser
+        run: npm install -g playwright@1 && npx playwright install --with-deps chromium
+      - name: Start Supabase
+        run: npx -y supabase@3.2.0 start
+      - name: Build and start the web app
+        run: |
+          eval "$(npx -y supabase@3.2.0 status -o env | sed 's/^/export /')"
+          printf 'NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\nVX_LLM=offline\nVX_ASSISTANT_SIGNING_KEY=local-dev-assistant-signing-key-not-for-production\n' "$API_URL" "$ANON_KEY" > apps/web/.env.local
+          pnpm --filter @vx/web build
+          (cd apps/web && nohup pnpm start > ../../web.log 2>&1 &)
+          npx -y wait-on http://localhost:3000/login
+      - name: End-to-end suites
+        run: |
+          pnpm test:e2e
+          for s in workspace knowledge concepts rfq flux security; do ./scripts/test-e2e-$s.sh; done
+      - name: Integrity and backup drill
+        run: ./scripts/check-integrity.sh && ./scripts/backup-drill.sh
+      - if: failure()
+        run: tail -200 web.log || true

@@ -4,6 +4,7 @@ import { KIND_LABEL, type AuditReport, type FileKind } from "@vx/flux";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
+import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { removeFile, runAudit } from "../actions";
@@ -20,12 +21,15 @@ export default async function FluxAuditPage({ params, searchParams }: {
   const { supabase, userId } = await requireUser();
   const [{ data: audit }, { data: files }, { data: me }, { data: project }] = await Promise.all([
     supabase.from("flux_audits").select("*").eq("id", auditId).eq("project_id", projectId).maybeSingle(),
-    supabase.from("flux_audit_files").select("id, revision_label, revision_date, name, sha256, size_bytes, created_at").eq("audit_id", auditId).order("created_at"),
+    supabase.from("flux_audit_files").select("id, revision_label, revision_date, name, storage_path, sha256, size_bytes, created_at").eq("audit_id", auditId).order("created_at"),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
   ]);
   if (!audit || !project) notFound();
   const canEdit = me?.role === "owner" || me?.role === "engineer";
+  const { data: scans } = await supabase.from("file_scans").select("path, status, signature").eq("bucket", "project-files")
+    .in("path", (files ?? []).map((f) => f.storage_path));
+  const scanOf = new Map((scans ?? []).map((x) => [x.path, x]));
   const running = audit.status === "queued" || audit.status === "running";
   let report: AuditReport | null = null;
   const links: { md?: string; json?: string } = {};
@@ -50,14 +54,14 @@ export default async function FluxAuditPage({ params, searchParams }: {
       <section>
         <h2>Uploaded files</h2>
         <table data-testid="flux-files" className="small">
-          <thead><tr><th>Revision</th><th>File</th><th>Size</th><th>sha256</th><th></th></tr></thead>
+          <thead><tr><th>Revision</th><th>File</th><th>Size</th><th>sha256</th><th>Virus scan</th><th></th></tr></thead>
           <tbody>
             {(files ?? []).map((f) => (
               <tr key={f.id}><td>{f.revision_label}{f.revision_date && <div className="muted">{f.revision_date}</div>}</td><td>{f.name}</td><td>{mb(f.size_bytes)}</td>
-                <td><code>{f.sha256.slice(0, 16)}</code></td>
+                <td><code>{f.sha256.slice(0, 16)}</code></td><td><ScanBadge status={scanOf.get(f.storage_path)?.status} signature={scanOf.get(f.storage_path)?.signature} /></td>
                 <td>{canEdit && !running && <form action={removeFile.bind(null, projectId, auditId, f.id)}><button className="btn btn-link" type="submit">Remove</button></form>}</td></tr>
             ))}
-            {!files?.length && <tr><td colSpan={5} className="muted">Nothing uploaded yet.</td></tr>}
+            {!files?.length && <tr><td colSpan={6} className="muted">Nothing uploaded yet.</td></tr>}
           </tbody>
         </table>
         {canEdit && !running && <FluxUpload projectId={projectId} auditId={auditId} revisions={revs} />}

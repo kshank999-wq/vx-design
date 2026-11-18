@@ -10,6 +10,7 @@ import {
   type ParsedDocument,
 } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
+import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { getModel } from "@/lib/model";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -22,6 +23,8 @@ export async function uploadDocument(projectId: string, form: FormData) {
   if (file.size > MAX_UPLOAD_BYTES) fail(path, "File is larger than 20 MB.");
 
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const refused = uploadProblem(file.name, bytes, POLICIES.document);
+  if (refused) fail(path, refused);
   let parsed: ParsedDocument;
   try {
     parsed = await parseDocument(bytes, file.type, file.name);

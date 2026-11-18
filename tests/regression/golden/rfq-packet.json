@@ -1,0 +1,64 @@
+{
+ "case": "rfq-packet",
+ "describe": "M-RFQ packet from a fixed manifest, requirements and file",
+ "inputs": {
+  "fab": "589b5d026032a10832869744a239e522fd40802b78347f7249a9ad1916455720"
+ },
+ "versions": {
+  "orchestrator": "@vx/orchestrator@0.0.0"
+ },
+ "output_sha256": "0f916bca3484d9b00deceaaabe98dfe4517779fdf851d27d18290acb2a29a644",
+ "output": {
+  "files": [
+   {
+    "name": "00-README.txt",
+    "sha256": "4ba6d83f7fba5b62f3cd6d99c057a1a09b94893c95e5d01491a1f260bad5410f",
+    "size": 809,
+    "source": "generated"
+   },
+   {
+    "name": "01-cover-letter.md",
+    "sha256": "eafcc266c435779d431d2a8aa4481a1e369ef59690fc531a428dfb9a43b02cfa",
+    "size": 493,
+    "source": "generated"
+   },
+   {
+    "name": "02-rfq-manifest.json",
+    "sha256": "ae60bd32f43a0baaf3b54262db98506fae57af0f60b709a86bb6dbe201106ab8",
+    "size": 740,
+    "source": "generated from the RFQ"
+   },
+   {
+    "name": "02-rfq-manifest.md",
+    "sha256": "6b3644407462097192c8c3c6ac3bb4e43f43df62f9773ec2ec4cbecb6e0d9e8d",
+    "size": 582,
+    "source": "generated from the RFQ"
+   },
+   {
+    "name": "03-nda-template.md",
+    "sha256": "bae674886fcbcdc3fac2cd8621b331eb0b26acbc6275b366a670e3fc6873034a",
+    "size": 1428,
+    "source": "template"
+   },
+   {
+    "name": "04-requirements.md",
+    "sha256": "6966c441dddbdac2badf776f6f97fe7585fd3422acdc18b079c23968b4aeb526",
+    "size": 145,
+    "source": "selected project requirements"
+   },
+   {
+    "name": "SHA256SUMS",
+    "sha256": "dda9373c79299c7ccc4eae1550f91e938ce1f9679b3c38770abdbc36c3cff0c6",
+    "size": 607,
+    "source": "generated"
+   },
+   {
+    "name": "files/timecode-fab-package-v1.zip",
+    "sha256": "589b5d026032a10832869744a239e522fd40802b78347f7249a9ad1916455720",
+    "size": 42,
+    "source": "design file timecode/fab-package v1"
+   }
+  ],
+  "sha256": "84e6c574f393d2810be18e247a26b33704a17e6bad9a57d9cf1970c12159581c"
+ }
+}

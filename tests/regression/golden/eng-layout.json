@@ -1,0 +1,291 @@
+{
+ "case": "eng-layout",
+ "describe": "KiCad layout from the offline fixture circuit (engineering-worker image)",
+ "inputs": {
+  "circuit": "5197f39e2c68f521e36ca9de36ebaf43e6bdd3e2d2ad3df338b1a1bd623c0e57",
+  "layout": "d39ed0d257886e21a1b77c7ed5c1b557a56bae772065c16505b9d308595e5fc6"
+ },
+ "versions": {
+  "vx_eng": "0.5.0",
+  "kicad": "10.0.8"
+ },
+ "output_sha256": "cb104e939e9ac02477e0885b26c703fcbd88adcecee63d53b439e339b298c4c6",
+ "output": {
+  "files": {
+   "board.dsn": "8d8b24cbee73b01d3033a1b5af8c5ff22342ea60fb43be642080c5921412e6fa",
+   "board.glb": "present",
+   "board.ses": "692ad801066a77259f11f7700f76b59621270eccafc64e1008cef9ad098bcd14",
+   "board.step": "present",
+   "bom.csv": "fb05d7b574579859f1f5f96f469d923b845d4a5b6627d4b71ef3dc8a1c3c6e47",
+   "drc-report.json": "666c6e6d51f02929f19ea7d911cec66dad28b015b6bde39b5de8f7183bab96c8",
+   "erc-report.json": "31cfe1c9b3f785bdb64ebdbe3de00b693edf67f94a3f9cf7565cb57a5404b98b",
+   "fp-lib-table": "97c1921f7e946fcd1ded45f872b8ec1bdcd87143327de71029327f17a65cd646",
+   "freerouting.log": "present",
+   "models.json": "70b3f86aaad756a90db4d7bc55a2dc0e2a4a3515ed0c2e153957b3b203f239cb",
+   "netlist.net": "be62ca0640b3e45d5a47b93cc04aac551374420dfde67274d554959a10fb0e2c",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/fp-lib-table": "97c1921f7e946fcd1ded45f872b8ec1bdcd87143327de71029327f17a65cd646",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/offline_fixture_ldo_led.kicad_pcb": "222e47ac98a85529e55d435934025aa40a6a736a248b34f2e21a1d6e0072139b",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/offline_fixture_ldo_led.kicad_pro": "2c6fdef1859e34269e0fd42cc779c325999e006a59e2b4f59e5aedac5d638538",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/offline_fixture_ldo_led.kicad_sch": "ebdd445f413c265f4078b471713ea712dbc13e58bdde4ed1ecafefd01e1a6b32",
+   "offline_fixture_ldo_led-kicad-project.zip!/offline_fixture_ldo_led/sym-lib-table": "f841a429d3cc7091364b62d00ccdb38375d6acc5cee46f8fed22be2b73b93fae",
+   "offline_fixture_ldo_led.kicad_pcb": "222e47ac98a85529e55d435934025aa40a6a736a248b34f2e21a1d6e0072139b",
+   "offline_fixture_ldo_led.kicad_prl": "5ef4699422fcbee94be843fa39d1cdf07c376cff5895b60dddb53e8ccf5a17f3",
+   "offline_fixture_ldo_led.kicad_pro": "2c6fdef1859e34269e0fd42cc779c325999e006a59e2b4f59e5aedac5d638538",
+   "offline_fixture_ldo_led.kicad_sch": "ebdd445f413c265f4078b471713ea712dbc13e58bdde4ed1ecafefd01e1a6b32",
+   "pcb-bottom.svg": "e0ac7d91307a67b4e8ff97987fd2718f0843d5f20a5d1d5e82f953d96a7be8d3",
+   "pcb-top.svg": "d599be77977ef2fb80d4a835ba8ffde6ba37aa0d5985ce7da3cf7edc4314bbfc",
+   "pcb.pdf": "present",
+   "render-bottom.png": "present",
+   "render-iso.png": "present",
+   "render-top.png": "present",
+   "schematic.pdf": "present",
+   "schematic.svg": "67ff3e61e8627ad53f083495184f702fb3fd7e9f9e2f0c72bc988006ac92a1c3",
+   "sym-lib-table": "f841a429d3cc7091364b62d00ccdb38375d6acc5cee46f8fed22be2b73b93fae"
+  },
+  "result": {
+   "board": {
+    "copper_layers": 2,
+    "fab_profile": {
+     "assembly": true,
+     "clearance_mm": 0.2,
+     "copper_edge_clearance_mm": 0.3,
+     "copper_oz": 1,
+     "description": "JLCPCB standard 2-layer, 1.6 mm FR-4, 1 oz copper",
+     "finish": "HASL (lead-free)",
+     "house": "jlcpcb",
+     "layers": 2,
+     "mask": "green",
+     "max_board_mm": 400,
+     "min_board_mm": 10,
+     "min_clearance_mm": 0.127,
+     "min_hole_mm": 0.3,
+     "min_track_mm": 0.127,
+     "min_via_diameter_mm": 0.6,
+     "min_via_drill_mm": 0.3,
+     "name": "jlcpcb-2layer-standard",
+     "power_track_mm": 0.5,
+     "silkscreen": "white",
+     "thickness_mm": 1.6,
+     "track_mm": 0.25,
+     "via_diameter_mm": 0.6,
+     "via_drill_mm": 0.3
+    },
+    "footprints": 10,
+    "height_mm": 22,
+    "nets": 5,
+    "thickness_mm": 1.6,
+    "width_mm": 34,
+    "zones": 2
+   },
+   "drc": {
+    "errors": 0,
+    "parity": 0,
+    "unconnected": 0,
+    "violations": [],
+    "waived": 0,
+    "warnings": 0
+   },
+   "erc": {
+    "errors": 0,
+    "violations": [],
+    "warnings": 0
+   },
+   "export_errors": null,
+   "generator_version": "0.5.0",
+   "kicad_version": "10.0.8",
+   "models": {
+    "found": 0,
+    "missing": [
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "model": "Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+      "ref": "C1",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+      "status": "missing"
+     },
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "model": "Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+      "ref": "C2",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+      "status": "missing"
+     },
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "LED_SMD:LED_0603_1608Metric",
+      "model": "LED_SMD.3dshapes/LED_0603_1608Metric.step",
+      "ref": "D1",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/LED_SMD.3dshapes/LED_0603_1608Metric.step",
+      "status": "missing"
+     },
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "model": "Connector_PinHeader_2.54mm.3dshapes/PinHeader_1x02_P2.54mm_Vertical.step",
+      "ref": "J1",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/Connector_PinHeader_2.54mm.3dshapes/PinHeader_1x02_P2.54mm_Vertical.step",
+      "status": "missing"
+     },
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "model": "Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+      "ref": "R1",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+      "status": "missing"
+     },
+     {
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1029)>",
+      "footprint": "Package_TO_SOT_SMD:SOT-23-5",
+      "model": "Package_TO_SOT_SMD.3dshapes/SOT-23-5.step",
+      "ref": "U1",
+      "source": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/Package_TO_SOT_SMD.3dshapes/SOT-23-5.step",
+      "status": "missing"
+     }
+    ],
+    "tag": "10.0.8",
+    "total": 6
+   },
+   "netlist": {
+    "match": true,
+    "missing": [],
+    "nets": 4,
+    "unexpected": []
+   },
+   "ok": true,
+   "placement": {
+    "courtyards": {
+     "C1": {
+      "sides": [
+       "top"
+      ],
+      "x0": 9.22,
+      "x1": 10.78,
+      "y0": 9.47,
+      "y1": 12.53
+     },
+     "C2": {
+      "sides": [
+       "top"
+      ],
+      "x0": 20.22,
+      "x1": 21.78,
+      "y0": 9.47,
+      "y1": 12.53
+     },
+     "D1": {
+      "sides": [
+       "top"
+      ],
+      "x0": 28.22,
+      "x1": 29.78,
+      "y0": 9.47,
+      "y1": 12.53
+     },
+     "H1": {
+      "sides": [
+       "bottom",
+       "top"
+      ],
+      "x0": 0.01,
+      "x1": 6.99,
+      "y0": 0,
+      "y1": 7
+     },
+     "H2": {
+      "sides": [
+       "bottom",
+       "top"
+      ],
+      "x0": 27.01,
+      "x1": 33.99,
+      "y0": 0,
+      "y1": 7
+     },
+     "H3": {
+      "sides": [
+       "bottom",
+       "top"
+      ],
+      "x0": 0.01,
+      "x1": 6.99,
+      "y0": 15,
+      "y1": 22
+     },
+     "H4": {
+      "sides": [
+       "bottom",
+       "top"
+      ],
+      "x0": 27.01,
+      "x1": 33.99,
+      "y0": 15,
+      "y1": 22
+     },
+     "J1": {
+      "sides": [
+       "bottom",
+       "top"
+      ],
+      "x0": 2.19,
+      "x1": 5.81,
+      "y0": 7.89,
+      "y1": 14.06
+     },
+     "R1": {
+      "sides": [
+       "top"
+      ],
+      "x0": 24.22,
+      "x1": 25.78,
+      "y0": 9.47,
+      "y1": 12.53
+     },
+     "U1": {
+      "sides": [
+       "top"
+      ],
+      "x0": 13.41,
+      "x1": 17.59,
+      "y0": 9.25,
+      "y1": 12.75
+     }
+    },
+    "density": 0.336,
+    "ok": true,
+    "problems": [],
+    "stage": "placement",
+    "warnings": []
+   },
+   "problems": [],
+   "project": "offline_fixture_ldo_led",
+   "routing": {
+    "ground_pour": {
+     "layers": [
+      "F.Cu",
+      "B.Cu"
+     ],
+     "net": "GND"
+    },
+    "length_mm": 64,
+    "power_nets": [
+     "+3V3",
+     "GND",
+     "VIN"
+    ],
+    "router": "freerouting",
+    "segments": 35,
+    "solid_zone_connections": [],
+    "vias": 1,
+    "widths_mm": [
+     0.25,
+     0.375,
+     0.5
+    ]
+   },
+   "stage": "built"
+  }
+ }
+}

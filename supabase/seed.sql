@@ -24,3 +24,7 @@ insert into public.tool_capabilities (tool_name, operation, deployment_mode, not
   ('threejs',   'step_render',           'browser',       'occt-import-js or server-side STEP to glTF'),
   ('flux',      'project_export',        'manual',        'Confirm what the account can export')
 on conflict (tool_name, operation) do nothing;
+
+-- Local development only: the key the web server signs assistant answers with (G6). Production sets its own with
+-- scripts/set-assistant-key.sh and never uses this value.
+select public.set_assistant_signing_key('local-dev-assistant-signing-key-not-for-production');

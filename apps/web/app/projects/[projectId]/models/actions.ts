@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeManufacturer, normalizeMpn } from "@vx/integrations";
 import { fail, requireUser } from "@/lib/auth";
+import { POLICIES, uploadProblem } from "@/lib/uploads";
 
 const MAX_BYTES = 24 * 1024 * 1024;   // under the server-action body limit (next.config.ts); larger files go by URL
 
@@ -26,6 +27,8 @@ export async function addModel(projectId: string, form: FormData) {
     if (file.size > MAX_BYTES) fail(path, "The file is larger than 24 MB: give an https URL to it instead.");
     if (!/\.(step|stp|zip)$/i.test(file.name)) fail(path, "Upload a .step, .stp or .zip file.");
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const refused = uploadProblem(file.name, bytes, POLICIES.model);
+    if (refused) fail(path, refused);
     const sha = createHash("sha256").update(bytes).digest("hex");
     originalPath = `${projectId}/models/uploads/${sha.slice(0, 16)}-${file.name.replace(/[^\w.-]/g, "_")}`;
     const { error } = await supabase.storage.from("project-files").upload(originalPath, bytes, { contentType: "application/octet-stream", upsert: true });
