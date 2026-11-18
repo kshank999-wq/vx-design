@@ -12,3 +12,4 @@ export * from "./power.ts";
 export * from "./enclosure.ts";
 export * from "./concept.ts";
 export * from "./flux-history.ts";
+export * from "./test-drafts.ts";

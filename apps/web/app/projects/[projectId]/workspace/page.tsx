@@ -32,10 +32,17 @@ export default async function WorkspacePage({ params, searchParams }: {
   const { supabase, userId } = await requireUser();
   const ctx = await loadContext(supabase, projectId);
   if (!ctx) notFound();
-  const [{ data: me }, { data: messages }] = await Promise.all([
+  const [{ data: me }, { data: messages }, { data: verification }, { data: openFaults }] = await Promise.all([
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("project_messages").select("id, author_kind, body, data, created_at").eq("project_id", projectId).order("id").limit(200),
+    supabase.rpc("requirement_verification", { p_project_id: projectId }),
+    supabase.from("faults").select("id").eq("project_id", projectId).in("status", ["open", "corrected"]),
   ]);
+  // S6: build and validation, summarised from the verification matrix.
+  const vm = (verification ?? []) as { status: string }[];
+  const vVerified = vm.filter((x) => x.status === "verified").length, vFailing = vm.filter((x) => x.status === "failing").length;
+  const vTested = vm.some((x) => x.status !== "no_procedure" && x.status !== "not_tested");
+  const valStep = !vm.length || !vTested ? "draft" : vFailing || (openFaults ?? []).length ? "blocked" : vVerified === vm.length ? "complete" : "running";
   const role = me?.role ?? "viewer";
   const canDecide = ["owner", "reviewer", "client"].includes(role);
   const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
@@ -191,6 +198,14 @@ export default async function WorkspacePage({ params, searchParams }: {
             );
           })}
           {!ctx.tasks.length && <li className="muted small">The engineering steps appear once the plan is approved.</li>}
+          <li className={`check check-${valStep}`} data-status={valStep} data-testid="validation-step">
+            <span className="check-icon" aria-hidden>{ICON[valStep]}</span>
+            <div>
+              <div><Link href={`/projects/${projectId}/validation`}>Build and validation</Link></div>
+              <div className="small muted">{!vTested ? "No hardware tests recorded yet"
+                : `${vVerified} of ${vm.length} requirement(s) verified by test${vFailing ? `; ${vFailing} failing` : ""}${(openFaults ?? []).length ? `; ${(openFaults ?? []).length} fault(s) open` : ""}`}</div>
+            </div>
+          </li>
         </ol>
       </aside>
     </main>

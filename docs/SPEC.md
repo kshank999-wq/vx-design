@@ -115,7 +115,7 @@ Later testbeds are VC Composer external processing hardware and VC Film Studio s
 | S3 | Detailed design | Schematics, verified symbols and footprints, PCB layout with DRC and ERC, firmware architecture, MCAD assembly, harness drawings, thermal checks | **Partial**: schematic + ERC (G3), PCB + DRC + 3D (G4). MCAD is M-ENC. Firmware architecture uses briefs. |
 | S4 | Sourcing & DFM | Approved vendor list, sourced BOM with alternates, stackup, placement and export files, manufacturing constraints | **Partial**: sourced BOM (M-SRC) and fab package (G4.5) built; vendor list planned |
 | S5 | Prototype packages & RFQs | Manufacturer-specific STEP/STL/DXF/Gerber/ODB++/IPC-2581, BOM/CPL, drawings, tolerances, inspection plan, NDA and RFQ packets | **Partial**: fab package (G4.5) and NDA/RFQ packets with disclosure approval (M-RFQ) built; manufacturer-specific formats and inspection plans planned |
-| S6 | Build & validation | Incoming inspection, bring-up, test logs, fault corrections, firmware validation, fit and finish, environmental tests | **Planned**: evidence capture (`test_results`) |
+| S6 | Build & validation | Incoming inspection, bring-up, test logs, fault corrections, firmware validation, fit and finish, environmental tests | **Built** (evidence capture): units traced to the fab package; versioned test procedures drafted from requirement limits and approved by a reviewer; immutable runs with conditions, calibrated equipment, measurements and attachments, pass/fail computed from the approved limits; faults opened by failures and closed only by a passing retest; requirement verification matrix. Firmware and environmental test execution stay manual. |
 | S7 | Compliance & production | Lab and regulatory assessment, pilot run, production test jig, revision lock, QC and traceability, released files | **Planned**: tracking only, never certification |
 | S8 | Lifecycle | PCN and EOL tracking, redesign impact, substitute qualification, revisions, vendor performance, cost history | **Planned** |
 
@@ -144,7 +144,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Next:** S6 evidence capture, deployment (Vercel, Supabase project, worker host).
+**Next:** deployment (Vercel, Supabase project, worker host).
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;
@@ -272,7 +272,7 @@ Retrieval-augmented generation is used, not fine-tuning, for v1.
 | process_rules | process, material, capability envelope, tolerances, thickness, finish, verified_at | New. Starts from `vx_eng/fab.py`'s fab profiles. |
 | requirements | project, constraint, priority, acceptance test, provenance, approval status | **Exists** (with citations) |
 | design_revisions | project, rev, CAD artifacts, suppliers, results, sign-offs | Covered by `plans`, `artifact_versions`, `approvals` and `audit_events`. A release/revision view is planned. |
-| test_results | prototype serial, rev, procedure, conditions, measurement, limit, pass/fail, attachment | New (S6) |
+| test_results | prototype serial, rev, procedure, conditions, measurement, limit, pass/fail, attachment | Exists (S6): `units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults` |
 
 **Licensing rules:**
 - A URL is not permission to download, republish or train on a document.
@@ -692,7 +692,6 @@ Implementation notes:
 **v1.1 data changes, planned:**
 - `tasks.stage` (S0–S8);
 - the knowledge catalogs (§8);
-- `test_results`;
 - `offers`;
 - `process_rules` (`manufacturers` built in M-RFQ);
 - per-part licence and provenance fields.

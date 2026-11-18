@@ -206,3 +206,8 @@ code { font-size: 12px; word-break: break-all; }
 .pill-conf-medium { background: var(--warn-bg); color: var(--warn); }
 .pill-conf-low { background: var(--error-bg); color: var(--danger); }
 label.radio { flex-direction: row; align-items: center; color: var(--fg); }
+
+/* Validation */
+.pill-verdict-pass, .pill-unit-passed, .pill-unit-reworked { background: var(--ok-bg); }
+.pill-verdict-fail, .pill-unit-failed { background: var(--error-bg); color: var(--danger); }
+.pill-verdict-incomplete, .pill-verdict-missing, .pill-unit-in_test { background: var(--warn-bg); color: var(--warn); }

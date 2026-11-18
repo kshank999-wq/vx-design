@@ -736,6 +736,43 @@ pnpm test:e2e:optimize               # browser: run, review, accept with confirm
 
 Screenshots: `docs/optimize/screens`.
 
+## S6: build and validation evidence
+
+Project page → **Validation**: prototype units, test procedures, recorded results with their evidence, and faults
+through to a verified fix. Members (clients included) can read everything. Owners and engineers register units,
+write procedures, attach evidence and handle faults. Owners and reviewers approve procedures. Reviewers may also
+record tests. **Test evidence is not certification** (§15).
+
+- **Units**: serial, board revision, the committed fab package or board they were built from, lot, assembler.
+  Status follows the results (built → in test → passed/failed → reworked).
+- **Procedures** (`TP-NNN`, versioned): stage, setup, steps, and measurements with limits (min/max, expected
+  value or yes/no), each tied to a requirement with a stated basis. **Draft from requirements** writes one draft
+  per untested requirement, with limits read from the requirement text ("between 3.2 V and 3.4 V", "at most 50 uA",
+  "3.3 ± 0.1 V") and cited; with no number, a yes/no check of the acceptance criteria. Approved versions are frozen; a
+  change is a new version.
+- **Runs**: a unit, an approved procedure, conditions (temperature, supply, firmware), equipment with calibration
+  dates and values (typed or pasted as `key,value` lines). **Pass/fail is computed in the database from the
+  approved limits**, never typed. Runs, measurements and evidence are immutable, even to the service role. A
+  mistake is fixed by a new run that supersedes the old one.
+- **Evidence**: scope captures, photos, logs, attached to a run under `{project}/evidence/{run}/`, with SHA-256,
+  scanned like other uploads.
+- **Faults**: a failing run opens one automatically. Root cause and correction (rework, design change, firmware,
+  component, procedure) move it to *corrected*. *Verified* needs a later passing run of the same procedure on the
+  same unit. *Won't fix* is owner-only, with a note.
+- **Verification matrix**: per requirement, the procedures and the units passing, failing or incomplete on their
+  latest run. Status: verified by test, failing, incomplete, not tested, or no approved procedure. The workspace
+  checklist shows a *Build and validation* step from it.
+
+Every step is written to the audit trail.
+
+```bash
+pnpm --filter @vx/planning test       # limits read from requirement text, procedure drafts
+./scripts/test-db.sh                  # validation_test: roles, frozen procedures, computed verdicts, immutability, faults, matrix
+pnpm test:e2e:validation              # browser: units, draft/approve, pass + evidence, fail → fault → rework → retest → verified
+```
+
+Screenshots: `docs/validation/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -743,7 +780,8 @@ Screenshots: `docs/optimize/screens`.
 `artifact_versions`, `task_artifacts`, `validations`, `tool_capabilities`, `cost_events`,
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
-`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`
+`manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
+`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

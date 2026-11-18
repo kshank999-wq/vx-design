@@ -52,13 +52,13 @@ select pg_temp.none('trigger functions users can call directly',
      and p.prorettype = 'trigger'::regtype and has_function_privilege('authenticated', p.oid, 'execute')$$);
 select pg_temp.none('worker-only functions users can call',
   $$select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'
-     and (p.proname ~ '^(claim|complete|reap|heartbeat|yield|acquire|release|record|worker|set_assistant)_' or p.proname in ('add_scratch_version', 'begin_validation'))
+     and (p.proname ~ '^(claim|complete|reap|heartbeat|yield|acquire|release|worker|set_assistant)_' or p.proname in ('add_scratch_version', 'begin_validation', 'record_cost', 'record_file_scan', 'record_part'))
      and has_function_privilege('authenticated', p.oid, 'execute')$$);
 -- Every SECURITY DEFINER function a user can call must check who is calling (or be a pure check about the caller).
 select pg_temp.none('SECURITY DEFINER functions callable by users with no authorization check',
   $$select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'execute')
-     and p.prosrc !~ '(has_project_role|is_project_member|is_project_staff|is_knowledge_editor|is_directory_user|kb_can_write|auth\.uid\(\)|confirmed_email|rfq_for_staff|flux_audit_for_staff|rfq_recipient_for_supplier)'$$);
+     and p.prosrc !~ '(has_project_role|is_project_member|is_project_staff|is_knowledge_editor|is_directory_user|kb_can_write|auth\.uid\(\)|confirmed_email|rfq_for_staff|flux_audit_for_staff|rfq_recipient_for_supplier|need_role)'$$);
 
 -- 3. Fixed leaks (z: signed in, member of nothing).
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ff', 'zed@outside.test');
