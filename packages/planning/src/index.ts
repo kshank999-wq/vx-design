@@ -16,3 +16,4 @@ export * from "./test-drafts.ts";
 export * from "./feasibility.ts";
 export * from "./trade-study.ts";
 export * from "./compliance.ts";
+export * from "./lifecycle.ts";

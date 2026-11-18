@@ -14,12 +14,15 @@ export default async function SupplierPage({ params, searchParams }: {
   const { manufacturerId: id } = await params;
   const { error, notice, edit, template } = await searchParams;
   const { supabase } = await requireUser();
-  const [{ data: m }, { data: contacts }, { data: editor }, { data: rules }] = await Promise.all([
+  const [{ data: m }, { data: contacts }, { data: editor }, { data: rules }, { data: perf }] = await Promise.all([
     supabase.from("manufacturers").select("*").eq("id", id).maybeSingle(),
     supabase.from("manufacturer_contacts").select("*").eq("manufacturer_id", id).order("created_at"),
     supabase.rpc("is_knowledge_editor"),
     supabase.from("process_rules").select("*").eq("manufacturer_id", id).order("process"),
+    supabase.rpc("vendor_performance", { p_manufacturer: id }),
   ]);
+  const vp = (perf ?? {}) as Record<string, number | null>;
+  const pct = (n: number | null | undefined, d: number | null | undefined) => (d ? `${Math.round((100 * (n ?? 0)) / d)}%` : "—");
   if (!m) notFound();
   const certs = (m.certifications ?? []) as { name: string; evidence: string | null }[];
 
@@ -61,6 +64,18 @@ export default async function SupplierPage({ params, searchParams }: {
         {m.status !== "inactive"
           ? <form action={setManufacturerStatus.bind(null, id, "inactive")}><SubmitButton variant="secondary" pendingText="…">Mark inactive</SubmitButton></form>
           : <form action={setManufacturerStatus.bind(null, id, "candidate")}><SubmitButton variant="secondary" pendingText="…">Reactivate as candidate</SubmitButton></form>}
+      </section>
+
+      <section>
+        <h2>Performance</h2>
+        <p className="small muted">From your projects&apos; records: RFQ responses, production lots, inspections and delivery dates. Projects you are not on are not counted.</p>
+        <dl className="facts" data-testid="vendor-performance">
+          <dt>RFQs</dt><dd>{vp.rfqs_invited ?? 0} invited, {vp.rfqs_quoted ?? 0} quoted, {vp.rfqs_declined ?? 0} declined, {vp.awards ?? 0} awarded
+            {vp.median_lead_days != null && `; median quoted lead time ${vp.median_lead_days} days`}</dd>
+          <dt>Lots</dt><dd>{vp.lots ?? 0} built, {vp.lots_accepted ?? 0} accepted, {vp.lots_rejected ?? 0} rejected</dd>
+          <dt>Inspection</dt><dd>{vp.units_inspected ? `${vp.defects} defect(s) in ${vp.units_inspected} inspected (${pct(vp.defects, vp.units_inspected)})` : "no inspections"}</dd>
+          <dt>On time</dt><dd>{vp.deliveries ? `${vp.on_time} of ${vp.deliveries} lot(s) (${pct(vp.on_time, vp.deliveries)})` : "no delivery dates recorded"}</dd>
+        </dl>
       </section>
 
       <ProcessRules manufacturerId={id} rows={rules ?? []} editor={!!editor} editProcess={edit} template={template} />

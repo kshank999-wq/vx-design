@@ -55,3 +55,10 @@ export async function setLotStatus(projectId: string, lotId: string, form: FormD
   if (error) fail(base(projectId, lotId), error);
   go(base(projectId, lotId), `Lot ${status.replace("_", " ")}.`);
 }
+
+export async function setDelivery(projectId: string, lotId: string, form: FormData) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("set_lot_delivery", { p_lot: lotId, p_promised_on: str(form, "promised_on") || null, p_delivered_on: str(form, "delivered_on") || null });
+  if (error) fail(base(projectId, lotId), error);
+  go(base(projectId, lotId), "Delivery dates saved.");
+}

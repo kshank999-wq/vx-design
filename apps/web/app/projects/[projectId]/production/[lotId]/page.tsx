@@ -4,7 +4,7 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { LOT_STATUS, lotCode, pct, type LotSummary } from "@/lib/production";
-import { addUnits, recordInspection, setLotStatus } from "../actions";
+import { addUnits, recordInspection, setDelivery, setLotStatus } from "../actions";
 
 export default async function LotPage({ params, searchParams }: {
   params: Promise<{ projectId: string; lotId: string }>; searchParams: Promise<{ error?: string; notice?: string }>;
@@ -51,9 +51,19 @@ export default async function LotPage({ params, searchParams }: {
         <dt>Kind</dt><dd>{l.kind}, {l.quantity} units{maker && <>, built by {maker}</>}</dd>
         <dt>Revision</dt><dd><Link href={`/projects/${projectId}/releases/${rel.id}`}>Rev {rel.revision}</Link>{rel.status !== "released" && <strong> (this release is {rel.status})</strong>}</dd>
         <dt>Production test</dt><dd>{proc ? <Link href={`/projects/${projectId}/validation/procedures/${proc.id}`}>{proc.code} v{proc.version} {proc.title}</Link> : "none set"}</dd>
+        <dt>Delivery</dt><dd data-testid="lot-delivery">{l.promised_on ? `promised ${l.promised_on}` : "no promised date"}{l.delivered_on ? `, delivered ${l.delivered_on}${l.promised_on ? (l.delivered_on <= l.promised_on ? " (on time)" : " (late)") : ""}` : ""}</dd>
         <dt>Sampling plan</dt><dd>inspect {l.sample_size}, accept with at most {l.accept_max_defects} defect(s)</dd>
         {l.status_note && <><dt>Note</dt><dd>{l.status_note}</dd></>}
       </dl>
+      {canEdit && (
+        <details className="small"><summary>Delivery dates</summary>
+          <form action={setDelivery.bind(null, projectId, lotId)} className="row tight">
+            <label className="inline">Promised<input name="promised_on" type="date" defaultValue={l.promised_on ?? ""} aria-label="Promised date" /></label>
+            <label className="inline">Delivered<input name="delivered_on" type="date" defaultValue={l.delivered_on ?? ""} aria-label="Delivered date" /></label>
+            <SubmitButton variant="secondary" pendingText="…">Save dates</SubmitButton>
+          </form>
+        </details>
+      )}
       <p data-testid="lot-summary">{s.units} unit(s) registered{s.scrapped ? `, ${s.scrapped} scrapped` : ""}. Production test: {s.tested} tested, {s.passing} passing,
         {" "}{s.failing} failing; first-pass yield {pct(s.first_pass, s.tested)}.</p>
 

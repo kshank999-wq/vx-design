@@ -6,6 +6,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { lotCode, RELEASE_STATUS, type ManifestFile, type ReadinessItem } from "@/lib/production";
 import { committedFiles } from "@/lib/releases";
+import { diffBoms, diffManifests } from "@vx/planning";
+import { bomLineFacts, readSourcedBom } from "@/lib/lifecycle";
 import { issueRelease, saveRelease, withdrawRelease } from "../actions";
 
 export default async function ReleasePage({ params, searchParams }: {
@@ -28,6 +30,15 @@ export default async function ReleasePage({ params, searchParams }: {
   const blocks = readiness.filter((x) => x.severity === "block");
   const files = draft && canEdit ? await committedFiles(supabase, projectId) : [];
   const manifest = (r.manifest ?? []) as ManifestFile[];
+  // Changes from the previous issued release: files by name, and the BOM by reference designator.
+  const { data: prev } = draft ? { data: null } : await supabase.from("releases").select("id, revision, manifest").eq("project_id", projectId)
+    .in("status", ["released", "superseded", "withdrawn"]).not("manifest", "is", null).lt("release_no", r.release_no).order("release_no", { ascending: false }).limit(1).maybeSingle();
+  const prevManifest = (prev?.manifest ?? []) as ManifestFile[];
+  const fileDiff = prev ? diffManifests(prevManifest, manifest) : null;
+  const bomOf = (m: ManifestFile[]) => m.find((f) => f.kind === "bom" && f.artifact.endsWith("/sourced-bom"));
+  const [bomA, bomB] = prev && bomOf(prevManifest) && bomOf(manifest) && bomOf(prevManifest)!.sha256 !== bomOf(manifest)!.sha256
+    ? await Promise.all([readSourcedBom(supabase, bomOf(prevManifest)!.path), readSourcedBom(supabase, bomOf(manifest)!.path)]) : [null, null];
+  const bomDiff = bomA && bomB ? diffBoms(bomLineFacts(bomA), bomLineFacts(bomB)) : null;
 
   return (
     <main>
@@ -85,6 +96,23 @@ export default async function ReleasePage({ params, searchParams }: {
             ))}</tbody>
           </table>
           <p className="small">Manifest sha256 <code data-testid="manifest-sha">{r.manifest_sha256}</code>, released {new Date(r.released_at!).toLocaleString()}.</p>
+          {fileDiff && prev && (
+            <>
+              <h2>Changes from Rev {prev.revision}</h2>
+              <ul className="small" data-testid="release-changes">
+                {fileDiff.changed.map((c) => <li key={c.artifact}>changed: {c.artifact} v{c.from} → v{c.to}</li>)}
+                {fileDiff.added.map((c) => <li key={c.artifact}>added: {c.artifact} v{c.version}</li>)}
+                {fileDiff.removed.map((c) => <li key={c.artifact}>removed: {c.artifact} v{c.version}</li>)}
+                {fileDiff.unchanged > 0 && <li className="muted">{fileDiff.unchanged} file(s) unchanged</li>}
+              </ul>
+              {bomDiff && <>
+                <h3>BOM changes</h3>
+                <ul className="small" data-testid="bom-changes">{bomDiff.map((d, i) => (
+                  <li key={i}>{d.refs.join(", ")}: {d.kind === "added" ? `added ${d.to}` : d.kind === "removed" ? `removed ${d.from}` : `${d.from} → ${d.to}`}</li>
+                ))}{!bomDiff.length && <li className="muted">No part changes (prices or stock only).</li>}</ul>
+              </>}
+            </>
+          )}
           <h2>Production lots</h2>
           <ul className="list small">{(lots ?? []).map((l) => (
             <li key={l.id}><Link href={`/projects/${projectId}/production/${l.id}`}>{lotCode(l.lot_no)}</Link> {l.kind}, {l.quantity} units, {l.status.replace("_", " ")}</li>

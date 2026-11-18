@@ -971,6 +971,77 @@ pnpm test:e2e:production          # browser: release, compliance from suggestion
 
 Screenshots: `docs/production/screens`.
 
+## S8: lifecycle
+
+Project page → **Lifecycle**. All ratings are calculated in `@vx/planning` (`lifecycle.ts`) from catalog records,
+with no model, and every rating lists its reasons.
+
+**Watch.**
+- **Loading.** **Load the BOM** reads the latest committed sourced BOM and matches each line to the parts catalog. A
+  newer committed BOM is offered as a reload.
+- **Risk per part:** high, medium, low or clear, with reasons. The inputs are:
+  - **lifecycle:** obsolete, last-time buy, not recommended for new designs, or unknown;
+  - **notices:** end-of-life notices with the days left to the last order, change notices from the last 180 days,
+    counterfeit alerts;
+  - **stock:** distributor stock against the need (quantity per board × the intake's build quantity), and how many
+    distributors hold it;
+  - **price:** a rise of 25% or more since the first observation.
+- **Fixture data.** Made-up distributor data is labelled.
+
+**Notices.**
+- **Recording.** Product change (PCN), end-of-life, last-time-buy and counterfeit notices are recorded per part, with
+  a source link or note.
+- **Shared.** Notices are shared with every project using the part, and cannot be edited.
+- **Effect on the catalog.** An end-of-life notice moves the part's catalog lifecycle. Any lifecycle change in
+  distributor data is recorded automatically as a notice.
+
+**Cases.**
+- **Opening.** A risk opens a case: one open case per part, assessed for impact.
+- **Resolving.** Owners and reviewers resolve a case with one of:
+  - a qualified substitute;
+  - a last-time buy (with the quantity);
+  - a redesign;
+  - an accepted risk;
+  - not affected.
+- **Recorded as a decision.** The resolution becomes a project decision. Its evidence is a hardware test when the
+  substitute was bench-tested.
+
+**Substitutes.**
+- **Proposing.** Typed in, or picked from the sourced BOM's alternates.
+- **Checks.** Five, each pass, fail or not applicable, always with a basis:
+  - footprint and pin-out;
+  - electrical ratings;
+  - temperature and environment;
+  - supply;
+  - test, where a pass names a passing S6 test run.
+- **Qualifying.** Needs every check done, none failed, and pin-out and electrical passing.
+
+**Revisions and cost.**
+- **Release changes.** A release page shows what changed from the previous release: files changed, added or
+  removed, and the BOM by reference designator (e.g. "U1: AP2112K → TLV75533").
+- **Cost history.** Lists every committed sourced BOM's per-board cost, with the release that used it.
+- **Price history.** Each part's price history is the best unit price at the build quantity on each day offers were
+  observed.
+
+**Supplier performance.**
+- Each supplier's page shows, from the projects you are on:
+  - RFQs invited, quoted, declined and awarded, and the median quoted lead time;
+  - lots built, accepted and rejected;
+  - the inspection defect rate;
+  - on-time delivery, from the promised and delivered dates now recorded on each lot.
+
+**S8 stage gate.** The S8 sign-off waits for a loaded BOM and no unresolved lifecycle cases.
+
+Lifecycle data refreshes when sourcing is re-run, which needs distributor keys. There is no scheduled re-check yet.
+
+```bash
+pnpm --filter @vx/planning test   # part risk, price breaks and history, file and BOM diffs
+./scripts/test-db.sh              # lifecycle_test: BOM loading, notices, cases, substitutes, decisions, S8 blockers
+pnpm test:e2e:lifecycle           # browser: watch, EOL notice, case + qualified substitute, BOM change, supplier record
+```
+
+Screenshots: `docs/lifecycle/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -980,7 +1051,8 @@ Screenshots: `docs/production/screens`.
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
 `units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`,
-`releases`, `compliance_items`, `compliance_results`, `production_lots`, `lot_inspections`
+`releases`, `compliance_items`, `compliance_results`, `production_lots`, `lot_inspections`, `part_notices`, `project_bom_parts`,
+`lifecycle_cases`, `substitutes`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
