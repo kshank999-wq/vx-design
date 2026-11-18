@@ -37,6 +37,7 @@
     "test:e2e:security": "./scripts/test-e2e-security.sh",
     "test:e2e:optimize": "./scripts/test-e2e-optimize.sh",
     "test:e2e:validation": "./scripts/test-e2e-validation.sh",
+    "test:e2e:quotas": "./scripts/test-e2e-quotas.sh",
     "check:integrity": "./scripts/check-integrity.sh",
     "drill:backup": "./scripts/backup-drill.sh",
     "test:regression": "node tests/regression/run.ts",

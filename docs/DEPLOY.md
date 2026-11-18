@@ -45,7 +45,10 @@ These are yours to make before deployment:
    SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... ./scripts/set-assistant-key.sh
    ```
 
-5. Optional: require a clean virus scan before anyone can open an uploaded file (once ClamAV runs, step 3):
+5. Put your own account (and other staff) on the unlimited plan once you have signed up. In the SQL editor:
+   `select public.set_account_plan((select id from auth.users where email = '<your email>'), 'unlimited');`
+   Review the **standard** plan's placeholder limits in `account_plans` before opening sign-ups.
+6. Optional: require a clean virus scan before anyone can open an uploaded file (once ClamAV runs, step 3):
    `update public.platform_settings set value = 'true' where key = 'require_virus_scan';` in the SQL editor.
 
 ## 2. Web app on Vercel

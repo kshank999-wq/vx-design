@@ -105,12 +105,6 @@ export class WorkerDb {
     return this.rpc<number>("reap_stale_executions", {});
   }
 
-  async activeRuns(): Promise<RunRow[]> {
-    const { data, error } = await this.client.from("runs").select("*").eq("status", "running").order("created_at");
-    if (error) throw new Error(`active runs: ${error.message}`);
-    return data as RunRow[];
-  }
-
   /** Runs that have ended (or may be about to) but have no report yet. */
   async unreportedRuns(): Promise<RunRow[]> {
     const { data, error } = await this.client.from("runs").select("*").is("report", null)
@@ -119,11 +113,12 @@ export class WorkerDb {
     return data as RunRow[];
   }
 
-  async claim(workerId: string, runId: string, leaseSeconds: number, disciplines: string[]): Promise<ExecutionRow | null> {
-    const row = await this.rpc<ExecutionRow | null>("claim_next_task", {
-      p_worker_id: workerId, p_run_id: runId, p_lease_seconds: leaseSeconds, p_disciplines: disciplines,
+  /** The next task across all running runs, shared fairly between accounts within their plan limits. */
+  async claimFair(workerId: string, leaseSeconds: number, disciplines: string[]): Promise<ExecutionRow | null> {
+    const row = await this.rpc<ExecutionRow | null>("claim_next_fair", {
+      p_worker_id: workerId, p_lease_seconds: leaseSeconds, p_disciplines: disciplines,
     });
-    return row?.id ? row : null;  // PostgREST returns an all-null row for a null composite
+    return row?.id ? row : null;
   }
 
   async checkin(workerId: string, disciplines: string[], tools: Record<string, string>): Promise<void> {

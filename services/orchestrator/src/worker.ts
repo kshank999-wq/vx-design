@@ -94,12 +94,11 @@ export class Worker {
     const reaped = await this.db.reapStale();
     if (reaped) console.log(`[${this.cfg.workerId}] reclaimed ${reaped} execution(s) from workers that stopped heartbeating`);
 
-    for (const run of await this.db.activeRuns()) {
-      while (!this.stopping && this.inflight.size < this.cfg.concurrency) {
-        const exec = await this.db.claim(this.cfg.workerId, run.id, this.cfg.leaseSeconds, this.disciplines);
-        if (!exec) break;
-        this.launch(exec);
-      }
+    // Fair queueing: each claim goes to the account (and then the run) with the fewest tasks running, within plan limits.
+    while (!this.stopping && this.inflight.size < this.cfg.concurrency) {
+      const exec = await this.db.claimFair(this.cfg.workerId, this.cfg.leaseSeconds, this.disciplines);
+      if (!exec) break;
+      this.launch(exec);
     }
     await this.finishIdleRuns();
     this.startJobs();

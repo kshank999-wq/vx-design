@@ -25,6 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/projects" className="brand">VX Design</Link>
             {email && <Link href="/knowledge" className="small">Knowledge</Link>}
             {directory && <Link href="/suppliers" className="small">Suppliers</Link>}
+            {email && <Link href="/account" className="small">Account</Link>}
             {(invites as unknown[] | null)?.length ? <Link href="/supplier" className="small">Supplier portal</Link> : null}
           </nav>
           {email && (

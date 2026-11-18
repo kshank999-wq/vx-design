@@ -144,7 +144,7 @@ Each project's plan is generated against these stages: tasks carry a `stage` alo
 
 **In scope for the in-house MVP:** everything marked Built, plus G4.5, M-SRC, M-KB, M-ENC and G5.
 
-**Deployment:** prepared and tested locally (docs/DEPLOY.md): email confirmation, uploads staged in storage (no web-server body limit), database deploy script, worker images and Compose file, smoke check. **Next:** create the hosted projects and run it.
+**Deployment:** prepared and tested locally (docs/DEPLOY.md): email confirmation, uploads staged in storage (no web-server body limit), database deploy script, worker images and Compose file, smoke check. Hosted Supabase and Vercel are set up; the worker host is waiting for an in-house machine. **Accounts:** per-account plans and quotas (projects, active runs, concurrent tasks, monthly AI/compute allowances, concept rounds) and fair queueing across accounts. Billing (Stripe) is still deferred.
 
 **Deferred:**
 - public multi-tenant SaaS, Stripe billing, transactional email (Resend), a public REST API and a marketplace;

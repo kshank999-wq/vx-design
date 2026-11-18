@@ -774,6 +774,37 @@ pnpm test:e2e:validation              # browser: units, draft/approve, pass + ev
 
 Screenshots: `docs/validation/screens`.
 
+## Accounts, quotas and fair queueing
+
+**Account** (top bar) shows the signed-in person's plan, its limits and this month's use. An account is whoever
+created a project: its plan covers all of that person's projects, whoever on the project starts the work.
+
+| Limit | Enforced |
+|---|---|
+| Projects per account | when a project is created |
+| Active runs (pending, running, paused) | when a run is authorized |
+| Tasks running at once | when a worker claims work: tasks beyond it wait in the queue |
+| Monthly AI and compute allowances (UTC calendar month, from `cost_events`) | reaching one stops the account's running runs at their next checkpoint and refuses new runs |
+| Concept rounds per month | when a round is requested |
+
+Limits are enforced by database triggers, so every path is covered. Refusals start with "Plan limit:" and say why.
+Plans live in `account_plans` (null = no limit). Accounts without a row are on **standard**, whose numbers are
+placeholders until pricing is decided. **unlimited** is for staff. Billing is not built: in the Supabase SQL editor,
+`select public.set_account_plan('<user id>', 'unlimited');` moves an account, and changing a plan's numbers applies
+to every account on it at once.
+
+**Fair queueing.** Workers claim with `claim_next_fair`, not oldest-run-first. Each claim goes to the account with
+the fewest tasks running, divided by its plan's `queue_weight` (unlimited counts double). Ties go to the account
+served least recently. Within an account, the run with the fewest tasks running goes first. A per-account lock keeps
+the limit exact when several workers claim at once.
+
+```bash
+./scripts/test-db.sh            # quotas_test: limits, refusals, spend stop, plan changes, claim order across accounts
+pnpm test:e2e:quotas            # browser: account page, a project limit as the user meets it, a plan change
+```
+
+Screenshot: `docs/quotas/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -782,7 +813,7 @@ Screenshots: `docs/validation/screens`.
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
-`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`
+`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:
