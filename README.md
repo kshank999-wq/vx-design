@@ -856,6 +856,58 @@ pnpm test:e2e:stages              # browser: intake, feasibility, S0/S1 sign-off
 
 Screenshots: `docs/stages/screens`.
 
+## Trade studies (S2) and manufacturer process rules (S4/S5)
+
+**Trade studies.** Project page → **Trade studies**: module or custom design, which part, which approach. A study
+holds a question and its options. Each criterion is one of:
+- lower is better;
+- higher is better;
+- a 1–5 rating;
+- a must-have (yes/no).
+
+Criteria are weighted 0–10. Each option's score for a criterion keeps its basis (where the number came from).
+Templates exist for *module vs custom* and *component choice*. **Fill from parts catalog** fills unit cost at the
+intake's quantity, stock and lifecycle for options with a part number, from the latest distributor offers; fixture
+data is labelled.
+
+The ranking is calculated in `@vx/planning`, with no model:
+- numeric criteria are scaled across the options, best = 1 and worst = 0;
+- ratings map 1–5 onto 0–1;
+- an option that fails a must-have is ruled out.
+
+A sensitivity note says whether halving or doubling any one weight would change the winner. Owners and reviewers
+decide with a rationale, and may choose against the ranking. The choice becomes a project decision under change
+control. Its alternatives, scores and ranking are kept as evidence, and it is marked an assumption if any hand-entered
+score has no basis. Decided studies are frozen.
+
+**Process rules.** On a supplier's page in the directory: what the supplier says it can make, per process. Each set
+of rules records its source (a capability page or a note) and the date it was read. Templates are offered for
+JLCPCB, OSH Park, and typical FDM, SLA and CNC services. A change clears the verification, and a library editor
+verifies against the source.
+
+| Process | Rules |
+|---|---|
+| Bare PCB fabrication | layer counts, track, clearance, drill, board size, thicknesses, finishes |
+| PCB assembly | smallest passive, finest pitch, BGA, parts on both sides, through-hole, board size |
+| FDM, SLA, SLS, CNC, sheet metal, molding | minimum wall, largest part, tolerance, materials |
+
+**Manufacturing fit.** Project page → **Manufacturing fit** (staff): the committed board and enclosure, measured,
+against every supplier's rules (`@vx/dfm`).
+- Board facts come from the fab package's check file and the fab profile it was built with: size, layers, track,
+  clearance, drill, thickness, finish, smallest passive, parts on both sides, through-hole, BGA.
+- Enclosure facts come from the fit report.
+- Each check shows the design's value against the limit. A result is *incomplete*, never a pass, when a value isn't
+  measured or a limit isn't stated.
+
+```bash
+pnpm --filter @vx/dfm test        # rules parsing, board/assembly/enclosure checks, unknown vs pass
+pnpm --filter @vx/planning test   # trade-study ranking, must-haves, sensitivity
+./scripts/test-db.sh              # trade_test: rules with sources and verification; study drafts, decisions, freeze
+pnpm test:e2e:trades              # browser: rules from templates, manufacturing fit, a catalog-filled study decided
+```
+
+Screenshots: `docs/trades/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -864,7 +916,7 @@ Screenshots: `docs/stages/screens`.
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
-`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`
+`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

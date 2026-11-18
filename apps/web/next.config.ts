@@ -21,7 +21,7 @@ const csp = [
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
-  transpilePackages: ["@vx/contracts", "@vx/planning", "@vx/power", "@vx/integrations", "@vx/flux", "@vx/security", "@vx/optimize"],
+  transpilePackages: ["@vx/contracts", "@vx/planning", "@vx/power", "@vx/integrations", "@vx/flux", "@vx/security", "@vx/optimize", "@vx/dfm"],
   // Document parsers run on the server only.
   serverExternalPackages: ["mammoth", "unpdf"],
   experimental: {

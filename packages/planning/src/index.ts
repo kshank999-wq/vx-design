@@ -14,3 +14,4 @@ export * from "./concept.ts";
 export * from "./flux-history.ts";
 export * from "./test-drafts.ts";
 export * from "./feasibility.ts";
+export * from "./trade-study.ts";

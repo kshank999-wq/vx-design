@@ -5,18 +5,20 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { CATEGORY_LABEL, MFR_STATUS, NDA_METHODS } from "@/lib/rfq";
 import { ManufacturerFields } from "@/components/Suppliers";
+import { ProcessRules } from "@/components/ProcessRules";
 import { addContact, removeContact, setManufacturerStatus, updateManufacturer, verifyContact, verifyManufacturer } from "../actions";
 
 export default async function SupplierPage({ params, searchParams }: {
-  params: Promise<{ manufacturerId: string }>; searchParams: Promise<{ error?: string; notice?: string }>;
+  params: Promise<{ manufacturerId: string }>; searchParams: Promise<{ error?: string; notice?: string; edit?: string; template?: string }>;
 }) {
   const { manufacturerId: id } = await params;
-  const { error, notice } = await searchParams;
+  const { error, notice, edit, template } = await searchParams;
   const { supabase } = await requireUser();
-  const [{ data: m }, { data: contacts }, { data: editor }] = await Promise.all([
+  const [{ data: m }, { data: contacts }, { data: editor }, { data: rules }] = await Promise.all([
     supabase.from("manufacturers").select("*").eq("id", id).maybeSingle(),
     supabase.from("manufacturer_contacts").select("*").eq("manufacturer_id", id).order("created_at"),
     supabase.rpc("is_knowledge_editor"),
+    supabase.from("process_rules").select("*").eq("manufacturer_id", id).order("process"),
   ]);
   if (!m) notFound();
   const certs = (m.certifications ?? []) as { name: string; evidence: string | null }[];
@@ -60,6 +62,8 @@ export default async function SupplierPage({ params, searchParams }: {
           ? <form action={setManufacturerStatus.bind(null, id, "inactive")}><SubmitButton variant="secondary" pendingText="…">Mark inactive</SubmitButton></form>
           : <form action={setManufacturerStatus.bind(null, id, "candidate")}><SubmitButton variant="secondary" pendingText="…">Reactivate as candidate</SubmitButton></form>}
       </section>
+
+      <ProcessRules manufacturerId={id} rows={rules ?? []} editor={!!editor} editProcess={edit} template={template} />
 
       <h2>Contacts</h2>
       <table data-testid="contacts">

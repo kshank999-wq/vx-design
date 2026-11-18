@@ -29,6 +29,9 @@ importers:
       '@vx/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@vx/dfm':
+        specifier: workspace:*
+        version: link:../../packages/dfm
       '@vx/flux':
         specifier: workspace:*
         version: link:../../packages/flux
@@ -72,6 +75,8 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  packages/dfm: {}
 
   packages/flux:
     dependencies:
