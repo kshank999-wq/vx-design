@@ -908,6 +908,69 @@ pnpm test:e2e:trades              # browser: rules from templates, manufacturing
 
 Screenshots: `docs/trades/screens`.
 
+## S7: compliance and production tracking
+
+Tracking only. VX Design records what labs and inspectors report, with their files. It never certifies a product or
+says that one complies.
+
+**Compliance.** Project page → **Compliance**.
+- **Suggestions.** `suggestCompliance` in `@vx/planning` works out the regimes that probably apply from the intake:
+  markets, radios, power source and intended use. Each suggestion names the intake fact that triggered it.
+  - Examples: FCC Part 15B and 15C, ISED, the EU Radio Equipment Directive or the EMC and Low Voltage directives,
+    RoHS, WEEE, REACH, the EU Battery Regulation, UK, RCM, Japan radio, UN 38.3 and IEC 62133-2.
+  - Cellular, children's and medical uses are flagged.
+  - Missing facts are listed as gaps, not guessed.
+  - It is a starting list to confirm with a test lab.
+- **Progress and results.** Items move through identified → in progress → at the lab. A lab result needs:
+  - the lab's report file (checked like other uploads);
+  - the lab name and the result date;
+  - the released revision that was tested.
+- **History.** Results are kept as an unchangeable history. A result tested on an older revision than the current
+  release is flagged, so someone assesses whether a retest is needed.
+- **Not applicable.** Needs an owner or reviewer and a reason.
+
+**Releases (revision lock).** Project page → **Releases**.
+- **What a release is.** A named revision (A, B, 1.1…) holding one committed version of each file it covers: fab
+  package, BOM, enclosure and others.
+- **Readiness check.** Lists what stands in the way:
+  - **Blockers:** unverified major or critical faults, failing requirements, failed compliance items.
+  - **Warnings:** an empty or partial file list, newer versions of included files, untested requirements, open
+    compliance items.
+- **Issuing.** The owner issues the release; blockers need a written reason. Issuing:
+  - freezes the manifest (each file's path and sha256) and the manifest's own checksum;
+  - records a project decision;
+  - supersedes the previous release.
+- **After issue.** An issued release cannot change. It can only be withdrawn, with a reason.
+
+**Production.** Project page → **Production**.
+- **Lots.** A pilot or production lot is built from the current release. Each lot has:
+  - an optional production (test jig) procedure, an approved S6 procedure;
+  - a sampling plan: sample size and defects allowed.
+- **Units.** Registered by serial range. Each unit carries the release's revision and its fab package.
+- **Testing.** Each unit's production test is an ordinary S6 test run. A failure opens an S6 fault, which blocks the
+  next release until it is verified.
+- **Inspections.** Incoming, in-process or final; unchangeable once recorded. The verdict comes from the plan:
+  - reject as soon as the defects exceed the number allowed;
+  - accept only once the full sample has been checked.
+- **Acceptance.** Owners and reviewers accept a lot. They need a passing latest final inspection, and every unit,
+  bar scrapped ones, passing its latest production test. Acceptance marks those units passed.
+- **Yield.** First-pass yield and the current pass count are shown per lot.
+- **Traceability.** **Trace** takes a serial number back to its lot, release, released files, fab package, test runs
+  and faults.
+
+**S7 stage gate.** The S7 sign-off waits for:
+- a released revision;
+- every compliance item passed or marked not applicable;
+- an accepted lot.
+
+```bash
+pnpm --filter @vx/planning test   # compliance suggestions from intake facts
+./scripts/test-db.sh              # production_test: releases, readiness, compliance results, lots, inspections, trace
+pnpm test:e2e:production          # browser: release, compliance from suggestions, lab result, lot, trace, Rev B
+```
+
+Screenshots: `docs/production/screens`.
+
 ## Database overview
 
 `projects`, `project_members`, `documents`, `requirements`, `plans`, `tasks`,
@@ -916,7 +979,8 @@ Screenshots: `docs/trades/screens`.
 `audit_events`, `project_invitations`, `project_messages`, `sources`, `source_chunks`, `standards`,
 `project_standards`, `knowledge_editors`, `concept_rounds`, `concept_variants`, `design_freezes`, `manufacturers`,
 `manufacturer_contacts`, `rfqs`, `rfq_attachments`, `rfq_recipients`, `rfq_quotes`, `flux_audits`, `flux_audit_files`, `file_scans`, `platform_settings`, `optimization_runs`, `proposals`,
-`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`
+`units`, `test_procedures`, `test_runs`, `test_measurements`, `test_evidence`, `faults`, `account_plans`, `accounts`, `project_intake`, `risks`, `stage_gates`, `trade_studies`, `process_rules`,
+`releases`, `compliance_items`, `compliance_results`, `production_lots`, `lot_inspections`
 (and `vx_private.secrets`, readable by no user), plus private `project-files` and `knowledge-files` storage buckets.
 
 Built-in guarantees, each covered by `supabase/tests/schema_test.sql`:

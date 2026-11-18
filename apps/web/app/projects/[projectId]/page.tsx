@@ -81,6 +81,9 @@ export default async function ProjectPage({ params, searchParams }: {
           <Link href={`/projects/${projectId}/dfm`} className="btn">Manufacturing fit</Link></>}{" "}
         <Link href={`/projects/${projectId}/trades`} className="btn">Trade studies</Link>{" "}
         <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link>{" "}
+        <Link href={`/projects/${projectId}/compliance`} className="btn">Compliance</Link>{" "}
+        <Link href={`/projects/${projectId}/releases`} className="btn">Releases</Link>{" "}
+        <Link href={`/projects/${projectId}/production`} className="btn">Production</Link>{" "}
         <Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link>{" "}
         <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link></p>
 

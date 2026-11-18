@@ -40,6 +40,7 @@
     "test:e2e:quotas": "./scripts/test-e2e-quotas.sh",
     "test:e2e:stages": "./scripts/test-e2e-stages.sh",
     "test:e2e:trades": "./scripts/test-e2e-trades.sh",
+    "test:e2e:production": "./scripts/test-e2e-production.sh",
     "check:integrity": "./scripts/check-integrity.sh",
     "drill:backup": "./scripts/backup-drill.sh",
     "test:regression": "node tests/regression/run.ts",
