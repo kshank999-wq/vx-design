@@ -36,7 +36,7 @@ Each block of the document is labelled with an id in square brackets. For every 
 
 Do not extract background, rationale or document metadata as requirements. Put questions the team must answer before design starts in open_questions.`;
 
-const KIND_CODES: Record<RequirementKind, string> = {
+export const KIND_CODES: Record<RequirementKind, string> = {
   functional: "FUN", electrical: "ELE", power: "PWR", mechanical: "MEC", thermal: "THM", interface: "IFC",
   environmental: "ENV", regulatory: "REG", manufacturing: "MFG", cost: "CST", other: "GEN",
 };

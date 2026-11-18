@@ -87,6 +87,7 @@ export default async function ProjectPage({ params, searchParams }: {
         <Link href={`/projects/${projectId}/lifecycle`} className="btn">Lifecycle</Link>{" "}
         <Link href={`/projects/${projectId}/mechanical`} className="btn">Mechanical checks</Link>{" "}
         <Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link>{" "}
+        <Link href={`/projects/${projectId}/wizard`} className="btn">Requirement wizard</Link>{" "}
         <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link></p>
 
       <section>

@@ -917,6 +917,43 @@ pnpm test:e2e:stages              # browser: intake, feasibility, S0/S1 sign-off
 
 Screenshots: `docs/stages/screens`.
 
+### Requirement wizard (S0)
+
+Project page → **Requirement wizard**. Clients can also reach it from the workspace's S0 checklist step.
+
+**The questions.** Six steps of plain questions, for when there is no written specification yet or to fill its gaps:
+1. Product and use: purpose, users, setting, quantity, target cost, lifetime.
+2. Markets.
+3. Power: source, battery life and daily use, standby, USB-C charging.
+4. Connectivity and controls: wireless, range, phone app, wired connections, display, buttons, sound.
+5. Size and environment: maximum size and weight, temperature range, IP rating, drop, mounting, finish.
+6. Anything else: named standards, and other needs, one per line.
+
+**Who answers.** Answers are saved at each step. Owners, engineers and clients can answer; reviewers can only read.
+
+**What it produces.** The review lists the requirements the answers give. `wizardRequirements` in `@vx/planning`
+writes them deterministically:
+- **Each requirement:** text, acceptance criteria and the answer it came from.
+- **Blanks:** a blank answer gives nothing, except a stated gap where one matters, such as a battery with no life
+  target, or outdoor use with no IP rating.
+- **Typical targets:** where the acceptance criteria add a typical target (USB 4.5–5.5 V, universal mains input, an
+  IEC 60068 method), they say so, for the team to confirm.
+
+**Applying.** Owners and engineers press **Create and update requirements**:
+- **The intake.** It is saved, so the feasibility check and compliance suggestions follow.
+- **New requirements.** Added as drafts ("extracted", origin `wizard`), numbered per kind after existing ones.
+- **Repeat runs.** Each requirement has a stable wizard key, so applying again updates changed requirements (back to
+  draft) instead of duplicating them. Requirements a plan task already uses are left alone and listed, as are wizard
+  requirements whose answer was removed.
+
+```bash
+pnpm --filter @vx/planning test   # wizard: requirements from answers, gaps, intake feeding compliance and feasibility
+./scripts/test-db.sh              # wizard_test: who answers and applies, numbering, updates, in-use protection
+pnpm test:e2e:wizard              # browser: a client answers all steps; the owner applies; a changed answer updates one
+```
+
+Screenshots: `docs/wizard/screens`.
+
 ## Trade studies (S2) and manufacturer process rules (S4/S5)
 
 **Trade studies.** Project page → **Trade studies**: module or custom design, which part, which approach. A study

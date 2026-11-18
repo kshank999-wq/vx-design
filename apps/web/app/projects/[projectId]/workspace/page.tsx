@@ -184,6 +184,7 @@ export default async function WorkspacePage({ params, searchParams }: {
             <span className="check-icon" aria-hidden>{ICON[stageStep]}</span>
             <div>
               <div><Link href={`/projects/${projectId}/stages`}>{cur ? `Stage ${cur.stage}: ${STAGE_NAME[cur.stage]}` : "All stages signed off"}</Link></div>
+              {cur?.stage === "S0" && <div className="small"><Link href={`/projects/${projectId}/wizard`} data-testid="wizard-link">Answer the requirement wizard</Link></div>}
               <div className="small muted">{signed} of 9 stages signed off{cur ? (cur.blockers.length ? ` · ${cur.blockers.length} item(s) before sign-off` : " · ready to sign off") : ""}</div>
             </div>
           </li>
