@@ -42,6 +42,13 @@ export function StagedFileInput({ name, bucket, prefix, accept, required, label,
     const { error } = await createClient().storage.from(bucket).upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false });
     busy.current = false;
     if (error) {
+      // Hosted server functions refuse request bodies over a few MB: a large file cannot fall back to the form.
+      if (f.size > 3 * 1048576) {
+        pending.current = undefined;
+        if (input.current) input.current.value = "";
+        setState("error"); setMessage(`Could not upload ${f.name} (${error.message}). Check the connection and choose the file again.`);
+        return;
+      }
       setState("error"); setMessage(`Could not stage the file (${error.message}); it will be sent with the form instead.`);
       if (pending.current !== undefined) { const s = pending.current; pending.current = undefined; setTimeout(() => input.current?.form?.requestSubmit(s instanceof HTMLButtonElement ? s : undefined), 0); }
       return;

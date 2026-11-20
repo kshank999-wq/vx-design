@@ -143,7 +143,26 @@ try {
   const { data: ref1 } = await admin.from("project_references").select("id").eq("project_id", project.id).eq("ref_no", 1).single();
   assert.deepEqual(round.reference_ids, [ref1.id]);
   await admin.from("concept_rounds").update({ status: "canceled" }).eq("project_id", project.id);
-  console.log("Inputs flow passed: two specs extracted together with a duplicate flagged, references, prior work, plan built on REF/PW with task basis, concepts from a mock-up.");
+
+  // 5. A Flux export dropped on the specifications box is pointed to prior work; a Flux import runs from this page.
+  await page.goto(`${P}/inputs`);
+  await page.getByLabel("Specification files").setInputFiles([{ name: "vc-smart-slate - Flux project data.zip", mimeType: "application/zip", buffer: Buffer.from("PK\x03\x04") }]);
+  await page.getByRole("button", { name: "Upload specifications" }).click();
+  await page.getByTestId("upload-specification-status").getByText(/this looks like a Flux or CAD export, not a specification\. Add it under 3\. Prior work/).waitFor();
+  await page.getByTestId("flux-start").getByLabel("Flux import title").fill("Timecode board");
+  await page.getByRole("button", { name: "Start a Flux import" }).click();
+  await page.getByText("Flux import started.").waitFor();
+  const fu = page.getByTestId("flux-open").getByTestId("flux-upload");
+  await fu.getByLabel("Revision", { exact: true }).fill("2026-11-20");
+  await fu.getByLabel("Files", { exact: true }).setInputFiles([{ name: "board.d356", mimeType: "text/plain", buffer: Buffer.from("P  JOB   x\n327GND              U1    -1         A01X-030947Y-010857X0291Y1098R090 S2\n999\n") }]);
+  await fu.getByRole("button", { name: "Upload" }).click();
+  await fu.getByTestId("upload-status").getByText("board.d356: added").waitFor();
+  await page.getByTestId("flux-open").getByText(/1 file\(s\) added/).waitFor();
+  await page.getByRole("button", { name: "Run the audit" }).click();
+  await page.getByText(/Audit requested/).waitFor();
+  await page.getByTestId("flux-running").waitFor();
+  await shot(page, "04-flux-import");
+  console.log("Inputs flow passed: two specs extracted together with a duplicate flagged, references, prior work, plan built on REF/PW with task basis, concepts from a mock-up, Flux import from the inputs page.");
 } catch (e) {
   if (page && process.env.FAIL_SHOT) await page.screenshot({ path: process.env.FAIL_SHOT, fullPage: true });
   throw e;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Banner } from "@/components/Banner";
+import { FluxUpload } from "@/components/FluxUpload";
 import { InputsUpload } from "@/components/InputsUpload";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { crossDocumentDuplicates } from "@/lib/documents";
 import { IMAGE_TYPES, loadPlanInputs, refCode, REFERENCE_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
 import { extractAll, removeReference, setAuditInPlan, updateReference } from "./actions";
+import { createAudit, runAudit } from "../flux/actions";
 
 export const maxDuration = 300;
 
@@ -27,7 +29,7 @@ export default async function InputsPage({ params, searchParams }: {
     supabase.from("documents").select("id, title, filename, extraction_status, extraction_report").eq("project_id", projectId).order("created_at"),
     supabase.from("requirements").select("id, ref_code, text, status, document_id").eq("project_id", projectId).order("ref_code"),
     supabase.from("project_references").select("*").eq("project_id", projectId).order("ref_no"),
-    supabase.from("flux_audits").select("id, audit_no, title, status, summary, use_in_plan, completed_at").eq("project_id", projectId).order("audit_no"),
+    supabase.from("flux_audits").select("id, audit_no, title, status, summary, use_in_plan, completed_at, error, flux_audit_files(count)").eq("project_id", projectId).order("audit_no"),
     supabase.from("project_intake").select("intended_use, quantity, max_dimensions").eq("project_id", projectId).maybeSingle(),
     supabase.from("current_design_freeze").select("frozen_at").eq("project_id", projectId).maybeSingle(),
     supabase.from("project_standards").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "confirmed"),
@@ -122,8 +124,8 @@ export default async function InputsPage({ params, searchParams }: {
 
       <section>
         <h2>3. Prior work</h2>
-        <p className="small muted">Designs already started elsewhere. A Flux project is imported and audited on the <Link href={`/projects/${projectId}/flux`}>Flux import</Link> page:
-          its parts, board, design notes, earlier decisions and open problems become prior work the plan builds on.</p>
+        <p className="small muted">Designs already started elsewhere. Add a Flux project's exported files here (or on the <Link href={`/projects/${projectId}/flux`}>Flux import</Link> page)
+          and run the audit: its parts, board, design notes, earlier decisions and open problems become prior work the plan builds on.</p>
         <table className="small" data-testid="prior-work">
           <thead><tr><th>Audit</th><th>Status</th><th>Found</th><th>In the plan</th></tr></thead>
           <tbody>{(audits ?? []).map((a) => {
@@ -138,6 +140,34 @@ export default async function InputsPage({ params, searchParams }: {
             </tr>;
           })}{!audits?.length && <tr><td colSpan={4} className="muted">No imports yet.</td></tr>}</tbody>
         </table>
+        {canEdit && (() => {
+          const open = (audits ?? []).filter((a) => a.status === "draft" || a.status === "failed").at(-1);
+          const running = (audits ?? []).some((a) => a.status === "queued" || a.status === "running");
+          if (running) return <p className="small muted" data-testid="flux-running">A worker is reading a Flux import; it appears above when the audit is ready. Reload to check.</p>;
+          if (!open) return (
+            <form action={createAudit.bind(null, projectId)} className="card row" data-testid="flux-start">
+              <input type="hidden" name="from" value="inputs" />
+              <label className="inline">Import from Flux<input name="title" required defaultValue={project.name} aria-label="Flux import title" /></label>
+              <SubmitButton variant="secondary" pendingText="…">Start a Flux import</SubmitButton>
+              <span className="small muted">Then add every file Flux exports (ZIPs included) and run the audit.</span>
+            </form>
+          );
+          const n = Number((open.flux_audit_files as unknown as { count: number }[] | null)?.[0]?.count ?? 0);
+          return (
+            <div className="card stack" data-testid="flux-open">
+              <p className="small"><strong>Flux import #{open.audit_no}</strong> {open.title}: {n} file(s) added.
+                {open.status === "failed" && open.error && <span className="error-text"> The last audit failed: {open.error}</span>}{" "}
+                <Link href={`/projects/${projectId}/flux/${open.id}`}>See the files</Link></p>
+              <FluxUpload projectId={projectId} auditId={open.id} revisions={[]} />
+              {n > 0 && (
+                <form action={runAudit.bind(null, projectId, open.id, "inputs")} className="row">
+                  <SubmitButton pendingText="Requesting…">Run the audit</SubmitButton>
+                  <span className="small muted">A worker reads every file; the import then appears above as prior work.</span>
+                </form>
+              )}
+            </div>
+          );
+        })()}
       </section>
 
       <section>

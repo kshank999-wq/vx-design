@@ -66,7 +66,7 @@ export default async function FluxAuditPage({ params, searchParams }: {
         </table>
         {canEdit && !running && <FluxUpload projectId={projectId} auditId={auditId} revisions={revs} />}
         {canEdit && !running && !!files?.length && (
-          <form action={runAudit.bind(null, projectId, auditId)} className="row">
+          <form action={runAudit.bind(null, projectId, auditId, "flux")} className="row">
             <SubmitButton pendingText="Requesting…">{audit.status === "ready" || audit.status === "failed" ? "Run the audit again" : "Run the audit"}</SubmitButton>
             <span className="small muted">Reads every file, checks the exports against each other and across revisions, and extracts earlier decisions and test claims.</span>
           </form>

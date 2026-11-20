@@ -26,6 +26,12 @@ export function InputsUpload({ projectId, mode, kinds }: { projectId: string; mo
     const supabase = createClient();
     const set = (i: number, text: string, ok: boolean | null) => setLines((l) => l.map((x, j) => (j === i ? { text, ok } : x)));
     for (const [i, f] of files.entries()) {
+      if (mode === "specification" && !/\.(docx|pdf|md|markdown|txt)$/i.test(f.name)) {
+        set(i, /\.(zip|json|edif|d356|ipc2581c|step|stp|csv|cad)$/i.test(f.name)
+          ? `${f.name}: this looks like a Flux or CAD export, not a specification. Add it under 3. Prior work (Flux import).`
+          : `${f.name}: specifications must be Word (.docx), PDF, Markdown or text.`, false);
+        continue;
+      }
       set(i, `${f.name}: uploading ${(f.size / 1048576).toFixed(1)} MB…`, null);
       const path = `${projectId}/uploads/${crypto.randomUUID()}/${f.name.replace(/[^\w.-]+/g, "_").slice(-120) || "file"}`;
       const { error } = await supabase.storage.from("project-files").upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false });
