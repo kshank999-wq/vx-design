@@ -1,6 +1,6 @@
 /** Normalised views of a design, whatever export they came from. Designators are upper-case; pins are "REF.PIN". */
 
-export type Source = "flux_json" | "bom" | "pnp" | "edif" | "ipc356" | "gerber";
+export type Source = "flux_json" | "bom" | "pnp" | "edif" | "ipc356" | "gerber" | "odbpp" | "idf";
 
 export interface ComponentFacts {
   designator: string;
@@ -14,7 +14,13 @@ export interface ComponentFacts {
   rotation?: number | null;
   side?: "top" | "bottom" | null;
   dnp?: boolean;
+  /** Why the part is there, as the designer recorded it (Flux BOM: Role, Role Details, Design Note, Functional Group). */
+  design?: DesignNotes | null;
+  /** Distributor part numbers recorded with the part (LCSC, DigiKey, Mouser…). */
+  suppliers?: Record<string, string>;
 }
+
+export interface DesignNotes { role?: string | null; details?: string | null; note?: string | null; group?: string | null; datasheet?: string | null; specification?: string | null }
 
 /** net name -> set of "REF.PIN" */
 export type Netlist = Map<string, Set<string>>;

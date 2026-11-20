@@ -750,12 +750,25 @@ staff can read; clients cannot).
 
 Nothing imported is ever marked verified. The best a part can be is *consistent across the exports*.
 
+Checked against a real Flux export (November 2026). What real exports do that the documentation does not say:
+- **Eight BOMs.** One BOM per board house is written. The audit reads Flux's own (`…-Flux.csv`), which has every
+  column, and keeps each part's design notes (Role, Role Details, Design Note, Functional Group) and distributor part
+  numbers. Those notes are shown next to each part, so the reasoning behind a part is not lost.
+- **Pin names in IPC-D-356.** Pin *names* are written there, cut to four characters (`VTREF` → `VTre`), and a
+  repeated name (`GND`, `GND_2`) arrives twice. Layout pins are matched to schematic pins by name ignoring punctuation,
+  then by prefix on the same part. A part numbered in one export and named in the other is matched by net, and listed
+  so its pin numbering is checked by hand.
+- **ODB++ archive names.** The ODB++ ZIP is named after the project, not "odb", so it is recognised by its
+  `matrix/matrix`. It gives the copper layers and the outline, and its copper records tell whether the board is routed.
+  A placed but unrouted board is flagged, and "connectivity matches" then says that nothing is connected yet.
+- **IDF (`.emn`).** This gives the outline, the thickness and the drilled holes.
+
 Limits:
-- Flux documents the content of `project.json` and publishes its schema, but this reader was written from the
-  description, not a real export, and reports any section it cannot find. Check it on the first real export.
-- Flux has no KiCad export. The plan's "Rebuild in KiCad" task recreates the design from the netlist, BOM and
-  placement.
-- IPC-2581, ODB++ and GenCAD are inventoried but not parsed.
+- **`project.json`.** This reader follows Flux's published description of `project.json`; the real export checked
+  did not include one. It reports any section it cannot find.
+- **No KiCad export.** Flux has none, so the plan's "Rebuild in KiCad" task recreates the design from the netlist,
+  BOM and placement.
+- **IPC-2581 and GenCAD** are inventoried but not parsed. ODB++, IDF and Gerbers cover the same board facts.
 - Screenshots are listed for a person to read.
 
 ```bash

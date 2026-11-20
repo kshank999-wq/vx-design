@@ -1,5 +1,12 @@
 import { column, DESIGNATOR_HEADERS, parseCsv, splitDesignators } from "../csv.ts";
-import type { ComponentFacts, ParsedFile } from "../model.ts";
+import type { ComponentFacts, DesignNotes, ParsedFile } from "../model.ts";
+
+/** Distributor part-number columns (Flux writes one per distributor). */
+const SUPPLIER_COLUMNS: [string, string[]][] = [
+  ["LCSC", ["lcsc part number", "lcsc part #", "lcsc", "jlcpcb part #"]], ["DigiKey", ["digi-key part number", "digikey part number", "digi-key"]],
+  ["Mouser", ["mouser part number", "mouser"]], ["Arrow", ["arrow part number"]], ["Verical", ["verical part number"]],
+  ["TME", ["tme part number"]], ["HQonline", ["hqonline part number"]],
+];
 
 const num = (s: string | undefined) => {
   if (s == null) return null;
@@ -18,6 +25,11 @@ export function parseBom(path: string, csv: string): ParsedFile {
     pkg: column(hdr, ["package", "footprint", "case", "package/case"]), qty: column(hdr, ["quantity", "qty"]),
     dnp: column(hdr, ["dnp", "do not populate", "dni", "fitted", "populate"]),
   };
+  // Exact header matches only for the free-text columns: a prefix match would pick unrelated columns.
+  const exact = (names: string[]) => { const hs = hdr.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, "")); for (const n of names) { const i = hs.indexOf(n.replace(/[^a-z0-9]/g, "")); if (i >= 0) return i; } return -1; };
+  const d = { role: exact(["role"]), details: exact(["role details"]), note: exact(["design note", "design notes", "notes", "note"]),
+              group: exact(["functional group"]), datasheet: exact(["datasheet url", "datasheet"]), spec: exact(["specification", "description"]) };
+  const sup = SUPPLIER_COLUMNS.map(([name, cands]) => [name, exact(cands)] as const).filter(([, i]) => i >= 0);
   if (c.ref < 0) return { source: "bom", path, components: [], notes: ["no designator column found; the BOM could not be matched to parts"] };
   if (c.mpn < 0) notes.push("no manufacturer part number column");
   const components: ComponentFacts[] = [];
@@ -29,9 +41,13 @@ export function parseBom(path: string, csv: string): ParsedFile {
     const dnpRaw = c.dnp >= 0 ? (r[c.dnp] ?? "").toLowerCase() : "";
     const dnp = c.dnp >= 0 && (hdr[c.dnp]!.toLowerCase().includes("fitted") || hdr[c.dnp]!.toLowerCase().includes("populate")
       ? /^(no|false|0|n)$/.test(dnpRaw) : /^(yes|true|1|y|dnp|x)$/.test(dnpRaw));
+    const cell = (i: number) => (i >= 0 ? r[i] || null : null);
+    const design: DesignNotes = { role: cell(d.role), details: cell(d.details), note: cell(d.note), group: cell(d.group), datasheet: cell(d.datasheet), specification: cell(d.spec) };
+    const suppliers = Object.fromEntries(sup.map(([name, i]) => [name, r[i] ?? ""]).filter(([, v]) => v));
     for (const ref of refs) {
       components.push({ designator: ref, mpn: c.mpn >= 0 ? r[c.mpn] || null : null, manufacturer: c.mfr >= 0 ? r[c.mfr] || null : null,
-                        value: c.value >= 0 ? r[c.value] || null : null, package: c.pkg >= 0 ? r[c.pkg] || null : null, dnp });
+                        value: c.value >= 0 ? r[c.value] || null : null, package: c.pkg >= 0 ? r[c.pkg] || null : null, dnp,
+                        design: Object.values(design).some(Boolean) ? design : null, ...(Object.keys(suppliers).length ? { suppliers } : {}) });
     }
   }
   return { source: "bom", path, components, notes };

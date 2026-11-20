@@ -5,12 +5,13 @@
  * present, not re-run".
  */
 import { buildInventory, KIND_LABEL, text, type FileKind, type InventoryFile, type InventoryProblem, type Upload } from "./inventory.ts";
-import { normMpn, type BoardFacts, type ComponentFacts, type Netlist, type ParsedFile, type Source } from "./model.ts";
+import { normMpn, type BoardFacts, type ComponentFacts, type DesignNotes, type Netlist, type ParsedFile, type Source } from "./model.ts";
 import { parseBom, parsePnp } from "./parsers/table.ts";
 import { parseEdif } from "./parsers/edif.ts";
 import { parseIpc356 } from "./parsers/ipc356.ts";
 import { parseProjectJson } from "./parsers/project-json.ts";
 import { summariseGerbers } from "./parsers/gerber.ts";
+import { parseIdf, parseOdb } from "./parsers/board.ts";
 
 export const AUDIT_VERSION = "flux-audit-v1";
 
@@ -22,6 +23,9 @@ export interface Finding {
 export interface ComponentState {
   designator: string; mpn: string | null; manufacturer: string | null; value: string | null; package: string | null;
   sources: Source[]; status: "consistent" | "uncertain"; reasons: string[]; catalog?: CatalogEntry | null; dnp?: boolean;
+  /** The designer's own notes on why the part is there (Flux BOM), carried over so the reasoning is not lost. */
+  design?: DesignNotes | null;
+  suppliers?: Record<string, string>;
 }
 export interface CatalogEntry { mpn: string; manufacturer: string | null; lifecycle: string | null }
 export interface HistoryInput {
@@ -73,13 +77,19 @@ export interface Snapshot {
   files: InventoryFile[];
   parsed: ParsedFile[];
   json: ParsedFile | null; bom: ParsedFile | null; pnp: ParsedFile | null; edif: ParsedFile | null; ipc356: ParsedFile | null; gerber: ParsedFile | null;
+  odb: ParsedFile | null; idf: ParsedFile | null;
   schematicNets: Netlist | null;
   components: Map<string, Partial<Record<Source, ComponentFacts>>>;
 }
 
-const MFR_SUFFIX = /(jlc|pcbway|macrofab|seeed|lcsc|digikey|mouser|octopart|eurocircuits|aisler|oshpark)/i;
-/** Flux writes one BOM/placement file per manufacturer; prefer the generic one, else the first by name. */
-const preferGeneric = (fs: InventoryFile[]) => [...fs].sort((a, b) => Number(MFR_SUFFIX.test(a.path)) - Number(MFR_SUFFIX.test(b.path)) || (a.path < b.path ? -1 : 1))[0];
+const MFR_SUFFIX = /(jlc|pcbway|macrofab|seeed|lcsc|digikey|mouser|octopart|eurocircuits|aisler|oshpark|advancedcircuits|allpcb|elecrow|openpnp)/i;
+/**
+ * Flux writes one BOM/placement file per manufacturer. Prefer Flux's own format ("…-Flux.csv": every column, with
+ * part numbers and design notes), then a generic one, then the widest file (most columns), then the first by name.
+ */
+const rank = (f: InventoryFile) => (/-flux\.csv$/i.test(f.path) ? 0 : MFR_SUFFIX.test(f.path.split(/[/!]/).pop()!) ? 2 : 1);
+const width = (f: InventoryFile) => (text(f).split(/\r?\n/, 1)[0] ?? "").split(",").length;
+const preferGeneric = (fs: InventoryFile[]) => [...fs].sort((a, b) => rank(a) - rank(b) || width(b) - width(a) || (a.path < b.path ? -1 : 1))[0];
 
 export function buildSnapshot(revision: string, files: InventoryFile[]): Snapshot {
   const of = (k: FileKind) => files.filter((f) => f.kind === k);
@@ -95,6 +105,11 @@ export function buildSnapshot(revision: string, files: InventoryFile[]): Snapsho
   const pnp = once(preferGeneric(of("pnp_csv")), parsePnp);
   const edif = once(of("edif")[0], parseEdif);
   const ipc356 = once(of("ipc356")[0], parseIpc356);
+  const odbFile = of("odbpp")[0];
+  const odb = odbFile ? parseOdb(odbFile.path, odbFile.data) : null;
+  if (odb) parsed.push(odb);
+  const idf = of("idf").map((f) => parseIdf(f.path, text(f))).find((x): x is ParsedFile => !!x) ?? null;
+  if (idf) parsed.push(idf);
   const gerbers = of("gerber");
   const gerber = gerbers.length ? summariseGerbers(gerbers.map((g) => ({ path: g.path, src: text(g) }))) : null;
   if (gerber) parsed.push(gerber);
@@ -107,11 +122,13 @@ export function buildSnapshot(revision: string, files: InventoryFile[]): Snapsho
     }
   }
   const schematicNets = edif?.nets?.size ? edif.nets : json?.nets?.size ? json.nets : null;
-  return { revision, files, parsed, json, bom, pnp, edif, ipc356, gerber, schematicNets, components };
+  return { revision, files, parsed, json, bom, pnp, edif, ipc356, gerber, odb, idf, schematicNets, components };
 }
 
 const first = <T>(...xs: (T | null | undefined)[]) => xs.find((x) => x != null && x !== "") ?? null;
-const POWER_NET = /^(\+|-)?(\d+V\d*|\d+V|V\d+V\d*|3V3|1V8|1V2|2V5|5V0|VCC\w*|VDD\w*|VSS\w*|VEE\w*|VBAT\w*|VBUS\w*|VIN\w*|VSYS\w*|VIO\w*|VREF\w*|V_\w+|\+?\d+(\.\d+)?V\w*|GND\w*|AGND\w*|DGND\w*|PGND\w*|EARTH)$/i;
+const POWER_NAME = /^(\+|-)?(\d+V\d*|\d+V|V\d+V\d*|3V3|1V8|1V2|2V5|5V0|VCC\w*|VDD\w*|VSS\w*|VEE\w*|VBAT\w*|VBUS\w*|VIN\w*|VSYS\w*|VIO\w*|VREF\w*|V_\w+|\+?\d+(\.\d+)?V\w*|GND\w*|AGND\w*|DGND\w*|PGND\w*|EARTH)$/i;
+/** A rail by name, also with a domain prefix or suffix ("TC_3V3", "VBAT_PROT"). */
+const POWER_NET = { test: (n: string) => POWER_NAME.test(n) || n.split(/[_.]/).some((seg, i, all) => all.length > 1 && (i === 0 || i === all.length - 1) && /^(\d+V\d*|V\d+V\d*|3V3|1V8|1V2|2V5|5V0|VCC\w*|VDD\w*|VBAT|VBUS|VIN|VSYS|GND)$/i.test(seg)) };
 const CONNECTOR = /^(J|P|CN|CON|X|USB|HDR)\d+$/;
 const MOUNTING = /^(H|MH|MTG|HOLE)\d+$|mounting|mtg[_-]?hole/i;
 
@@ -136,15 +153,69 @@ function componentStates(s: Snapshot, catalog: Map<string, CatalogEntry>): Compo
     out.push({ designator, mpn, manufacturer: first(by.bom?.manufacturer, by.flux_json?.manufacturer, by.edif?.manufacturer),
                value: first(by.bom?.value, by.flux_json?.value, by.edif?.value, by.pnp?.value),
                package: first(by.flux_json?.package, by.bom?.package, by.pnp?.package, by.flux_json?.footprint, by.edif?.footprint),
-               sources, status: reasons.length ? "uncertain" : "consistent", reasons, catalog: cat, dnp });
+               sources, status: reasons.length ? "uncertain" : "consistent", reasons, catalog: cat, dnp,
+               ...(by.bom?.design ? { design: by.bom.design } : {}), ...(by.bom?.suppliers ? { suppliers: by.bom.suppliers } : {}) });
   }
   return out;
 }
 
+const pinNetOf = (n: Netlist) => { const m = new Map<string, string>(); for (const [net, pins] of n) for (const p of pins) m.set(p, net); return m; };
+const pinName = (k: string) => k.slice(k.indexOf(".") + 1).replace(/#\d+$/, "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+
+/**
+ * Maps layout pin names onto the schematic's where they differ only in form. Flux writes pin *names* into IPC-D-356
+ * and the format keeps four characters ("VTREF" → "VTre", "~RESET~" → "~RES"); a part's repeated name ("GND", "GND_2")
+ * arrives as "GND" twice. Each layout pin is matched, on the same part, to a schematic pin with the same name
+ * ignoring case and punctuation, else to the one unused pin whose name starts with it (same net name preferred).
+ * A part numbered in one export and named in the other (oscillator pins 1/4/6 against CLK/GND/OE) is matched by net:
+ * a remaining layout pin is paired with a remaining schematic pin of the same part on the same-named net. Pins on one
+ * net are interchangeable for connectivity, so this cannot hide an open or a short; it is reported, by part.
+ * Matches are one-to-one; a repeated record with no pin left is dropped.
+ */
+export function reconcilePins(sch: Netlist, lay: Netlist): { lay: Netlist; renamed: number; byNet: string[] } {
+  const sp = pinNetOf(sch), lp = pinNetOf(lay);
+  const byRef = new Map<string, string[]>();
+  for (const p of sp.keys()) { const r = p.split(".")[0]!; byRef.set(r, [...(byRef.get(r) ?? []), p]); }
+  const used = new Set<string>(), map = new Map<string, string | null>();
+  const pending = [...lp.keys()].filter((p) => { if (sp.has(p)) { used.add(p); map.set(p, p); return false; } return byRef.has(p.split(".")[0]!); });
+  const take = (p: string, pick: (c: string[]) => string[]) => {
+    const cands = pick((byRef.get(p.split(".")[0]!) ?? []).filter((c) => !used.has(c)));
+    if (!cands.length) return false;
+    const net = lp.get(p)!;
+    const best = [...cands].sort((a, b) => Number(sp.get(b) === net) - Number(sp.get(a) === net) || pinName(a).length - pinName(b).length || (a < b ? -1 : 1))[0]!;
+    used.add(best); map.set(p, best);
+    return true;
+  };
+  const rest = pending.filter((p) => !take(p, (c) => c.filter((x) => pinName(x) === pinName(p))));
+  const unmatched: string[] = [];
+  for (const p of [...rest].sort((a, b) => pinName(b).length - pinName(a).length)) {
+    if (pinName(p).length >= 2 && take(p, (c) => c.filter((x) => pinName(x).startsWith(pinName(p))))) continue;
+    unmatched.push(p);
+  }
+  const byNet = new Set<string>();
+  for (const p of unmatched) {
+    const net = lp.get(p)!;
+    if (!net.startsWith("N/C:") && take(p, (c) => c.filter((x) => sp.get(x) === net))) { byNet.add(p.split(".")[0]!); continue; }
+    if (/#\d+$/.test(p)) map.set(p, null);
+  }
+  let renamed = 0;
+  const out: Netlist = new Map();
+  for (const [net, pins] of lay) {
+    const s = new Set<string>();
+    for (const p of pins) {
+      const m = map.has(p) ? map.get(p) : p;
+      if (m == null) continue;
+      if (m !== p) renamed++;
+      s.add(m);
+    }
+    if (s.size) out.set(net.startsWith("N/C:") ? `N/C:${[...s][0]}` : net, s);
+  }
+  return { lay: out, renamed, byNet: [...byNet].sort((a, b) => a.localeCompare(b, "en", { numeric: true })) };
+}
+
 /** Topological comparison: which schematic nets are split (opens) or merged (shorts) in the layout, and missing/extra pins. */
 export function compareConnectivity(sch: Netlist, lay: Netlist) {
-  const pinNet = (n: Netlist) => { const m = new Map<string, string>(); for (const [net, pins] of n) for (const p of pins) m.set(p, net); return m; };
-  const sp = pinNet(sch), lp = pinNet(lay);
+  const sp = pinNetOf(sch), lp = pinNetOf(lay);
   const refs = (m: Map<string, string>) => new Set([...m.keys()].map((p) => p.split(".")[0]));
   const layRefs = refs(lp), schRefs = refs(sp);
   const opens: { net: string; layout_nets: string[] }[] = [];
@@ -202,11 +273,14 @@ function compareSnapshots(a: Snapshot, b: Snapshot, ca: ComponentState[], cb: Co
 }
 
 function boardOf(s: Snapshot): BoardFacts & { sources: string[] } {
-  const j = s.json?.board ?? {}, g = s.gerber?.board ?? {};
-  const sources = [s.json?.board ? "Flux JSON" : null, s.gerber ? "Gerbers" : null].filter((x): x is string => !!x);
+  const j = s.json?.board ?? {}, g = s.gerber?.board ?? {}, o = s.odb?.board ?? {}, i = s.idf?.board ?? {};
+  const sources = [s.json?.board ? "Flux JSON" : null, s.gerber ? "Gerbers" : null, s.odb?.board?.copper_layers || s.odb?.board?.width_mm ? "ODB++" : null,
+                   s.idf?.board?.width_mm ? "IDF" : null].filter((x): x is string => !!x);
   return {
-    width_mm: first(j.width_mm, g.width_mm), height_mm: first(j.height_mm, g.height_mm), thickness_mm: j.thickness_mm ?? null,
-    copper_layers: first(j.copper_layers, g.copper_layers), layer_names: j.layer_names?.length ? j.layer_names : g.layer_names ?? [],
+    width_mm: first(j.width_mm, g.width_mm, o.width_mm, i.width_mm), height_mm: first(j.height_mm, g.height_mm, o.height_mm, i.height_mm),
+    thickness_mm: first(j.thickness_mm, i.thickness_mm),
+    copper_layers: first(j.copper_layers, g.copper_layers, o.copper_layers),
+    layer_names: j.layer_names?.length ? j.layer_names : g.layer_names?.length ? g.layer_names : o.layer_names ?? [],
     min_trace_mm: j.min_trace_mm ?? null, min_space_mm: j.min_space_mm ?? null, sources,
   };
 }
@@ -299,17 +373,32 @@ export function runAudit(input: AuditInput): AuditReport {
     if (life.length) tag("mpn", add({ severity: "warning", category: "sourcing", revision: rev, title: `${life.length} part(s) not recommended for new designs`, detail: "From the VX parts catalog.", items: life.map((c) => `${c.designator} ${c.mpn}: ${c.catalog?.lifecycle}`), evidence: [] }));
 
     // Schematic vs layout.
+    const copper = s.odb?.meta?.copper as { pads: number; tracks: number; surfaces: number } | undefined;
+    const unrouted = !!copper && copper.pads > 0 && copper.tracks === 0 && copper.surfaces === 0;
     if (s.schematicNets && s.ipc356?.nets?.size) {
-      const cmp = compareConnectivity(s.schematicNets, s.ipc356.nets);
+      const rec = reconcilePins(s.schematicNets, s.ipc356.nets);
+      if (rec.renamed) add({ severity: "info", category: "connectivity", revision: rev, title: `${rec.renamed} layout pin(s) matched to schematic pins with a different name`,
+        detail: "The layout netlist (IPC-D-356) keeps only four characters of a pin name, so names such as VTREF arrive as VTre; these were matched by prefix on the same part." +
+          (rec.byNet.length ? ` Some parts are numbered in one export and named in the other (${rec.byNet.join(", ")}); their pins were matched by net, which checks connectivity but not which pad is which: check those footprints' pin numbering against the datasheet.` : ""),
+        items: rec.byNet.map((r) => `${r}: pins matched by net, not by name`), evidence: [s.ipc356.path] });
+      const cmp = compareConnectivity(s.schematicNets, rec.lay);
       const items = [...cmp.opens.map((o) => `net ${o.net} is split in the layout into ${o.layout_nets.join(", ")}`),
                      ...cmp.shorts.map((o) => `layout net ${o.layout_net} joins schematic nets ${o.schematic_nets.join(", ")}`),
                      ...cmp.missing.map((p) => `pin ${p} is not connected in the layout`), ...cmp.extra.map((p) => `pin ${p} is connected in the layout but not in the schematic`)];
       if (items.length) tag("connectivity", add({ severity: "blocker", category: "connectivity", revision: rev, title: "The layout does not match the schematic",
         detail: "Compared by which pins are joined, not by net names (schematic: " + (s.edif ? "EDIF" : "project JSON") + "; layout: IPC-D-356).", items, evidence: [s.edif?.path ?? s.json!.path, s.ipc356.path] }));
-      else add({ severity: "info", category: "connectivity", revision: rev, title: "Layout connectivity matches the schematic netlist", detail: "Every schematic connection between placed parts is present in the layout netlist, and nothing extra. This compares two exports from Flux; it is not an independent DRC.", evidence: [s.edif?.path ?? s.json!.path, s.ipc356.path] });
+      else add({ severity: "info", category: "connectivity", revision: rev, title: "Layout connectivity matches the schematic netlist", detail: "Every schematic connection between placed parts is present in the layout netlist, and nothing extra. This compares two exports from Flux; it is not an independent DRC." +
+        (unrouted ? " The layout netlist lists which net each pad belongs to; the copper has no tracks yet, so none of these connections is made on the board." : ""), evidence: [s.edif?.path ?? s.json!.path, s.ipc356.path] });
     }
+    if (unrouted) tag("routing", add({ severity: "warning", category: "routing", revision: rev, title: "The layout is not routed",
+      detail: `The ODB++ copper layers hold ${copper!.pads} pad(s) and no tracks or copper pours: parts are placed but nothing is connected on the board yet.`, evidence: [s.odb!.path] }));
 
-    // Board: JSON vs Gerbers.
+    // Board: the outline and layer count wherever more than one export states them.
+    const outlines = ([["project data", s.json?.board], ["Gerbers", s.gerber?.board], ["ODB++", s.odb?.board], ["IDF", s.idf?.board]] as const)
+      .filter(([, b]) => b?.width_mm && b?.height_mm).map(([n, b]) => [n, b!.width_mm!, b!.height_mm!] as const);
+    const off = outlines.filter(([, w, h]) => Math.abs(w - outlines[0]![1]) > 0.5 || Math.abs(h - outlines[0]![2]) > 0.5);
+    if (off.length && !(s.json?.board?.width_mm && s.gerber?.board?.width_mm)) tag("layers", add({ severity: "warning", category: "layers", revision: rev, title: "Board size differs between exports",
+      detail: outlines.map(([n, w, h]) => `${n}: ${w} × ${h} mm`).join("; "), evidence: [] }));
     const j = s.json?.board, g = s.gerber?.board;
     if (j?.copper_layers && g?.copper_layers && j.copper_layers !== g.copper_layers) tag("layers", add({ severity: "warning", category: "layers", revision: rev, title: "Layer count differs between the project data and the Gerbers", detail: `Stackup lists ${j.copper_layers} copper layers; the Gerbers have ${g.copper_layers}.`, evidence: [s.json!.path, s.gerber!.path] }));
     if (j?.width_mm && g?.width_mm && (Math.abs(j.width_mm - g.width_mm) > 0.5 || Math.abs((j.height_mm ?? 0) - (g.height_mm ?? 0)) > 0.5)) tag("layers", add({ severity: "warning", category: "layers", revision: rev, title: "Board size differs between the project data and the Gerber outline", detail: `Project: ${j.width_mm} × ${j.height_mm} mm; Gerber outline: ${g.width_mm} × ${g.height_mm} mm.`, evidence: [s.json!.path, s.gerber!.path] }));
@@ -402,6 +491,7 @@ export function runAudit(input: AuditInput): AuditReport {
   if (ids.export) t({ title: "Complete the Flux export", discipline: "documentation", effort: "S", scope: "Export the missing items from Flux and re-run this audit.", inputs: ["Flux project"], done_when: "This audit reports no missing export items.", findings: ids.export });
   if (ids.assets) t({ title: "Recover missing referenced files", discipline: "documentation", effort: "S", scope: "Export \"JSON and asset files\", or upload the referenced 3D models and datasheets.", inputs: ["Flux project"], done_when: "No referenced file is missing.", findings: ids.assets });
   if (ids.connectivity) t({ title: "Resolve the schematic/layout differences", discipline: "pcb_layout", effort: "M", scope: "Decide for each listed difference whether the schematic or the layout is right; fix the other in Flux (or in the KiCad rebuild).", inputs: ["EDIF", "IPC-D-356"], done_when: "The layout netlist matches the schematic netlist with no differences.", findings: ids.connectivity });
+  if (ids.routing) t({ title: "Route the board", discipline: "pcb_layout", effort: "L", scope: "The parts are placed but no copper is routed. Route it (in Flux, or in the KiCad rebuild with autorouting and DRC).", inputs: ["placement", "netlist"], done_when: "Every net is routed and DRC passes with no unrouted connections.", findings: ids.routing });
   if (ids.consistency) t({ title: "Reconcile the BOM, placement and schematic", discipline: "components", effort: "S", scope: "Make every designator appear consistently, with one part number, in all exports (mark do-not-populate parts as such).", inputs: ["BOM", "pick and place", "project JSON"], done_when: "No designator or part-number conflicts remain.", findings: ids.consistency });
   if (ids.mpn) t({ title: "Choose and source the uncertain parts", discipline: "sourcing", effort: "M", scope: "Pick manufacturer part numbers where missing and check lifecycle and stock in M-SRC.", inputs: ["BOM"], done_when: "Every fitted part has a part number with a current offer and an active lifecycle.", findings: ids.mpn });
   if (latest && (latest.schematicNets || latest.bom)) t({ title: "Rebuild the design in KiCad from the export", discipline: "schematic", effort: "L",

@@ -20,8 +20,11 @@ export function renderReport(r: AuditReport, title: string): string {
   }
   if (r.current) {
     const c = r.current;
-    L.push(`## Current state (${c.revision})`, "", "### Parts", "", "| Ref | Part number | Manufacturer | Value | Package | Seen in | Status |", "|---|---|---|---|---|---|---|");
-    for (const p of c.components) L.push(`| ${p.designator} | ${p.mpn ?? "—"} | ${p.manufacturer ?? "—"} | ${p.value ?? "—"} | ${p.package ?? "—"} | ${p.sources.join(", ")} | ${p.status}${p.reasons.length ? `: ${esc(p.reasons.join("; "))}` : ""} |`);
+    L.push(`## Current state (${c.revision})`, "", "### Parts", "", "| Ref | Part number | Manufacturer | Value | Package | Why it is there | Seen in | Status |", "|---|---|---|---|---|---|---|---|");
+    for (const p of c.components) {
+      const why = p.design ? [p.design.role, p.design.details, p.design.note].filter(Boolean).join(" — ") : "";
+      L.push(`| ${p.designator} | ${p.mpn ?? "—"}${p.suppliers ? ` (${esc(Object.entries(p.suppliers).map(([k, v]) => `${k} ${v}`).join(", "))})` : ""} | ${p.manufacturer ?? "—"} | ${p.value ?? "—"} | ${p.package ?? "—"} | ${esc(why) || "—"} | ${p.sources.join(", ")} | ${p.status}${p.reasons.length ? `: ${esc(p.reasons.join("; "))}` : ""} |`);
+    }
     L.push("", "### Board", "", `- Outline: ${c.enclosure.outline_mm ?? "unknown"} (from ${c.board.sources.join(" and ") || "nothing"})`,
       `- Copper layers: ${c.board.copper_layers ?? "unknown"}${c.board.layer_names?.length ? ` (${c.board.layer_names.join(", ")})` : ""}`,
       `- Minimum trace / space: ${c.board.min_trace_mm ?? "?"} / ${c.board.min_space_mm ?? "?"} mm`, "", "### Connectors (motherboard and external connections)", "");

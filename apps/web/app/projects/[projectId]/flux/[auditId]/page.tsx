@@ -131,10 +131,14 @@ export default async function FluxAuditPage({ params, searchParams }: {
               ))}{!cur.connectors.length && <li className="muted">none recognised</li>}</ul>
               <h3 style={{ marginTop: 16 }}>Parts</h3>
               <table className="small" data-testid="parts">
-                <thead><tr><th>Ref</th><th>Part number</th><th>Value</th><th>Package</th><th>Seen in</th><th>Status</th></tr></thead>
+                <thead><tr><th>Ref</th><th>Part number</th><th>Value</th><th>Package</th><th>Why it is there (designer&apos;s notes)</th><th>Seen in</th><th>Status</th></tr></thead>
                 <tbody>{cur.components.map((c) => (
-                  <tr key={c.designator} data-ref={c.designator}><td>{c.designator}</td><td>{c.mpn ?? <span className="warn-text">none</span>}{c.manufacturer && <div className="muted">{c.manufacturer}</div>}</td>
-                    <td>{c.value ?? "—"}</td><td>{c.package ?? "—"}</td><td>{c.sources.join(", ")}</td>
+                  <tr key={c.designator} data-ref={c.designator}><td>{c.designator}</td><td>{c.mpn ?? <span className="warn-text">none</span>}{c.manufacturer && <div className="muted">{c.manufacturer}</div>}
+                      {c.suppliers && <div className="muted">{Object.entries(c.suppliers).map(([k, v]) => `${k} ${v}`).join(", ")}</div>}</td>
+                    <td>{c.value ?? "—"}</td><td>{c.package ?? "—"}</td>
+                    <td data-testid="design-notes">{c.design ? <>{c.design.role && <strong>{c.design.role}</strong>}{c.design.group && <span className="muted"> · {c.design.group}</span>}
+                      {c.design.details && <div>{c.design.details}</div>}{c.design.note && <div className="muted">{c.design.note}</div>}</> : <span className="muted">—</span>}</td>
+                    <td>{c.sources.join(", ")}</td>
                     <td><span className={`pill pill-${c.status === "consistent" ? "complete" : "awaiting_approval"}`}>{c.status}</span>
                       {!!c.reasons.length && <div className="muted">{c.reasons.join("; ")}</div>}</td></tr>
                 ))}</tbody>

@@ -7,12 +7,12 @@ import { unzipSync } from "fflate";
 
 export type FileKind =
   | "flux_json" | "flux_schema" | "gerber" | "drill" | "bom_csv" | "pnp_csv" | "table_csv" | "edif" | "ipc356" | "ipc2581"
-  | "odbpp" | "gencad" | "step" | "mesh_3d" | "drawing" | "pdf" | "image" | "text" | "archive" | "unknown";
+  | "odbpp" | "gencad" | "idf" | "step" | "mesh_3d" | "drawing" | "pdf" | "image" | "text" | "archive" | "unknown";
 
 export const KIND_LABEL: Record<FileKind, string> = {
   flux_json: "Flux project data (JSON)", flux_schema: "Flux project JSON schema", gerber: "Gerber layer", drill: "Drill file",
   bom_csv: "Bill of materials (CSV)", pnp_csv: "Pick and place (CSV)", table_csv: "Other table (CSV)", edif: "Schematic netlist (EDIF)",
-  ipc356: "Layout netlist (IPC-D-356)", ipc2581: "IPC-2581", odbpp: "ODB++", gencad: "GenCAD", step: "3D model (STEP)",
+  ipc356: "Layout netlist (IPC-D-356)", ipc2581: "IPC-2581", odbpp: "ODB++", gencad: "GenCAD", idf: "Board outline (IDF)", step: "3D model (STEP)",
   mesh_3d: "3D mesh (STL/GLB/OBJ…)", drawing: "2D drawing (DXF/SVG)", pdf: "PDF", image: "Image or screenshot",
   text: "Notes, chat or report (text)", archive: "Archive", unknown: "Unrecognised",
 };
@@ -54,6 +54,7 @@ export function classify(path: string, data: Uint8Array): FileKind {
   if (e === "d356" || e === "ipc" && /^(C |P |3\d7)/m.test(h)) return "ipc356";
   if (e === "ipc2581c" || e === "cvg" || /<IPC-2581/i.test(h)) return "ipc2581";
   if (e === "cad" && /\$HEADER/i.test(h)) return "gencad";
+  if ((e === "emn" || e === "emp" || e === "brd" || e === "bdf" || e === "pro") && /^\s*\.HEADER\b/i.test(h)) return "idf";
   if (e === "step" || e === "stp" || e === "stpz" || /^ISO-10303-21;/.test(h)) return "step";
   if (MESH_EXT.has(e)) return "mesh_3d";
   if (e === "dxf" || e === "svg") return "drawing";
@@ -88,7 +89,9 @@ export function buildInventory(uploads: Upload[]): { files: InventoryFile[]; pro
     total += data.length;
     if (total > LIMITS.maxTotalBytes) { problems.push({ path, problem: "the bundle unpacks to more than 1 GB; the rest was not read" }); return; }
     const lower = path.toLowerCase();
-    if (isZip(data) && depth < 2 && !/odb/.test(lower.split(/[/!]/).pop()!)) {
+    // ODB++ is one job in a ZIP (matrix/matrix, steps/…): kept whole, whatever the archive is called.
+    const odb = isZip(data) && (/odb/.test(lower.split(/[/!]/).pop()!) || zipHas(data, /(^|\/)matrix\/matrix$/i));
+    if (isZip(data) && depth < 2 && !odb) {
       let inner: Record<string, Uint8Array>;
       try {
         inner = unzipSync(data, { filter: (f) => f.originalSize <= LIMITS.maxFileBytes });
@@ -105,11 +108,18 @@ export function buildInventory(uploads: Upload[]): { files: InventoryFile[]; pro
       }
       return;
     }
-    const kind = isZip(data) && /odb/.test(lower) ? "odbpp" : classify(path, data);
+    const kind = odb ? "odbpp" : classify(path, data);
     files.push({ path, revision, kind, size: data.length, sha256: sha(data), data });
   };
   for (const u of uploads) add(u.name, u.revision, u.data, 0);
   return { files, problems };
+}
+
+/** Whether a ZIP has an entry whose name matches, without unpacking anything. */
+export function zipHas(data: Uint8Array, re: RegExp): boolean {
+  let found = false;
+  try { unzipSync(data, { filter: (f) => { if (re.test(f.name)) found = true; return false; } }); } catch { return false; }
+  return found;
 }
 
 export const text = (f: InventoryFile) => new TextDecoder("utf-8", { fatal: false }).decode(f.data);

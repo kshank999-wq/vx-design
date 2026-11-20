@@ -11,6 +11,7 @@ export function parseIpc356(path: string, src: string): ParsedFile {
   let units = "";
   const notes: string[] = [];
   let bad = 0;
+  const seen = new Map<string, number>();
   for (const raw of src.split(/\r?\n/)) {
     const line = raw.replace(/\s+$/, "");
     if (line.startsWith("P ")) {
@@ -27,9 +28,13 @@ export function parseIpc356(path: string, src: string): ParsedFile {
     if (!ref || ref.toUpperCase() === "VIA") continue;
     if (!pin) { bad++; continue; }
     net = aliases.get(net) ?? net;
-    if (!net || net === "N/C") net = `N/C:${ref}.${pin}`;
+    // A pin field repeated on one part (Flux writes pin *names*, cut to four characters, so "GND" and "GND_2" both
+    // become "GND") is kept apart as "GND#2" for the audit to match against the schematic.
+    let key = pinKey(ref, pin);
+    if (seen.has(key)) { const n = (seen.get(key) ?? 1) + 1; seen.set(key, n); key = `${key}#${n}`; } else seen.set(key, 1);
+    if (!net || net === "N/C") net = `N/C:${key}`;
     if (!nets.has(net)) nets.set(net, new Set());
-    nets.get(net)!.add(pinKey(ref, pin));
+    nets.get(net)!.add(key);
   }
   if (bad) notes.push(`${bad} record(s) without a pin number were skipped`);
   if (!nets.size) notes.push("no component access records found");
