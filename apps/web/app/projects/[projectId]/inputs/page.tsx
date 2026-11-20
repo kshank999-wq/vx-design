@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
 import { InputsUpload } from "@/components/InputsUpload";
@@ -54,7 +55,8 @@ export default async function InputsPage({ params, searchParams }: {
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
-      <h1>Project inputs</h1>
+      <div className="row spread"><h1>Project inputs</h1>
+        {((audits ?? []).some((a) => a.status === "queued" || a.status === "running") || (docs ?? []).some((d) => d.extraction_status === "running")) && <AutoRefresh intervalMs={3000} />}</div>
       <p className="muted">Everything the plan is built from: the specifications, mock-ups and references, and work already done in other tools.
         The plan cites these by their codes (REF-1, PW-1) and says for each task whether it reuses earlier work, adapts it or starts fresh,
         so nothing that exists is done again. Imported work is never treated as verified: the plan includes the checks that re-establish it.</p>
@@ -143,7 +145,7 @@ export default async function InputsPage({ params, searchParams }: {
         {canEdit && (() => {
           const open = (audits ?? []).filter((a) => a.status === "draft" || a.status === "failed").at(-1);
           const running = (audits ?? []).some((a) => a.status === "queued" || a.status === "running");
-          if (running) return <p className="small muted" data-testid="flux-running">A worker is reading a Flux import; it appears above when the audit is ready. Reload to check.</p>;
+          if (running) return <p className="small muted" data-testid="flux-running">A worker is reading a Flux import. This page updates by itself; the import appears above when the audit is ready.</p>;
           if (!open) return (
             <form action={createAudit.bind(null, projectId)} className="card row" data-testid="flux-start">
               <input type="hidden" name="from" value="inputs" />

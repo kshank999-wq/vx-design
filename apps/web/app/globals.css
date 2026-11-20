@@ -219,3 +219,6 @@ label.radio { flex-direction: row; align-items: center; color: var(--fg); }
 .pill-risk-medium { background: var(--warn-bg); color: var(--warn); }
 .pill-risk-high, .pill-risk-critical { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 .pill-risk-critical { font-weight: 600; }
+
+.toast { position: fixed; right: 16px; bottom: 16px; max-width: min(480px, calc(100vw - 32px)); z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.15); cursor: pointer; margin: 0; }
+.toast::before { content: attr(data-text); }

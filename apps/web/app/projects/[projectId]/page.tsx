@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -69,7 +70,7 @@ export default async function ProjectPage({ params, searchParams }: {
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> /</p>
-      <h1>{project.name}</h1>
+      <div className="row spread"><h1>{project.name}</h1>{(docs ?? []).some((d) => d.extraction_status === "running") && <AutoRefresh intervalMs={4000} />}</div>
       {project.description && <p className="muted">{project.description}</p>}
       <Banner error={error} notice={notice} />
       <p><Link href={`/projects/${projectId}/workspace`} className="btn">Open the workspace</Link>

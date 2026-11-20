@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
@@ -21,7 +22,7 @@ export default async function FluxAuditsPage({ params, searchParams }: {
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
-      <h1>Flux import and audit</h1>
+      <div className="row spread"><h1>Flux import and audit</h1>{(audits ?? []).some((a) => a.status === "queued" || a.status === "running") && <AutoRefresh intervalMs={3000} />}</div>
       <p className="muted">Bring in work done in Flux: what was exported, what is consistent and what is uncertain, what changed between revisions,
         which earlier decisions and test claims have evidence, and a migration plan. An imported design is never treated as verified.</p>
       <Banner error={error} />

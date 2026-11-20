@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Suspense } from "react";
+import { ScrollKeeper } from "@/components/ScrollKeeper";
 import { signOut } from "./login/actions";
 import "./globals.css";
 
@@ -36,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           )}
         </header>
         {children}
+        <Suspense fallback={null}><ScrollKeeper /></Suspense>
       </body>
     </html>
   );

@@ -131,8 +131,12 @@ try {
   const r2 = page.getByTestId("references").locator("[data-ref='REF-2']");
   await r2.locator("summary").click();
   await r2.getByLabel("Use REF-2 in the plan").uncheck();
+  const before = await page.evaluate(() => window.scrollY);
   await r2.getByRole("button", { name: "Save" }).click();
   await page.getByText("Reference saved.").waitFor();
+  await page.getByTestId("toast").waitFor();
+  assert.ok(await page.evaluate(() => window.scrollY) > Math.min(before, 300) - 50, "the page stays where it was after a form is sent");
+  assert.equal(await page.getByTestId("toast").getAttribute("data-text"), "Reference saved.");
   assert.doesNotMatch(await page.getByTestId("plan-context").locator("pre").textContent(), /REF-2/);
   await page.goto(`${P}/concepts`);
   await page.getByLabel("Use REF-1 Front view").check();
@@ -161,6 +165,7 @@ try {
   await page.getByRole("button", { name: "Run the audit" }).click();
   await page.getByText(/Audit requested/).waitFor();
   await page.getByTestId("flux-running").waitFor();
+  await page.locator(".live-dot").waitFor();   // the page refreshes itself while the audit runs
   await shot(page, "04-flux-import");
   console.log("Inputs flow passed: two specs extracted together with a duplicate flagged, references, prior work, plan built on REF/PW with task basis, concepts from a mock-up, Flux import from the inputs page.");
 } catch (e) {
