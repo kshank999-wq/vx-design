@@ -79,6 +79,13 @@ export const AcceptanceTest = z.object({
 });
 
 /** Task as produced by the planner, before it is written to the database (§6). */
+export const TaskBasis = z.object({
+  mode: z.enum(["reuse", "adapt", "new"]),
+  sources: z.array(z.string()).default([]),
+  reason: z.string().default(""),
+});
+export type TaskBasis = z.infer<typeof TaskBasis>;
+
 export const PlannedTask = z.object({
   key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   title: z.string().min(1),
@@ -95,6 +102,8 @@ export const PlannedTask = z.object({
   approvalRequired: z.boolean().default(false),
   approvalReason: z.string().nullable().default(null),
   estimatedHours: z.number().nonnegative().nullable().default(null),
+  /** What the task builds on: reuse or adapt prior work and references (cited by input id), or start fresh. */
+  basis: TaskBasis.nullable().default(null),
 });
 export type PlannedTask = z.infer<typeof PlannedTask>;
 

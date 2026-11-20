@@ -10,9 +10,11 @@ const go = (path: string, notice: string) => redirect(`${path}${path.includes("?
 export async function requestConcepts(projectId: string, parentVariantId: string | null, form: FormData) {
   const path = pagePath(projectId, form);
   const { supabase } = await requireUser();
-  const { error } = await supabase.rpc("request_concepts", {
-    p_project_id: projectId, p_direction: str(form, "direction"), p_count: Number(str(form, "count") || 3), p_parent_variant_id: parentVariantId,
-  });
+  const refs = form.getAll("reference").map(String).filter(Boolean);
+  const args = { p_project_id: projectId, p_direction: str(form, "direction"), p_count: Number(str(form, "count") || 3), p_parent_variant_id: parentVariantId };
+  const { error } = refs.length
+    ? await supabase.rpc("request_concepts_with_references", { ...args, p_reference_ids: refs })
+    : await supabase.rpc("request_concepts", args);
   if (error) fail(path, error);
   revalidatePath(`/projects/${projectId}/concepts`);
   go(path, parentVariantId ? "Refinement requested: new variants appear here when they are ready." : "Concepts requested: they appear here when they are ready.");

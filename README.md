@@ -68,6 +68,48 @@ pnpm --filter @vx/web build && pnpm --filter @vx/web start
 pnpm test:e2e                      # browser flow; run the app with VX_LLM=offline to avoid model calls
 ```
 
+### Project inputs
+
+**Project inputs** (`/projects/<id>/inputs`, linked first on the project page) is where everything a plan is built
+from comes together, and where the plan is generated:
+
+1. **Specifications.**
+   - **Upload:** any number at once, one per board, for the enclosure, for the software. Each file goes from the
+     browser to a staging folder and is then checked and parsed as before.
+   - **Extract:** "Extract requirements from N documents" reads them at the same time, then stores the results one
+     document after another, so requirement codes continue across documents.
+   - **Duplicates:** requirements that say nearly the same thing in two documents (word overlap ≥ 75%) are listed for
+     a person to merge or keep.
+2. **Mock-ups and references (`REF-n`).**
+   - **What they are:** sketches, renders, photos, drawings, datasheets, and files from other tools or another
+     engineer (a KiCad project, a BOM spreadsheet, a schematic PDF: kind "Prior design").
+   - **Each one has:** a kind, a title, a note on what it shows and what to keep, and a "use in the plan" switch.
+   - **Files accepted:** PNG, JPEG, WebP, GIF, PDF, DOCX, XLSX, ZIP, STEP and text, checked on their bytes. SVG is
+     refused because it can carry script.
+   - **Concepts:** image references can be given to a concept round. The image model gets them as reference images,
+     and their notes go into the brief.
+3. **Prior work (`PW-n`).** Finished Flux audits marked for the plan. The planner gets, for each:
+   - **Board:** size, layers, and whether it is routed.
+   - **Parts:** grouped by part number and role, with the designer's notes.
+   - **Design facts:** rails and connectors.
+   - **History:** earlier decisions and claimed validations, all marked unverified.
+   - **Audit results:** its open problems and suggested next steps.
+4. **Other inputs.** The intake, the design freeze, confirmed standards and knowledge sources are shown with links,
+   and also go to the planner.
+5. **The plan.** "What the planner reads" shows the exact context. "Generate plan from these inputs" builds the plan.
+   - **Each task** states its basis: it **reuses** earlier work, **adapts** it, or **starts fresh**, citing the inputs
+     it builds on and saying what remains.
+   - **Validation:** a task citing an input that does not exist, or reusing work without citing any, is sent back for
+     repair. Imported work is never treated as verified, so reused work still gets acceptance tests that
+     re-establish it.
+   - **Display:** the plan page shows each task's basis and the inputs the plan was built on.
+   - **Kept through changes:** the basis and the input list are stored with the plan and survive revisions and changes
+     made from the workspace chat.
+
+`supabase/tests/inputs_test.sql` covers the database rules: who may add references, the folder they must be stored
+in, duplicates, image-only concept references, and the plan's inputs and basis through revision.
+`pnpm test:e2e:inputs` covers the browser flow.
+
 ## G2: worker backbone
 
 Approved plans are executed by workers (`services/orchestrator`), separate long-running processes

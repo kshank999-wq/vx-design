@@ -35,7 +35,7 @@ export async function draftPlanChange(projectId: string, messageId: number) {
   const { data: plan } = await supabase.from("plans").select("*").eq("project_id", projectId).in("status", ["draft", "awaiting_approval", "approved"])
     .order("version", { ascending: false }).limit(1).maybeSingle();
   if (!plan) fail(path, "There is no plan to change yet.");
-  const { data: tasks } = await supabase.from("tasks").select("id, key, title, discipline, description, required_tools, acceptance_tests, approval_policy, risk_level, estimated_hours")
+  const { data: tasks } = await supabase.from("tasks").select("id, key, title, discipline, description, required_tools, acceptance_tests, approval_policy, risk_level, estimated_hours, basis")
     .eq("plan_id", plan.id).order("position");
   const ids = (tasks ?? []).map((t) => t.id);
   const [{ data: deps }, { data: reqs }] = ids.length ? await Promise.all([
@@ -47,13 +47,14 @@ export async function draftPlanChange(projectId: string, messageId: number) {
     key: t.key, title: t.title, discipline: t.discipline, description: t.description, required_tools: t.required_tools ?? [],
     acceptance_tests: t.acceptance_tests ?? [], approval_required: !!(t.approval_policy as { required?: boolean } | null)?.required,
     approval_reason: (t.approval_policy as { reason?: string | null } | null)?.reason ?? null, risk_level: t.risk_level, estimated_hours: t.estimated_hours,
+    basis: t.basis ?? null,
     upstream_keys: (deps ?? []).filter((d) => d.task_id === t.id).map((d) => keyOf.get(d.depends_on_task_id)!).filter(Boolean).sort(),
     requirement_refs: (reqs ?? []).filter((r) => r.task_id === t.id).map((r) => (r.requirements as unknown as { ref_code: string }).ref_code).sort(),
   }));
   let changed: PlanTaskPayload[];
   try { changed = applyPlanChange(payloadTasks, change); } catch (e) { fail(path, `The change cannot be applied: ${(e as Error).message}.`); }
   const { data: newId, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: {
-    summary: plan.summary, supervision_mode: plan.supervision_mode, assumptions: plan.assumptions, deferred: plan.deferred, revised_from_id: plan.id,
+    summary: plan.summary, supervision_mode: plan.supervision_mode, assumptions: plan.assumptions, deferred: plan.deferred, revised_from_id: plan.id, inputs: plan.inputs ?? [],
     generator: { ...(plan.generator as object ?? {}), revised_from_version: plan.version, chat_message_id: String(messageId), chat_change: change },
     tasks: changed,
   } });

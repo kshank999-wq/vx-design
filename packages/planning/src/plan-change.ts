@@ -24,6 +24,8 @@ export interface PlanTaskPayload {
   key: string; title: string; discipline: string; description: string | null; required_tools: string[]; acceptance_tests: unknown[];
   approval_required: boolean; approval_reason: string | null; risk_level: string; estimated_hours: number | null;
   upstream_keys: string[]; requirement_refs: string[];
+  /** What the task builds on (plan inputs); kept through chat changes. */
+  basis?: { mode: string; sources: string[]; reason: string } | null;
 }
 
 export function slugKey(title: string, taken: Set<string>): string {

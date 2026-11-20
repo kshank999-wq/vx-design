@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Discipline, PlannedTask, RiskLevel, ValidationKind, topologicalOrder } from "@vx/contracts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
-export const PLAN_PROMPT_VERSION = "plan-v1";
+export const PLAN_PROMPT_VERSION = "plan-v2";
 const MAX_REPAIR_ROUNDS = 2;
 
 export interface RequirementInput {
@@ -16,6 +16,7 @@ export interface RequirementInput {
   status: string;
   text: string;
   notes?: string | null;
+  acceptanceCriteria?: string | null;
 }
 
 export interface CapabilityInput {
@@ -43,6 +44,11 @@ const PlanOutput = z.object({
     approval_required: z.boolean(),
     approval_reason: z.string().nullable(),
     estimated_hours: z.number().nullable(),
+    basis: z.object({
+      mode: z.enum(["reuse", "adapt", "new"]).describe("reuse: take prior work or a reference as it is and check it; adapt: start from it and change it; new: nothing to build on"),
+      sources: z.array(z.string()).describe("Input ids this task builds on, e.g. PW-1, REF-2; empty for new"),
+      reason: z.string().describe("One sentence: what is taken over and what still has to be done"),
+    }).nullable().optional(),
   })),
   deferred_requirements: z.array(z.object({ ref: z.string(), reason: z.string() })),
   assumptions: z.array(z.string()),
@@ -60,7 +66,9 @@ For each task:
 - set approval_required for decisions a human must own: processor or SoC family, battery chemistry and charging, board dimensions and layer stackup, major connector assignments, and anything with high or critical risk;
 - choose required_tools from the capability list where possible.
 
-Every requirement must be covered by at least one task, or listed in deferred_requirements with a reason. Put open assumptions you relied on in assumptions.`;
+Every requirement must be covered by at least one task, or listed in deferred_requirements with a reason. Put open assumptions you relied on in assumptions.
+
+Build on what exists. The project context may list prior work (PW-n: earlier designs imported from other tools, with their parts, boards, decisions and open problems) and references (REF-n: mock-ups, sketches, drawings, datasheets). Do not plan to redo work that exists: plan to take it over, check it and finish it. For every task set basis: "reuse" when prior work or a reference is taken as it is and checked, "adapt" when it is the starting point but must change, "new" when nothing exists; cite the input ids in sources and say in reason what is taken over and what remains. Imported work is never verified: a task that reuses it still needs acceptance tests that re-establish it (ERC, DRC, fit, a review of the earlier decisions). Treat the import audit's open problems and claimed validations as work to plan, not as facts.`;
 
 export interface PlanProblem {
   code: string;
@@ -92,14 +100,16 @@ export class PlanValidationError extends Error {
 export async function generatePlan(
   requirements: RequirementInput[],
   model: LanguageModel,
-  opts: { capabilities?: CapabilityInput[]; projectContext?: string } = {},
+  opts: { capabilities?: CapabilityInput[]; projectContext?: string; inputIds?: string[] } = {},
 ): Promise<PlanResult> {
+  const inputIds = opts.inputIds ?? [];
   const active = requirements.filter((r) => r.status !== "rejected");
   const usage: Usage[] = [];
   const caps = (opts.capabilities ?? [])
     .map((c) => `- ${c.toolName}.${c.operation}: ${c.status}`).join("\n") || "- (no capability data yet)";
   const reqs = active
-    .map((r) => `- ${r.refCode} [${r.kind}, ${r.priority}${r.status === "ambiguous" ? ", AMBIGUOUS" : ""}] ${r.text}${r.notes ? ` (open: ${r.notes})` : ""}`)
+    .map((r) => `- ${r.refCode} [${r.kind}, ${r.priority}${r.status === "ambiguous" ? ", AMBIGUOUS" : ""}] ${r.text}` +
+      `${r.acceptanceCriteria ? ` — accepted when: ${r.acceptanceCriteria}` : ""}${r.notes ? ` (open: ${r.notes})` : ""}`)
     .join("\n");
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{
     role: "user",
@@ -111,7 +121,7 @@ export async function generatePlan(
   for (let attempt = 1; ; attempt++) {
     const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: SYSTEM, messages, schema: PlanOutput });
     usage.push(result.usage);
-    const problems = validatePlan(result.output, active.map((r) => r.refCode));
+    const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds);
     if (!problems.length) {
       const { tasks, adjustments } = normalizePlan(result.output);
       return {
@@ -135,7 +145,7 @@ export async function generatePlan(
 }
 
 /** Deterministic checks. An empty list means the plan can be stored for review. */
-export function validatePlan(plan: PlanOutput, requirementRefs: string[]): PlanProblem[] {
+export function validatePlan(plan: PlanOutput, requirementRefs: string[], inputIds: string[] = []): PlanProblem[] {
   const problems: PlanProblem[] = [];
   const known = new Set(requirementRefs);
   const keys = new Set<string>();
@@ -148,6 +158,13 @@ export function validatePlan(plan: PlanOutput, requirementRefs: string[]): PlanP
     if (!t.acceptance_tests.length) problems.push({ code: "no_acceptance", message: `task "${t.key}" has no acceptance tests` });
     for (const ref of t.requirement_refs) {
       if (!known.has(ref)) problems.push({ code: "unknown_requirement", message: `task "${t.key}" references unknown requirement ${ref}` });
+    }
+    // With prior work or references to build on, every task says what it builds on, citing real inputs.
+    const ids = new Set(inputIds);
+    if (ids.size && !t.basis) problems.push({ code: "no_basis", message: `task "${t.key}" has no basis: say whether it reuses, adapts or starts fresh` });
+    if (t.basis) {
+      for (const src of t.basis.sources) if (!ids.has(src)) problems.push({ code: "unknown_source", message: `task "${t.key}" cites ${src}, which is not one of the inputs (${[...ids].join(", ") || "none"})` });
+      if (t.basis.mode !== "new" && !t.basis.sources.length) problems.push({ code: "basis_without_source", message: `task "${t.key}" ${t.basis.mode}s earlier work but cites no input` });
     }
   }
   for (const t of plan.tasks) {
@@ -197,6 +214,7 @@ function toContract(t: PlanOutput["tasks"][number]): PlannedTask {
     approvalRequired: t.approval_required,
     approvalReason: t.approval_reason,
     estimatedHours: t.estimated_hours,
+    basis: t.basis ?? null,
   });
 }
 

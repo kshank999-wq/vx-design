@@ -22,7 +22,7 @@ export default async function ConceptsPage({ params, searchParams }: {
   const { embed: e, error, notice } = await searchParams;
   const embed = e === "1";
   const { supabase, userId } = await requireUser();
-  const [{ data: project }, { data: me }, { data: rounds }, { data: variants }, { data: freeze }] = await Promise.all([
+  const [{ data: project }, { data: me }, { data: rounds }, { data: variants }, { data: freeze }, { data: mockups }] = await Promise.all([
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("concept_rounds").select("id, round_no, direction, variant_count, parent_variant_id, status, brief, brief_model, provider, model, error, created_at")
@@ -30,6 +30,7 @@ export default async function ConceptsPage({ params, searchParams }: {
     supabase.from("concept_variants").select("id, round_id, ordinal, name, rationale, prompt, cmf, status, error, image_path, mime_type, provider, model, seed, revised_prompt, provider_meta")
       .eq("project_id", projectId).order("ordinal"),
     supabase.from("current_design_freeze").select("id, variant_id, envelope, cmf, note, change_reason, frozen_at").eq("project_id", projectId).maybeSingle(),
+    supabase.from("project_references").select("id, ref_no, title").eq("project_id", projectId).in("mime_type", ["image/png", "image/jpeg", "image/webp"]).order("ref_no"),
   ]);
   if (!project) notFound();
   const role = me?.role ?? "viewer";
@@ -83,6 +84,11 @@ export default async function ConceptsPage({ params, searchParams }: {
               <select name="count" defaultValue="3">{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
             <SubmitButton pendingText="Requesting…">Generate concepts</SubmitButton>
           </div>
+          {!!mockups?.length && (
+            <fieldset className="row" data-testid="concept-references"><legend>Start from our mock-ups (up to 4; from <a href={`/projects/${projectId}/inputs`} target={embed ? "_top" : undefined}>project inputs</a>)</legend>
+              {mockups.map((m) => <label key={m.id} className="inline"><input type="checkbox" name="reference" value={m.id} aria-label={`Use REF-${m.ref_no} ${m.title}`} /> REF-{m.ref_no} {m.title}</label>)}
+            </fieldset>
+          )}
           <p className="small muted">Claude writes a brief from the requirements and your direction; an image model renders each variant.
             Image generation is paid: up to 2 rounds at a time and 12 a day per project.</p>
         </form>

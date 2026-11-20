@@ -30,7 +30,11 @@ export async function processConceptRound(db: WorkerDb, model: { model: Language
   try {
     const ctx = await db.conceptContext(round);
     const { brief, usage, promptVersion } = await generateConceptBrief({
-      project: ctx.project, requirements: ctx.requirements, direction: round.direction, count: round.variant_count,
+      project: ctx.project, requirements: ctx.requirements, count: round.variant_count,
+      direction: ctx.references.length
+        ? `${round.direction}\n\nThe team's own mock-ups are given as reference images; follow what they show unless the direction says otherwise:\n` +
+          ctx.references.map((r) => `- REF-${r.ref_no} ${r.title}${r.note ? `: ${r.note}` : ""}`).join("\n")
+        : round.direction,
       parent: ctx.parent ? { name: ctx.parent.name, prompt: ctx.parent.prompt, cmf_summary: (ctx.parent.cmf.summary as string) ?? null } : null,
       freeze: ctx.freeze,
     }, model.model);
@@ -50,6 +54,13 @@ export async function processConceptRound(db: WorkerDb, model: { model: Language
                           label: `"${ctx.parent.name}" (round ${ctx.parent.round_no})` });
       } else {
         referenceNote = `the refined variant is a ${ctx.parent.mime_type} placeholder, which ${provider.label} cannot take as a reference; refined from its description only`;
+      }
+    }
+
+    // The project's mock-ups chosen for this round (raster images; checked when the round was requested).
+    for (const r of ctx.references) {
+      if (RASTER.has(r.mime_type) || provider.id === "fixture") {
+        references.push({ mimeType: r.mime_type, data: await db.downloadBytes(r.storage_path), label: `REF-${r.ref_no} ${r.title}` });
       }
     }
 

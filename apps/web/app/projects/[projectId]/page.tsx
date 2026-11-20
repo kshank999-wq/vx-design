@@ -91,6 +91,9 @@ export default async function ProjectPage({ params, searchParams }: {
         <Link href={`/projects/${projectId}/wizard`} className="btn">Requirement wizard</Link>{" "}
         <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link></p>
 
+      <p className="card small" data-testid="inputs-link"><Link href={`/projects/${projectId}/inputs`} className="btn btn-primary">Project inputs</Link>{" "}
+        Add every specification at once, mock-ups and references, and work from other tools (Flux), then generate the plan from all of it.</p>
+
       <section>
         <h2>1. Specification documents</h2>
         <table>
@@ -113,7 +116,7 @@ export default async function ProjectPage({ params, searchParams }: {
                   </td>
                   <td className="right">
                     {canEdit && (
-                      <form action={runExtraction.bind(null, projectId, d.id)}>
+                      <form action={runExtraction.bind(null, projectId, d.id, "project")}>
                         <SubmitButton variant="secondary" pendingText="Extracting… (can take a few minutes)">
                           {d.extraction_status === "pending" ? "Extract requirements" : "Re-extract"}
                         </SubmitButton>
@@ -199,7 +202,7 @@ export default async function ProjectPage({ params, searchParams }: {
           {!plans?.length && <li className="muted">No plans yet.</li>}
         </ul>
         {canEdit && (
-          <form action={createPlan.bind(null, projectId)}>
+          <form action={createPlan.bind(null, projectId, "project")}>
             <SubmitButton disabled={counts.total - counts.rejected === 0} pendingText="Generating plan… (can take a few minutes)">
               Generate plan from requirements
             </SubmitButton>

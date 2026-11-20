@@ -381,16 +381,20 @@ export class WorkerDb {
     requirements: { ref_code: string; kind: string; text: string }[];
     parent: { name: string; prompt: string; cmf: Record<string, unknown>; image_path: string; mime_type: string; round_no: number } | null;
     freeze: { name: string; envelope: { length_mm: number; width_mm: number; height_mm: number } } | null;
+    references: { ref_no: number; title: string; note: string | null; storage_path: string; mime_type: string }[];
   }> {
-    const [{ data: project, error: e1 }, { data: reqs, error: e2 }, parent, { data: freeze, error: e4 }] = await Promise.all([
+    const [{ data: project, error: e1 }, { data: reqs, error: e2 }, parent, { data: freeze, error: e4 }, { data: refs, error: e5 }] = await Promise.all([
       this.client.from("projects").select("name, description").eq("id", round.project_id).single(),
       this.client.from("requirements").select("ref_code, kind, text").eq("project_id", round.project_id).neq("status", "rejected").order("ref_code"),
       round.parent_variant_id
         ? this.client.from("concept_variants").select("name, prompt, cmf, image_path, mime_type, concept_rounds!concept_variants_round_id_fkey(round_no)").eq("id", round.parent_variant_id).single()
         : Promise.resolve({ data: null, error: null }),
       this.client.from("current_design_freeze").select("envelope, concept_variants(name)").eq("project_id", round.project_id).maybeSingle(),
+      round.reference_ids?.length
+        ? this.client.from("project_references").select("ref_no, title, note, storage_path, mime_type").eq("project_id", round.project_id).in("id", round.reference_ids).order("ref_no")
+        : Promise.resolve({ data: [], error: null }),
     ]);
-    const err = e1 ?? e2 ?? parent.error ?? e4;
+    const err = e1 ?? e2 ?? parent.error ?? e4 ?? e5;
     if (err) throw new Error(`concept context: ${err.message}`);
     const p = parent.data as { name: string; prompt: string; cmf: Record<string, unknown>; image_path: string; mime_type: string;
                                concept_rounds: { round_no: number } } | null;
@@ -399,6 +403,7 @@ export class WorkerDb {
       parent: p ? { name: p.name, prompt: p.prompt, cmf: p.cmf, image_path: p.image_path, mime_type: p.mime_type, round_no: p.concept_rounds.round_no } : null,
       freeze: freeze ? { name: (freeze.concept_variants as unknown as { name: string }).name,
                          envelope: freeze.envelope as { length_mm: number; width_mm: number; height_mm: number } } : null,
+      references: (refs ?? []) as { ref_no: number; title: string; note: string | null; storage_path: string; mime_type: string }[],
     };
   }
 
@@ -573,7 +578,7 @@ export interface OcrJobRow {
 
 export interface ConceptRoundRow {
   id: string; project_id: string; round_no: number; direction: string; variant_count: number; parent_variant_id: string | null;
-  attempts: number;
+  attempts: number; reference_ids?: string[] | null;
 }
 
 

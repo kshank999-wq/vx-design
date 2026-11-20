@@ -46,6 +46,7 @@
     "test:e2e:kb-polish": "./scripts/test-e2e-kb-polish.sh",
     "test:e2e:wizard": "./scripts/test-e2e-wizard.sh",
     "test:e2e:inspection": "./scripts/test-e2e-inspection.sh",
+    "test:e2e:inputs": "./scripts/test-e2e-inputs.sh",
     "check:integrity": "./scripts/check-integrity.sh",
     "drill:backup": "./scripts/backup-drill.sh",
     "test:regression": "node tests/regression/run.ts",

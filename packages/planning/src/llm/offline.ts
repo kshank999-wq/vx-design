@@ -102,6 +102,17 @@ export class OfflineModel implements LanguageModel {
       t("verification", "Verification and manufacturing outputs", "verification", ["pcb-layout"], ["MFG", "REG", "CST"],
         { required_tools: ["kicad", "kikit"] }),
     ];
+    // Inputs to build on: prior work (PW-n) goes to the electronics, mock-ups and drawings (REF-n) to the envelope.
+    const pw = [...prompt.matchAll(/^Prior work \[(PW-\d+)\]/gm)].map((m) => m[1]!);
+    const refsIn = [...prompt.matchAll(/^- \[(REF-\d+)\] .*?\((mockup|sketch|render|photo|drawing|prior design|datasheet|other),/gm)];
+    const looks = refsIn.filter((m) => /mockup|sketch|render|photo|drawing/.test(m[2]!)).map((m) => m[1]!);
+    const prior = [...pw, ...refsIn.filter((m) => m[2] === "prior design").map((m) => m[1]!)];
+    if (pw.length || refsIn.length) {
+      const basis = (key: string) => key === "enclosure-envelope" && looks.length ? { mode: "adapt", sources: looks, reason: "Start from the mock-ups (offline plan)." }
+        : ["architecture", "schematic", "pcb-layout"].includes(key) && prior.length ? { mode: "adapt", sources: prior, reason: "Start from the prior design and re-check it (offline plan)." }
+        : { mode: "new", sources: [], reason: "Nothing to build on (offline plan)." };
+      for (const x of tasks) Object.assign(x, { basis: basis(x.key) });
+    }
     const covered = new Set(tasks.flatMap((x) => x.requirement_refs));
     const leftovers = reqs.map((r) => r.ref).filter((r) => !covered.has(r));
     tasks[0]!.requirement_refs.push(...leftovers);
