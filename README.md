@@ -106,6 +106,13 @@ from comes together, and where the plan is generated:
    - **Kept through changes:** the basis and the input list are stored with the plan and survive revisions and changes
      made from the workspace chat.
 
+**Large plans go to a worker.** Planning hundreds of requirements takes longer than the hosted web server's 5-minute
+request limit. Above 80 active requirements (`VX_WEB_PLAN_MAX_REQUIREMENTS`), "Generate plan" records a plan request
+(`public.request_plan`) holding everything the planner reads. A worker then generates the plan with no time limit
+and stores it as a draft version, with the same checks as a plan made on the web. Project inputs and the project
+page show the request's progress (they refresh themselves), then a link to the plan, or the reason it failed. Only
+one plan request runs per project at a time. `services/orchestrator/test/plan-request.test.ts` covers this path.
+
 `supabase/tests/inputs_test.sql` covers the database rules: who may add references, the folder they must be stored
 in, duplicates, image-only concept references, and the plan's inputs and basis through revision.
 `pnpm test:e2e:inputs` covers the browser flow.

@@ -4,6 +4,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
 import { InputsUpload } from "@/components/InputsUpload";
+import { PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { crossDocumentDuplicates } from "@/lib/documents";
@@ -183,11 +184,12 @@ export default async function InputsPage({ params, searchParams }: {
 
       <section className="card">
         <h2>5. The plan</h2>
+        <PlanRequestStatus supabase={supabase} projectId={projectId} />
         <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}.</p>
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
         {canEdit && (
           <form action={createPlan.bind(null, projectId, "inputs")} className="row">
-            <SubmitButton disabled={!active.length} pendingText="Planning… (a minute or two)">Generate plan from these inputs</SubmitButton>
+            <SubmitButton disabled={!active.length} pendingText="Starting…">Generate plan from these inputs</SubmitButton>
             {!active.length && <span className="small muted">Extract requirements first.</span>}
           </form>
         )}

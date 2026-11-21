@@ -1,7 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { extractRequirements, generatePlan, PlanValidationError } from "@vx/planning";
+import { extractRequirements, generatePlan, planPayload, PlanValidationError, type PlanRequestPayload } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
@@ -47,6 +47,9 @@ export async function setRequirementStatus(projectId: string, requirementId: str
   revalidatePath(path);
 }
 
+/** Above this many active requirements the plan is made by a worker: the web server's request limit is 5 minutes. */
+const WEB_PLAN_LIMIT = Number(process.env.VX_WEB_PLAN_MAX_REQUIREMENTS ?? 80);
+
 /** A plan from every project input: requirements (with acceptance criteria), intake, freeze, standards, references, prior work. */
 export async function createPlan(projectId: string, from?: string) {
   const path = from === "inputs" ? `/projects/${projectId}/inputs` : `/projects/${projectId}`;
@@ -59,54 +62,27 @@ export async function createPlan(projectId: string, from?: string) {
   ]);
   const active = (reqs ?? []).filter((r) => r.status !== "rejected");
   if (!active.length) fail(path, "Extract or add requirements before generating a plan.");
+  const request: PlanRequestPayload = {
+    requirements: active.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, status: r.status, text: r.text, notes: r.notes, acceptanceCriteria: r.acceptance_criteria })),
+    context: loaded.context, input_ids: loaded.sources.map((x) => x.id), inputs: loaded.record,
+    capabilities: (caps ?? []).map((c) => ({ toolName: c.tool_name, operation: c.operation, status: c.status })),
+    supervision_mode: project?.supervision_mode ?? "guided",
+  };
+
+  // Large projects: a worker plans (it has no time limit); this page and the inputs page show progress.
+  if (active.length > WEB_PLAN_LIMIT) {
+    const { error } = await supabase.rpc("request_plan", { p_project: projectId, p_payload: request });
+    if (error) fail(path, error);
+    revalidatePath(path);
+    redirect(`${path}?notice=${encodeURIComponent(`Planning ${active.length} requirements: a worker is generating the plan. This page updates by itself and links to the plan when it is ready (usually 5 to 15 minutes).`)}`);
+  }
 
   let choice;
-  try {
-    choice = getModel();
-  } catch (e) {
-    fail(path, e);
-  }
+  try { choice = getModel(); } catch (e) { fail(path, e); }
   let planId: string;
   try {
-    const plan = await generatePlan(
-      active.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, status: r.status, text: r.text, notes: r.notes, acceptanceCriteria: r.acceptance_criteria })),
-      choice.model,
-      {
-        capabilities: (caps ?? []).map((c) => ({ toolName: c.tool_name, operation: c.operation, status: c.status })),
-        projectContext: loaded.context,
-        inputIds: loaded.sources.map((x) => x.id),
-      },
-    );
-    const payload = {
-      summary: plan.summary,
-      supervision_mode: project?.supervision_mode ?? "guided",
-      generator: {
-        model: choice.label,
-        offline: choice.offline,
-        prompt_version: plan.promptVersion,
-        attempts: plan.attempts,
-        adjustments: plan.adjustments,
-        usage: plan.usage,
-      },
-      assumptions: plan.assumptions,
-      deferred: plan.deferred,
-      inputs: loaded.record,
-      tasks: plan.tasks.map((t) => ({
-        key: t.key,
-        title: t.title,
-        discipline: t.discipline,
-        description: t.description ?? "",
-        upstream_keys: t.upstreamKeys,
-        requirement_refs: t.requirementRefs,
-        required_tools: t.requiredTools,
-        acceptance_tests: t.acceptanceTests,
-        risk_level: t.riskLevel,
-        approval_required: t.approvalRequired,
-        approval_reason: t.approvalReason,
-        estimated_hours: t.estimatedHours,
-        basis: t.basis,
-      })),
-    };
+    const plan = await generatePlan(request.requirements, choice.model, { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids });
+    const payload = planPayload(plan, { model: choice.label, offline: choice.offline, supervisionMode: request.supervision_mode, inputs: request.inputs });
     const { data, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: payload });
     if (error) throw new Error(error.message);
     planId = data as string;

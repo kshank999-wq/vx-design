@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
+import { PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StagedFileInput } from "@/components/StagedFileInput";
@@ -191,6 +192,7 @@ export default async function ProjectPage({ params, searchParams }: {
 
       <section>
         <h2>3. Plans</h2>
+        <PlanRequestStatus supabase={supabase} projectId={projectId} />
         <ul className="list">
           {(plans ?? []).map((p) => (
             <li key={p.id}>

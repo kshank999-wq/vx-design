@@ -447,6 +447,17 @@ export class WorkerDb {
     return { requirements: reqs ?? [], attachments };
   }
 
+  // --- Plan requests (plans too large for the web server) ---
+
+  async claimPlanRequest(workerId: string): Promise<PlanRequestRow | null> {
+    const r = await this.rpc<PlanRequestRow | null>("claim_plan_request", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async completePlanRequest(id: string, workerId: string, plan: unknown, model: string, error: string | null): Promise<string | null> {
+    return this.rpc<string | null>("complete_plan_request", { p_id: id, p_worker_id: workerId, p_plan: plan, p_model: model, p_error: error });
+  }
+
   // --- Flux import audit (G5) ---
 
   async claimFluxAudit(workerId: string): Promise<FluxAuditRow | null> {
@@ -588,3 +599,5 @@ export interface RfqRow {
 }
 
 export interface FluxAuditRow { id: string; project_id: string; audit_no: number; title: string; attempts: number }
+
+export interface PlanRequestRow { id: string; project_id: string; payload: unknown; requirements: number; attempts: number }
