@@ -45,9 +45,11 @@ const PlanOutput = z.object({
     approval_reason: z.string().nullable(),
     estimated_hours: z.number().nullable(),
     basis: z.object({
-      mode: z.enum(["reuse", "adapt", "new"]).describe("reuse: take prior work or a reference as it is and check it; adapt: start from it and change it; new: nothing to build on"),
-      sources: z.array(z.string()).describe("Input ids this task builds on, e.g. PW-1, REF-2; empty for new"),
+      mode: z.enum(["reuse", "adapt", "replace", "new"]).describe("reuse: keep earlier work as it is and check it; adapt: start from it and change it; replace: earlier work exists but has a problem, so do it differently; new: nothing exists"),
+      sources: z.array(z.string()).describe("Input ids this task builds on or replaces: PR-n register items, PW-n imports, REF-n references; empty for new"),
       reason: z.string().describe("One sentence: what is taken over and what still has to be done"),
+      concerns: z.array(z.string()).describe("Problems with the earlier work (from its recorded issues or your review); empty if none"),
+      alternatives: z.array(z.string()).describe("When there are concerns: alternatives to consider (exact parts or approaches) with a word on why; else empty"),
     }).nullable().optional(),
   })),
   deferred_requirements: z.array(z.object({ ref: z.string(), reason: z.string() })),
@@ -67,6 +69,8 @@ For each task:
 - choose required_tools from the capability list where possible.
 
 Every requirement must be covered by at least one task, or listed in deferred_requirements with a reason. Put open assumptions you relied on in assumptions.
+
+Earlier work comes first. When the context has an earlier-work register (PR-n), most decisions are already made: parts chosen, circuits designed, boards partitioned, layout started. Plan to CONTINUE that work, not to redo it: a task about a subsystem cites the PR items it continues and says whether each is kept (reuse), changed (adapt) or replaced (replace). Do not plan a selection or trade study for something already selected unless the register records a problem with it; then say so in concerns and give alternatives (exact part numbers where you can). Every item that is selected, designed, laid out or verified must be cited by at least one task. Items stated by the owner are decisions: keep them unless they cannot work, and then explain why.
 
 Build on what exists. The project context may list prior work (PW-n: earlier designs imported from other tools, with their parts, boards, decisions and open problems) and references (REF-n: mock-ups, sketches, drawings, datasheets). Do not plan to redo work that exists: plan to take it over, check it and finish it. For every task set basis: "reuse" when prior work or a reference is taken as it is and checked, "adapt" when it is the starting point but must change, "new" when nothing exists; cite the input ids in sources and say in reason what is taken over and what remains. Imported work is never verified: a task that reuses it still needs acceptance tests that re-establish it (ERC, DRC, fit, a review of the earlier decisions). Treat the import audit's open problems and claimed validations as work to plan, not as facts.`;
 
@@ -100,7 +104,9 @@ export class PlanValidationError extends Error {
 export async function generatePlan(
   requirements: RequirementInput[],
   model: LanguageModel,
-  opts: { capabilities?: CapabilityInput[]; projectContext?: string; inputIds?: string[]; maxTokens?: number } = {},
+  opts: { capabilities?: CapabilityInput[]; projectContext?: string; inputIds?: string[]; maxTokens?: number;
+          /** Register items (selected, designed, laid out, verified) every plan must address. */
+          mustAddress?: { id: string; label: string }[] } = {},
 ): Promise<PlanResult> {
   const inputIds = opts.inputIds ?? [];
   const active = requirements.filter((r) => r.status !== "rejected");
@@ -123,7 +129,7 @@ export async function generatePlan(
   for (let attempt = 1; ; attempt++) {
     const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
     usage.push(result.usage);
-    const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds);
+    const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds, opts.mustAddress ?? []);
     if (!problems.length) {
       const { tasks, adjustments } = normalizePlan(result.output);
       return {
@@ -147,7 +153,7 @@ export async function generatePlan(
 }
 
 /** Deterministic checks. An empty list means the plan can be stored for review. */
-export function validatePlan(plan: PlanOutput, requirementRefs: string[], inputIds: string[] = []): PlanProblem[] {
+export function validatePlan(plan: PlanOutput, requirementRefs: string[], inputIds: string[] = [], mustAddress: { id: string; label: string }[] = []): PlanProblem[] {
   const problems: PlanProblem[] = [];
   const known = new Set(requirementRefs);
   const keys = new Set<string>();
@@ -167,6 +173,9 @@ export function validatePlan(plan: PlanOutput, requirementRefs: string[], inputI
     if (t.basis) {
       for (const src of t.basis.sources) if (!ids.has(src)) problems.push({ code: "unknown_source", message: `task "${t.key}" cites ${src}, which is not one of the inputs (${[...ids].join(", ") || "none"})` });
       if (t.basis.mode !== "new" && !t.basis.sources.length) problems.push({ code: "basis_without_source", message: `task "${t.key}" ${t.basis.mode}s earlier work but cites no input` });
+      if (t.basis.mode === "replace" && (!(t.basis.concerns ?? []).length || !(t.basis.alternatives ?? []).length)) {
+        problems.push({ code: "replace_without_reason", message: `task "${t.key}" replaces earlier work: give the concerns and at least one alternative` });
+      }
     }
   }
   for (const t of plan.tasks) {
@@ -183,6 +192,11 @@ export function validatePlan(plan: PlanOutput, requirementRefs: string[], inputI
       problems.push({ code: "cycle", message: (e as Error).message });
     }
   }
+
+  // Earlier work already committed to must be addressed: kept, changed or replaced, never silently ignored.
+  const cited = new Set(plan.tasks.flatMap((t) => t.basis?.sources ?? []));
+  const missed = mustAddress.filter((m) => !cited.has(m.id));
+  if (missed.length) problems.push({ code: "prior_work_ignored", message: `earlier work not addressed by any task (cite each in the basis of the task that continues, revises or replaces it): ${missed.slice(0, 40).map((m) => `${m.id} ${m.label}`).join("; ")}${missed.length > 40 ? ` …and ${missed.length - 40} more` : ""}` });
 
   const covered = new Set(plan.tasks.flatMap((t) => t.requirement_refs));
   const deferred = new Set(plan.deferred_requirements.map((d) => d.ref));

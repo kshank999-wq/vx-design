@@ -34,6 +34,7 @@ import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
 import { processPlanRequest } from "./plans.ts";
+import { processPriorWorkRegister } from "./prior-work.ts";
 import { processOcrJob } from "./ocr.ts";
 import { execFileSync } from "node:child_process";
 import { processVirusScans, sweepStagedUploads } from "./scan.ts";
@@ -107,6 +108,9 @@ if (images?.configured()) {
   // Plans too large for the web server's request limit.
   const dbp = new WorkerDb(url, key);
   worker.addJob("plans", () => processPlanRequest(dbp, model, id));
+  // The prior-work register: earlier work read from every prior-work document.
+  const dbw = new WorkerDb(url, key);
+  worker.addJob("prior-work register", () => processPriorWorkRegister(dbw, model, id));
   // Optimization proposals (§14): deterministic; alternates are looked up with the configured sourcing providers.
   const dbo = new WorkerDb(url, key);
   worker.addJob("optimization", () => processOptimization(dbo, sourcing, id));

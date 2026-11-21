@@ -22,6 +22,8 @@ export interface PriorWork {
   migration: string[];        // the audit's suggested tasks
 }
 export interface ReferenceInput { id: string; kind: string; title: string; note?: string | null; filename: string }
+import { registerText, type RegisterItem } from "./prior-work.ts";
+
 export interface PlanInputs {
   project: { name: string; description?: string | null };
   intake?: Record<string, string | number | null> | null;
@@ -30,6 +32,8 @@ export interface PlanInputs {
   documents?: { title: string; requirements: number }[];
   references?: ReferenceInput[];
   priorWork?: PriorWork[];
+  /** The prior-work register (already corrected by people): every item, cited as PR-n. */
+  register?: RegisterItem[];
 }
 export interface PlanInputSource { id: string; kind: "prior_work" | "reference"; label: string }
 
@@ -97,6 +101,7 @@ export function planContext(inputs: PlanInputs): { text: string; sources: PlanIn
     if (w.open.length) L.push("- open problems found by the import audit:", ...w.open.slice(0, 15).map((o) => `  - ${clip(one(o), 200)}`));
     if (w.migration.length) L.push("- import audit's suggested next steps:", ...w.migration.map((m) => `  - ${clip(one(m), 200)}`));
   }
+  if (inputs.register?.length) L.push("", registerText(inputs.register));
   return { text: L.join("\n"), sources };
 }
 

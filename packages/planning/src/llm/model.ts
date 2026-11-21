@@ -24,6 +24,8 @@ export interface GenerateRequest<T> {
   onText?: (delta: string) => void;
   /** Output budget for this call (thinking and the answer share it); defaults to the model's setting. */
   maxTokens?: number;
+  /** Reasoning effort for this call; defaults to the model's setting. */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 export interface GenerateResult<T> {
@@ -73,7 +75,7 @@ export class ClaudeModel implements LanguageModel {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       thinking: { type: "adaptive" },
-      output_config: { effort: this.effort, format: betaZodOutputFormat(req.schema) },
+      output_config: { effort: req.effort ?? this.effort, format: betaZodOutputFormat(req.schema) },
       // The system prompt is identical across calls of the same purpose: cache it.
       system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
       messages: req.messages,

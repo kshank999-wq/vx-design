@@ -13,7 +13,7 @@ import type { WorkerDb } from "./db.ts";
 const FLUX_POLICY: UploadPolicy = { maxBytes: 300 * 1048576,
   accept: ["pdf", "zip", "docx", "xlsx", "png", "jpeg", "gif", "webp", "step", "gzip", "svg", "html", "text", "binary"] };
 
-async function pdfText(data: Uint8Array): Promise<string> {
+export async function pdfText(data: Uint8Array): Promise<string> {
   const { extractText, getDocumentProxy } = await import("unpdf");
   const pdf = await getDocumentProxy(new Uint8Array(data));
   const { text } = await extractText(pdf, { mergePages: true });

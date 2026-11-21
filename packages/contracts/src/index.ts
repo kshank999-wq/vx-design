@@ -80,9 +80,13 @@ export const AcceptanceTest = z.object({
 
 /** Task as produced by the planner, before it is written to the database (§6). */
 export const TaskBasis = z.object({
-  mode: z.enum(["reuse", "adapt", "new"]),
+  mode: z.enum(["reuse", "adapt", "replace", "new"]),
   sources: z.array(z.string()).default([]),
   reason: z.string().default(""),
+  /** Problems found with the earlier work this task builds on or replaces. */
+  concerns: z.array(z.string()).default([]),
+  /** Alternatives to consider where earlier work has a problem (parts, approaches), with a word on why. */
+  alternatives: z.array(z.string()).default([]),
 });
 export type TaskBasis = z.infer<typeof TaskBasis>;
 

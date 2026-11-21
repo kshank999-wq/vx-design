@@ -12,6 +12,7 @@ import { OFFLINE_FIXTURE_POWER } from "../power.ts";
 import { OFFLINE_FIXTURE_ENCLOSURE } from "../enclosure.ts";
 import { OFFLINE_FIXTURE_CONCEPT } from "../concept.ts";
 import { offlineFluxHistory } from "../flux-history.ts";
+import { offlinePriorWork } from "../prior-work.ts";
 
 const KIND_KEYWORDS: [string, RegExp][] = [
   ["power", /\b(rail|current|voltage|power|battery|regulator|mA|V)\b/i],
@@ -32,6 +33,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("enclosure_design") ? structuredClone(OFFLINE_FIXTURE_ENCLOSURE)
       : req.purpose.startsWith("concept_brief") ? structuredClone(OFFLINE_FIXTURE_CONCEPT)
       : req.purpose.startsWith("flux_history") ? offlineFluxHistory(prompt)
+      : req.purpose.startsWith("prior_work") ? offlinePriorWork(prompt)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {
@@ -107,10 +109,14 @@ export class OfflineModel implements LanguageModel {
     const refsIn = [...prompt.matchAll(/^- \[(REF-\d+)\] .*?\((mockup|sketch|render|photo|drawing|prior design|datasheet|other),/gm)];
     const looks = refsIn.filter((m) => /mockup|sketch|render|photo|drawing/.test(m[2]!)).map((m) => m[1]!);
     const prior = [...pw, ...refsIn.filter((m) => m[2] === "prior design").map((m) => m[1]!)];
-    if (pw.length || refsIn.length) {
-      const basis = (key: string) => key === "enclosure-envelope" && looks.length ? { mode: "adapt", sources: looks, reason: "Start from the mock-ups (offline plan)." }
-        : ["architecture", "schematic", "pcb-layout"].includes(key) && prior.length ? { mode: "adapt", sources: prior, reason: "Start from the prior design and re-check it (offline plan)." }
-        : { mode: "new", sources: [], reason: "Nothing to build on (offline plan)." };
+    // Register items already committed to (selected, designed, laid out, verified): the architecture task continues them.
+    const committed = [...prompt.matchAll(/^\s+- \[(PR-\d+)\] \((selected|designed|laid out|verified)/gm)].map((m) => m[1]!);
+    if (pw.length || refsIn.length || committed.length) {
+      const none = { concerns: [] as string[], alternatives: [] as string[] };
+      const basis = (key: string) => key === "enclosure-envelope" && looks.length ? { mode: "adapt", sources: looks, reason: "Start from the mock-ups (offline plan).", ...none }
+        : key === "architecture" && (prior.length || committed.length) ? { mode: "adapt", sources: [...prior, ...committed], reason: "Continue the earlier work and re-check it (offline plan).", ...none }
+        : ["schematic", "pcb-layout"].includes(key) && prior.length ? { mode: "adapt", sources: prior, reason: "Start from the prior design and re-check it (offline plan).", ...none }
+        : { mode: "new", sources: [], reason: "Nothing to build on (offline plan).", ...none };
       for (const x of tasks) Object.assign(x, { basis: basis(x.key) });
     }
     const covered = new Set(tasks.flatMap((x) => x.requirement_refs));

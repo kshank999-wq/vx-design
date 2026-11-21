@@ -61,10 +61,10 @@ const plan = (basis: PlanOutput["tasks"][number]["basis"]): PlanOutput => ({
 test("basis is required when there is something to build on, and must cite real inputs", () => {
   assert.deepEqual(validatePlan(plan(null), ["REQ-1"], []), [], "no inputs: no basis needed");
   assert.deepEqual(validatePlan(plan(null), ["REQ-1"], ["PW-1"]).map((p) => p.code), ["no_basis"]);
-  assert.deepEqual(validatePlan(plan({ mode: "adapt", sources: ["PW-9"], reason: "r" }), ["REQ-1"], ["PW-1"]).map((p) => p.code), ["unknown_source"]);
-  assert.deepEqual(validatePlan(plan({ mode: "reuse", sources: [], reason: "r" }), ["REQ-1"], ["PW-1"]).map((p) => p.code), ["basis_without_source"]);
-  assert.deepEqual(validatePlan(plan({ mode: "adapt", sources: ["PW-1"], reason: "r" }), ["REQ-1"], ["PW-1"]), []);
-  assert.deepEqual(validatePlan(plan({ mode: "new", sources: [], reason: "nothing exists" }), ["REQ-1"], ["PW-1"]), []);
+  assert.deepEqual(validatePlan(plan({ mode: "adapt", sources: ["PW-9"], reason: "r", concerns: [], alternatives: [] }), ["REQ-1"], ["PW-1"]).map((p) => p.code), ["unknown_source"]);
+  assert.deepEqual(validatePlan(plan({ mode: "reuse", sources: [], reason: "r", concerns: [], alternatives: [] }), ["REQ-1"], ["PW-1"]).map((p) => p.code), ["basis_without_source"]);
+  assert.deepEqual(validatePlan(plan({ mode: "adapt", sources: ["PW-1"], reason: "r", concerns: [], alternatives: [] }), ["REQ-1"], ["PW-1"]), []);
+  assert.deepEqual(validatePlan(plan({ mode: "new", sources: [], reason: "nothing exists", concerns: [], alternatives: [] }), ["REQ-1"], ["PW-1"]), []);
 });
 
 test("offline plan builds on the inputs it is given", async () => {
@@ -73,7 +73,7 @@ test("offline plan builds on the inputs it is given", async () => {
   const reqs = [{ refCode: "REQ-FUN-001", kind: "functional", priority: "must", status: "confirmed", text: "Show timecode", acceptanceCriteria: "Readable at 3 m" }];
   const r = await generatePlan(reqs, new OfflineModel(), { projectContext: ctx.text, inputIds: ctx.sources.map((s) => s.id) });
   const by = new Map(r.tasks.map((t) => [t.key, t.basis]));
-  assert.deepEqual(by.get("schematic"), { mode: "adapt", sources: ["PW-1"], reason: "Start from the prior design and re-check it (offline plan)." });
+  assert.deepEqual(by.get("schematic"), { mode: "adapt", sources: ["PW-1"], reason: "Start from the prior design and re-check it (offline plan).", concerns: [], alternatives: [] });
   assert.deepEqual(by.get("enclosure-envelope")?.sources, ["REF-1"]);
   assert.equal(by.get("power-budget")?.mode, "new");
   const bare = await generatePlan(reqs, new OfflineModel(), {});

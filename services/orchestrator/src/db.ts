@@ -447,6 +447,50 @@ export class WorkerDb {
     return { requirements: reqs ?? [], attachments };
   }
 
+  // --- Prior-work register ---
+
+  async claimPriorWorkRegister(workerId: string): Promise<{ id: string; project_id: string } | null> {
+    const r = await this.rpc<{ id: string; project_id: string } | null>("claim_prior_work_register", { p_worker_id: workerId });
+    return r && r.id ? r : null;
+  }
+
+  async progressPriorWorkRegister(id: string, workerId: string, progress: string): Promise<void> {
+    await this.rpc("progress_prior_work_register", { p_id: id, p_worker_id: workerId, p_progress: progress });
+  }
+
+  async completePriorWorkRegister(id: string, workerId: string, items: unknown, sources: unknown, model: string, usage: unknown, error: string | null): Promise<void> {
+    await this.rpc("complete_prior_work_register", { p_id: id, p_worker_id: workerId, p_items: items, p_sources: sources, p_model: model, p_usage: usage, p_error: error });
+  }
+
+  /** Finished Flux imports marked for the plan, with their files. */
+  async priorWorkAudits(projectId: string): Promise<{ audit_no: number; files: { name: string; revision_label: string; storage_path: string }[] }[]> {
+    const { data, error } = await this.client.from("flux_audits").select("audit_no, flux_audit_files(name, revision_label, storage_path)")
+      .eq("project_id", projectId).eq("status", "ready").eq("use_in_plan", true).order("audit_no");
+    if (error) throw new Error(`prior-work audits: ${error.message}`);
+    return (data ?? []).map((a) => ({ audit_no: a.audit_no, files: (a.flux_audit_files ?? []) as { name: string; revision_label: string; storage_path: string }[] }));
+  }
+
+  /** Reference files that may describe earlier work: files from other tools, drawings, and files attached to parts. */
+  async priorWorkReferences(projectId: string): Promise<{ ref_no: number; kind: string; title: string; note: string | null; filename: string; storage_path: string;
+                                                          part: { mpn: string; manufacturer: string | null; role: string; status: string } | null }[]> {
+    const { data, error } = await this.client.from("project_references")
+      .select("ref_no, kind, title, note, filename, storage_path, part_id, project_parts(mpn, manufacturer, role, status)")
+      .eq("project_id", projectId).eq("use_in_plan", true).order("ref_no");
+    if (error) throw new Error(`prior-work references: ${error.message}`);
+    return (data ?? []).filter((r) => r.part_id || ["prior_design", "drawing", "datasheet", "other"].includes(r.kind))
+      .map((r) => ({ ref_no: r.ref_no, kind: r.kind, title: r.title, note: r.note, filename: r.filename, storage_path: r.storage_path,
+                     part: (r.project_parts as unknown as { mpn: string; manufacturer: string | null; role: string; status: string } | null) ?? null }));
+  }
+
+  /** Parts the owner recorded as chosen, with the names of their attached files. */
+  async projectParts(projectId: string): Promise<{ mpn: string; manufacturer: string | null; role: string; subsystem: string; status: string; note: string | null; files: string[] }[]> {
+    const { data, error } = await this.client.from("project_parts").select("mpn, manufacturer, role, subsystem, status, note, project_references(filename)")
+      .eq("project_id", projectId).order("created_at");
+    if (error) throw new Error(`project parts: ${error.message}`);
+    return (data ?? []).map((p) => ({ mpn: p.mpn, manufacturer: p.manufacturer, role: p.role, subsystem: p.subsystem, status: p.status, note: p.note,
+                                      files: ((p.project_references ?? []) as { filename: string }[]).map((f) => f.filename) }));
+  }
+
   // --- Plan requests (plans too large for the web server) ---
 
   async claimPlanRequest(workerId: string): Promise<PlanRequestRow | null> {
