@@ -68,6 +68,24 @@ pnpm --filter @vx/web build && pnpm --filter @vx/web start
 pnpm test:e2e                      # browser flow; run the app with VX_LLM=offline to avoid model calls
 ```
 
+### Guided setup and the look of the app
+
+**Guided setup** (`/projects/<id>/setup`, "Guided setup" on the project page) takes a new project through five steps,
+one at a time:
+1. **Project:** name, code and description, and the product class chosen from chips.
+2. **Mock-up:** reference images, and a link to the concept rounds.
+3. **Intake:** markets, power, radios and standards as chips, size as three boxes, and the feasibility check.
+4. **Inputs:** specifications uploaded here; parts and prior work are counted.
+5. **Review and plan:** what is still missing, then "Generate the plan".
+
+A readiness ring shows how much of what the planner needs is filled in. A manifest and the project's recent activity
+sit beside the steps.
+
+**Look:** the clean light design is the template: a blue-grey background with a faint blueprint grid, white cards,
+navy panel headers in the workspace, and the S0–S8 stage strip on the project page and the workspace. Dark mode follows
+the system until someone picks one with the switch in the header. The logo and favicon come from
+`VX Design Chrome Orbit Logo.png`. The setup's chips, readiness ring and cyan accents come from the dark-tech concept.
+
 ### Project inputs
 
 **Project inputs** (`/projects/<id>/inputs`, linked first on the project page) is where everything a plan is built

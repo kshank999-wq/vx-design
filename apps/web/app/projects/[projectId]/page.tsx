@@ -75,6 +75,7 @@ export default async function ProjectPage({ params, searchParams }: {
       <div className="title-row">
         <div><h1>{project.name}</h1>{project.description && <p className="muted" style={{ margin: 0 }}>{project.description}</p>}</div>
         <div className="row">{(docs ?? []).some((d) => d.extraction_status === "running") && <AutoRefresh intervalMs={4000} />}
+          {me?.role && me.role !== "client" && <Link href={`/projects/${projectId}/setup`} className="btn">Guided setup</Link>}
           <Link href={`/projects/${projectId}/workspace`} className="btn btn-primary">Open the workspace</Link></div>
       </div>
       <StageBar supabase={supabase} projectId={projectId} />
@@ -282,7 +283,7 @@ export default async function ProjectPage({ params, searchParams }: {
         {canEdit && <details><summary>Add a project source</summary><SourceForm projectId={projectId} heading="Add a source to this project" /></details>}
       </section>
 
-      <section>
+      <section id="members">
         <h2>7. People</h2>
         <p className="small muted">{roleCounts.map(([r, n]) => `${n} ${r}${n > 1 ? "s" : ""}`).join(" · ")}. Clients see the workspace only:
           requirements, the checklist, results and checks, and the chat. They approve or return work at approval stops, and never see
