@@ -4,7 +4,7 @@
  * archive tricks (path traversal, symlinks, encryption, zip bombs) and active content in SVG/HTML. It does not look
  * for viruses; that is the scanner's job (clamd.ts).
  */
-export type Detected = "pdf" | "zip" | "docx" | "xlsx" | "png" | "jpeg" | "gif" | "webp" | "step" | "gzip" | "svg" | "html"
+export type Detected = "pdf" | "zip" | "docx" | "xlsx" | "png" | "jpeg" | "gif" | "webp" | "step" | "stl" | "gzip" | "svg" | "html"
   | "executable" | "script" | "text" | "binary";
 
 export interface ZipInfo { entries: number; uncompressed: number; compressed: number; zip64: boolean; names: string[] }
@@ -44,10 +44,12 @@ export function detect(b: Uint8Array): Detected {
   if (b[0] === 0x1f && b[1] === 0x8b) return "gzip";
   if (at(b, "MZ") || at(b, "\x7fELF") || [0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(u32(b, 0) >>> 0)
       || (b[0] === 0xca && b[1] === 0xfe && b[2] === 0xba && b[3] === 0xbe)) return "executable";
+  if (b.length >= 84 && 84 + 50 * (u32(b, 80) >>> 0) === b.length) return "stl";   // binary STL: header, count, 50 bytes a triangle
   if (!looksText(b)) return "binary";
   const head = new TextDecoder().decode(b.subarray(0, 4096)).replace(/^﻿/, "").trimStart();
   if (head.startsWith("#!")) return "script";
   if (/^ISO-10303-21;/.test(head)) return "step";
+  if (/^solid\b[^\n]*\n\s*facet\s/i.test(head)) return "stl";
   if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg[\s>]/i.test(head)) return "svg";
   if (/^(<!DOCTYPE html|<html[\s>])/i.test(head)) return "html";
   return "text";
@@ -123,7 +125,7 @@ export function inspectZip(b: Uint8Array, limits = DEFAULT_ZIP): { info: ZipInfo
 
 const EXT_KIND: Record<string, Detected[]> = {
   pdf: ["pdf"], zip: ["zip"], docx: ["zip"], xlsx: ["zip"], png: ["png"], jpg: ["jpeg"], jpeg: ["jpeg"], gif: ["gif"], webp: ["webp"],
-  step: ["step"], stp: ["step"], svg: ["svg"], html: ["html"], htm: ["html"], gz: ["gzip"], tgz: ["gzip"],
+  step: ["step"], stp: ["step"], stl: ["stl"], svg: ["svg"], html: ["html"], htm: ["html"], gz: ["gzip"], tgz: ["gzip"],
 };
 
 export function inspectUpload(name: string, b: Uint8Array, policy: UploadPolicy): Inspection {

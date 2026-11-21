@@ -14,6 +14,8 @@ test("detects what a file is from its bytes", () => {
   assert.equal(detect(new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 2, 1])), "executable");
   assert.equal(detect(enc("#!/bin/sh\nrm -rf /\n")), "script");
   assert.equal(detect(enc("ISO-10303-21;\nHEADER;")), "step");
+  assert.equal(detect(enc("solid part\n  facet normal 0 0 1\n")), "stl");
+  { const b = new Uint8Array(84 + 50); new DataView(b.buffer).setUint32(80, 1, true); assert.equal(detect(b), "stl", "binary STL"); }
   assert.equal(detect(enc('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>')), "svg");
   assert.equal(detect(enc("The slate shall run for 8 hours.")), "text");
   assert.equal(detect(zipSync({ "word/document.xml": enc("<w/>") })), "zip");

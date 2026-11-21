@@ -498,6 +498,29 @@ pnpm test:models           # upload -> worker check -> verify -> layout ships th
 pnpm test:e2e:models       # browser: upload, overlay, verify
 ```
 
+## Manufacturing routes and the 3D-printing export
+
+**Manufacturing routes** (`/projects/<id>/manufacturing`, staff only) record, for each physical part, how it is made
+now and how it will be made in production (`public.part_routes`).
+- **Parts:** the newest enclosure base and lid from each enclosure task, 3D models uploaded on this page (STL or STEP,
+  stored as references of kind "3D model"), and parts without a model yet.
+- **Each route has:** what the part must survive (outdoors or sun, drops, snap fits, client-facing finish, tight fits,
+  rubber-like, clear, hottest temperature), the production process, material and yearly volume, the prototype
+  material and quantity, colour and finish, and notes. The needs are pre-filled from the requirements.
+- **Suggestions** (`suggestPrototypes` in `@vx/dfm`): prototype options across FDM, SLA, SLS/MJF, urethane casting and
+  CNC. Options that cannot meet a need are left out: too little heat resistance, rigid for a rubber part, opaque for a
+  window. The rest are ranked on the part's needs, on how well they stand in for the production material, and on
+  cost and speed for the quantity. Each suggestion gives its reasons and what to watch out for. Ratings are
+  qualitative and heat figures approximate.
+- **Per part:** size and volume read from the STL, a material estimate in grams, a warning when it is too big for a
+  typical machine, starting print or order settings, and a warning when the prototype material differs from production
+  (fit and form only, no strength or drop sign-off).
+- **Export for 3D printing:** a ZIP with one folder per part (STL and STEP), `PRINT-SHEET.md` (material, settings,
+  quantity, finish, size, estimate, what the print stands in for) and `parts.csv` for a print service's order form.
+- **Planning:** the routes go into the planner's context, which is told to design each part for its production process
+  and plan the prototype builds and production tooling. The enclosure designer prototypes with the route's process and
+  material, and keeps walls uniform when production is injection molding.
+
 ## M-ENC: enclosure and fit
 
 Enclosure tasks (discipline `enclosure`) run on the KiCad engineering worker. They take the **committed

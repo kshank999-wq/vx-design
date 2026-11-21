@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
-export const ENCLOSURE_PROMPT_VERSION = "enclosure-v1";
+export const ENCLOSURE_PROMPT_VERSION = "enclosure-v2";
 export const MAX_ENCLOSURE_REPAIRS = 3;
 
 export const EnclosureDesign = z.object({
@@ -72,7 +72,9 @@ The housing is generated around the board's real outline and every part's 3D mod
 - top openings go through the lid: windows for tall headers or displays, round light holes for LEDs (give a diameter), button holes.
 The lid sits above the tallest part without a top opening plus the top clearance.
 
-Choose the process and material from the requirements (default FDM PETG for a first prototype), a wall at or above the process minimum, standoffs tall enough to clear through-hole pins below the board and to take the fastener, and a fastening the process supports (heat-set inserts or thread-forming screws in prints, tapped holes in aluminium). Record assumptions (e.g. an enclosure style you chose because none was specified) and open questions.`;
+Choose the process and material from the requirements (default FDM PETG for a first prototype), a wall at or above the process minimum, standoffs tall enough to clear through-hole pins below the board and to take the fastener, and a fastening the process supports (heat-set inserts or thread-forming screws in prints, tapped holes in aluminium). If the project lists manufacturing routes for the enclosure base or lid, prototype with that process and material (map SLS or MJF nylon to "sls"; a cast or machined plastic prototype is out of scope here: choose the closest print and say so in the assumptions). When the production route is injection molding, keep the walls a uniform thickness and avoid thick solid sections so the printed geometry carries over to the mold; say what will change for molding (draft, ribs, bosses) in the assumptions.
+
+Record assumptions (e.g. an enclosure style you chose because none was specified) and open questions.`;
 
 export function renderEnclosurePrompt(input: EnclosureInput): string {
   const f = input.facts;

@@ -225,3 +225,4 @@ export function enclosureFactsFromFitReport(r: {
     dimensions_mm: d && d.x != null && d.y != null && d.z != null ? [d.x, d.y, d.z] : null,
   };
 }
+export * from "./materials.ts";

@@ -17,6 +17,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "@vx/contracts": "workspace:*",
+    "@vx/dfm": "workspace:*",
     "@vx/integrations": "workspace:*",
     "@vx/planning": "workspace:*",
     "@vx/power": "workspace:*",

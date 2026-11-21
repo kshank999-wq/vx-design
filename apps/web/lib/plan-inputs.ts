@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { routeLine, type Route } from "./manufacturing";
 import { applyEdits, COMMITTED, planContext, priorWorkFromFluxAudit, type FluxAuditLike, type PlanInputs, type PlanInputSource, type PriorWork, type RegisterItem } from "@vx/planning";
 
 export { ITEM_STATUS_LABEL, PART_FILE_KINDS, PART_STATUS, partFileKind, REFERENCE_KINDS, VISUAL_KINDS } from "./reference-kinds";
@@ -36,7 +37,7 @@ export const itemLabel = (i: RegisterItem) => `${i.mpn ? `${i.mpn} ` : ""}${i.ti
  * documents, references marked for the plan, and completed Flux audits marked for the plan (as prior work).
  */
 export async function loadPlanInputs(supabase: SupabaseClient, projectId: string): Promise<LoadedInputs> {
-  const [{ data: project }, { data: intake }, { data: freeze }, { data: standards }, { data: docs }, { data: reqs }, { data: refs }, { data: audits }, { data: reg }] = await Promise.all([
+  const [{ data: project }, { data: intake }, { data: freeze }, { data: standards }, { data: docs }, { data: reqs }, { data: refs }, { data: audits }, { data: reg }, { data: routes }] = await Promise.all([
     supabase.from("projects").select("name, description").eq("id", projectId).single(),
     supabase.from("project_intake").select("intended_use, regions, quantity, target_unit_cost, currency, max_dimensions, power_source, radios, target_standards, notes").eq("project_id", projectId).maybeSingle(),
     supabase.from("current_design_freeze").select("envelope, cmf, note").eq("project_id", projectId).maybeSingle(),
@@ -46,6 +47,7 @@ export async function loadPlanInputs(supabase: SupabaseClient, projectId: string
     supabase.from("project_references").select("id, ref_no, kind, title, note, filename, part_id").eq("project_id", projectId).eq("use_in_plan", true).order("ref_no"),
     supabase.from("flux_audits").select("id, audit_no, title, report_path").eq("project_id", projectId).eq("status", "ready").eq("use_in_plan", true).order("audit_no"),
     supabase.from("prior_work_registers").select("id, items, edits, completed_at").eq("project_id", projectId).eq("status", "ready").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("part_routes").select("*").eq("project_id", projectId).order("name"),
   ]);
   const list = (a: string[] | null | undefined) => (a?.length ? a.join(", ") : null);
   const i = intake;
@@ -77,6 +79,7 @@ export async function loadPlanInputs(supabase: SupabaseClient, projectId: string
   };
   const register = reg ? { id: reg.id as string, items: applyEdits((reg.items ?? []) as RegisterItem[], (reg.edits ?? {}) as Record<string, { status?: string; note?: string; excluded?: boolean }>), created: reg.completed_at as string } : null;
   if (register?.items.length) inputs.register = register.items;
+  if (routes?.length) inputs.routes = (routes as Route[]).map(routeLine);
   const { text, sources } = planContext(inputs);
   const record: LoadedInputs["record"] = sources.map((s) => ({
     id: s.id, kind: s.kind, label: s.label,

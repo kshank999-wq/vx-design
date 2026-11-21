@@ -130,7 +130,7 @@ try {
   await page.reload();
   const files = await page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']").innerText();
   assert.match(files, /Datasheet\s+rvt101-datasheet\.pdf/);
-  assert.match(files, /3D model \(STEP\)\s+rvt101\.step/);
+  assert.match(files, /3D model \(STEP or STL\)\s+rvt101\.step/);
   assert.equal(await page.getByTestId("prior-files").locator("[data-ref]").count(), 1, "part files stay with the part");
   await page.getByTestId("add-part").locator("summary").click();
   await page.getByTestId("add-part").getByLabel("Part number").fill("rvt101hvhnwc00b");

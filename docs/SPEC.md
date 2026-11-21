@@ -431,7 +431,7 @@ Profiles start from published supplier DFM data (e.g. JLCPCB capabilities, Proto
 | Wood / laminate / coating | Clapper sticks, appearance parts | Moisture, finish durability, adhesives, variation |
 | Cable harness | Internal power and data | Bend radius, strain relief, pinouts, lengths, continuity test |
 
-Build order: 3D print and CNC first (M-ENC). Molding DFM comes later.
+Build order: 3D print and CNC first (M-ENC). **Manufacturing routes** (built) record each part's prototype and production process and material, rank prototype materials, export a 3D-printing pack, and feed the plan and the enclosure design. Molding DFM (draft, ribs, bosses, shrink, toolmaker package) is next.
 
 **Manufacturer network.** The target is ten *candidate* suppliers per category. These are research targets, not pre-vetted partners:
 - bare PCB;

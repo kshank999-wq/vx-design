@@ -93,3 +93,9 @@ test("a reply cut off at the token limit says so, with the budget used", async (
     /generate_plan: the reply was cut off at the 128000-token limit \(the model's reasoning and its answer share it\)/);
   assert.equal(asked, 128000, "the call's own budget is used");
 });
+
+test("manufacturing routes go to the planner", () => {
+  const { text } = planContext({ project: { name: "X" }, routes: ["Enclosure base: prototype ASA (fdm) × 3; production Injection molding, PC/ABS"] });
+  assert.match(text, /^Manufacturing routes \(prototype now, production later\)\. Design each part for its production process/m);
+  assert.match(text, /^- Enclosure base: prototype ASA \(fdm\) × 3; production Injection molding, PC\/ABS$/m);
+});

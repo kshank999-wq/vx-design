@@ -34,6 +34,8 @@ export interface PlanInputs {
   priorWork?: PriorWork[];
   /** The prior-work register (already corrected by people): every item, cited as PR-n. */
   register?: RegisterItem[];
+  /** How each physical part is made now and later, one line per part ("Enclosure base: prototype …; production …"). */
+  routes?: string[];
 }
 export interface PlanInputSource { id: string; kind: "prior_work" | "reference"; label: string }
 
@@ -102,6 +104,11 @@ export function planContext(inputs: PlanInputs): { text: string; sources: PlanIn
     if (w.migration.length) L.push("- import audit's suggested next steps:", ...w.migration.map((m) => `  - ${clip(one(m), 200)}`));
   }
   if (inputs.register?.length) L.push("", registerText(inputs.register));
+  if (inputs.routes?.length) {
+    L.push("", "Manufacturing routes (prototype now, production later). Design each part for its production process from the start, plan the " +
+      "prototype builds and the production tooling, and do not sign off strength or drop tests on a prototype material that differs from production:",
+      ...inputs.routes.map((r) => `- ${one(r)}`));
+  }
   return { text: L.join("\n"), sources };
 }
 

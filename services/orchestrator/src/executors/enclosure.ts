@@ -52,13 +52,14 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
           await writeFile(zip, await db.downloadBytes(v.storagePath));
           const facts = await enclosureFacts(tools, zip);
           if (!facts.ok) throw new Error(`board facts: ${facts.error}`);
-          const [project, reqs, upstream, notes, design] = await Promise.all([
+          const [project, reqs, upstream, notes, design, routes] = await Promise.all([
             db.project(task.project_id), db.taskRequirements(task.id), db.upstreamOutputs(task.id), db.reviewNotes(task.id),
-            db.upstreamJson(task.id, "design"),
+            db.upstreamJson(task.id, "design"), db.partRouteLines(task.project_id),
           ]);
           const circuit = design ? CircuitDesign.safeParse(design.value) : null;
           const input: EnclosureInput = {
-            projectContext: `${project.name}${project.description ? `: ${project.description}` : ""}`,
+            projectContext: `${project.name}${project.description ? `: ${project.description}` : ""}` +
+              (routes.length ? `\n\nManufacturing routes:\n${routes.map((r) => `- ${r}`).join("\n")}` : ""),
             task: { key: task.key, title: task.title, description: task.description },
             requirements: reqs.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, text: r.text })),
             acceptanceTests: task.acceptance_tests.map((a) => ({ id: a.id, description: a.description, method: a.method })),

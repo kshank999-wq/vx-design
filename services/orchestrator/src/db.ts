@@ -1,3 +1,4 @@
+import { routeLine } from "@vx/dfm";
 /**
  * The worker's view of the database. Every state change goes through a Postgres function
  * that checks the worker still holds the execution (see supabase/migrations/*_g2_worker.sql).
@@ -257,6 +258,13 @@ export class WorkerDb {
       }
     }
     return out;
+  }
+
+  /** The project's manufacturing routes, one line per part (prototype now, production later). */
+  async partRouteLines(projectId: string): Promise<string[]> {
+    const { data, error } = await this.client.from("part_routes").select("*").eq("project_id", projectId).order("name");
+    if (error) throw new Error(`part routes: ${error.message}`);
+    return (data ?? []).map((r) => routeLine(r));
   }
 
   async reviewNotes(taskId: string): Promise<string[]> {
