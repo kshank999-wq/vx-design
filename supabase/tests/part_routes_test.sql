@@ -34,7 +34,12 @@ select pg_temp.expect_error($$select public.save_part_route('ffffffff-0000-0000-
 select public.save_part_route('ffffffff-0000-0000-0000-000000000001', pg_temp.id('r1'), 'Enclosure base', null, '{}', 'mjf_pa12', 10, 'injection_molding', 'pc_abs', 5000, null, 'pilot batch');
 select pg_temp.check((select prototype_option = 'mjf_pa12' and source_key = 'artifact:enc/base' from public.part_routes where id = pg_temp.id('r1')), 'edited; the model link stays');
 
+select public.save_part_molding(pg_temp.id('r1'), '{"pull": "-z", "finish": "MT-11010", "grade": null}');
+select pg_temp.check((select molding = '{"pull": "-z", "finish": "MT-11010"}'::jsonb from public.part_routes where id = pg_temp.id('r1')), 'molding saved, nulls stripped');
+select pg_temp.expect_error($$select public.save_part_molding(pg_temp.id('r1'), '{"pull": "up"}')$$, 'unknown pull direction up');
+
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error($$select public.save_part_molding(pg_temp.id('r1'), '{}')$$, 'only owner, engineer%');
 select pg_temp.check((select count(*) = 1 from public.part_routes where project_id = 'ffffffff-0000-0000-0000-000000000001'), 'reviewer reads routes');
 select pg_temp.expect_error($$select public.remove_part_route(pg_temp.id('r1'))$$, 'only owner, engineer%');
 

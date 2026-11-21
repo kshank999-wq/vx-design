@@ -226,3 +226,4 @@ export function enclosureFactsFromFitReport(r: {
   };
 }
 export * from "./materials.ts";
+export * from "./molding.ts";

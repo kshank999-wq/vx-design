@@ -204,7 +204,10 @@ const DENSITY: Record<string, number> = { PLA: 1.24, PETG: 1.27, ASA: 1.07, "Pol
 export interface StlStats { triangles: number; size_mm: [number, number, number]; volume_cm3: number }
 
 /** Size and enclosed volume of an STL (binary or ASCII). */
-export function stlStats(bytes: Uint8Array): StlStats {
+export function stlStats(bytes: Uint8Array): StlStats { return statsOf(parseStl(bytes)); }
+
+/** Triangles of an STL (binary or ASCII), nine coordinates each. */
+export function parseStl(bytes: Uint8Array): number[][] {
   const tris: number[][] = [];
   const head = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 512))).trimStart();
   const binaryCount = bytes.length >= 84 ? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(80, true) : -1;
@@ -219,6 +222,10 @@ export function stlStats(bytes: Uint8Array): StlStats {
     for (let i = 0; i + 2 < v.length; i += 3) tris.push([...v[i]!, ...v[i + 1]!, ...v[i + 2]!]);
   } else throw new Error("not an STL file");
   if (!tris.length) throw new Error("the STL has no triangles");
+  return tris;
+}
+
+export function statsOf(tris: number[][]): StlStats {
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   let vol = 0;
   for (const t of tris) {

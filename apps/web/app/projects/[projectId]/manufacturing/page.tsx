@@ -2,14 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   fitsBuildVolumes, massEstimate, needsFromRequirements, optionByKey, printSettings, PROD_PROCESSES, PRODUCTION_MATERIALS, PROTO_PROCESSES,
-  PROTOTYPE_OPTIONS, prodMaterialLabel, prodProcessLabel, stlStats, suggestPrototypes, type PartNeeds, type StlStats,
+  PROTOTYPE_OPTIONS, prodMaterialLabel, prodProcessLabel, suggestPrototypes, type PartNeeds, type StlStats,
+  analyzeMolding, FINISHES, moldable, parseStl, PULLS, requiredDraft, statsOf, toolSuggestion, type MoldingAnalysis,
 } from "@vx/dfm";
 import { Banner } from "@/components/Banner";
 import { InputsUpload } from "@/components/InputsUpload";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { partModels, type PartModel, type Route } from "@/lib/manufacturing";
-import { removeRoute, saveRoute, chooseSuggestion } from "./actions";
+import { chooseSuggestion, removeRoute, saveMolding, saveRoute } from "./actions";
 
 export const maxDuration = 60;
 
@@ -40,14 +41,19 @@ export default async function ManufacturingPage({ params, searchParams }: {
   const modelOf = (r: Route) => models.find((m) => m.key === r.source_key) ?? null;
   const unrouted = models.filter((m) => !routes.some((r) => r.source_key === m.key));
 
-  // Size and volume from each routed part's STL.
+  // Size and volume from each routed part's STL, and the molding check for parts to be injection molded.
   const stats = new Map<string, StlStats>();
+  const molding = new Map<string, MoldingAnalysis>();
   await Promise.all(routes.map(async (r) => {
     const stl = modelOf(r)?.stl;
     if (!stl) return;
     const { data } = await supabase.storage.from("project-files").download(stl.path);
     if (!data) return;
-    try { stats.set(r.id, stlStats(new Uint8Array(await data.arrayBuffer()))); } catch { /* not readable: no size shown */ }
+    try {
+      const tris = parseStl(new Uint8Array(await data.arrayBuffer()));
+      stats.set(r.id, statsOf(tris));
+      if (r.production_process === "injection_molding" && moldable(r.production_material)) molding.set(r.id, analyzeMolding(tris, r.production_material!, r.molding));
+    } catch { /* not readable: no size shown */ }
   }));
   const allPaths = models.flatMap((m) => [m.stl?.path, m.step?.path].filter((p): p is string => !!p));
   const { data: signed } = allPaths.length ? await supabase.storage.from("project-files").createSignedUrls(allPaths, 3600, { download: true }) : { data: [] };
@@ -128,6 +134,50 @@ export default async function ManufacturingPage({ params, searchParams }: {
                 </table>
               </details>
               {o && <details className="small" data-testid="settings"><summary>How to print or order it</summary><ul>{printSettings(o).lines.map((l) => <li key={l}>{l}</li>)}</ul></details>}
+              {r.production_process === "injection_molding" && (() => {
+                const a = molding.get(r.id), mg = r.molding ?? {}, tool = toolSuggestion(r.production_volume);
+                const tag = ` ${r.name}`;
+                return (
+                  <details className="molding" data-testid="molding" open={!!a?.findings.some((f) => f.level === "error")}>
+                    <summary className="small"><strong>Injection molding</strong>{a && <> · <span className={`pill pill-${a.findings.some((f) => f.level === "error") ? "failed" : a.findings.some((f) => f.level === "warning") ? "pending" : "complete"}`}>
+                      {a.findings.filter((f) => f.level === "error").length} to fix, {a.findings.filter((f) => f.level === "warning").length} to check</span></>}</summary>
+                    {!moldable(r.production_material) ? <p className="small muted">Choose a moldable production material (PC/ABS, ABS, PC, ASA, nylon, PP, POM, TPE, acrylic) to check the part.</p>
+                      : !a ? <p className="small muted">Upload an STL of the part (or run the enclosure task) to check draft, walls and undercuts; the package can still be made from the STEP.</p>
+                      : <>
+                        <dl className="facts small" data-testid="molding-facts">
+                          <dt>Draft</dt><dd>{a.low_draft_pct}% of the surface below {a.required_draft_deg}° ({a.zero_draft_pct}% with none), pulled {a.pull}</dd>
+                          <dt>Undercuts</dt><dd>{a.undercut_pct}% of the surface</dd>
+                          <dt>Walls</dt><dd>{a.wall ? `nominal ${a.wall.nominal_mm} mm (5% ${a.wall.p05_mm}, 95% ${a.wall.p95_mm})` : "not measured"}</dd>
+                          <dt>Shot</dt><dd>about {a.shot_g} g; projected area {a.projected_cm2} cm²; clamp about {a.clamp_t} t</dd>
+                          <dt>Tool</dt><dd>{tool.tool}; {mg.cavities ? `${mg.cavities} cavit${mg.cavities === 1 ? "y" : "ies"}` : tool.cavities}</dd>
+                        </dl>
+                        <ul className="small findings">{a.findings.map((f, k) => <li key={k} className={f.level === "error" ? "error-text" : f.level === "warning" ? "warn-text" : "muted"}>
+                          <strong>{f.level === "error" ? "Fix" : f.level === "warning" ? "Check" : "Note"}:</strong> {f.text}</li>)}</ul>
+                      </>}
+                    {canEdit && (
+                      <form action={saveMolding.bind(null, projectId, r.id)} className="stack">
+                        <div className="grid2">
+                          <label>Pull direction (model axes)<select name="pull" defaultValue={mg.pull ?? "+z"} aria-label={`Pull direction${tag}`}>{PULLS.map((x) => <option key={x}>{x}</option>)}</select></label>
+                          <label>Mold finish<select name="finish" defaultValue={mg.finish ?? ""} aria-label={`Mold finish${tag}`}><option value="">To be agreed</option>
+                            {FINISHES.map((f) => <option key={f.key} value={f.key}>{f.label}{r.production_material ? ` (draft ≥ ${requiredDraft(r.production_material, f.key)}°)` : ""}</option>)}</select></label>
+                          <label>Material grade<input name="grade" defaultValue={mg.grade ?? ""} placeholder="e.g. Cycoloy C2950 or equal" aria-label={`Material grade${tag}`} /></label>
+                          <label>Flammability<select name="flammability" defaultValue={mg.flammability ?? ""} aria-label={`Flammability${tag}`}><option value="">None required</option>
+                            {["UL94 HB", "UL94 V-2", "UL94 V-1", "UL94 V-0", "UL94 5VA"].map((x) => <option key={x}>{x}</option>)}</select></label>
+                          <label>Cosmetic (A) surfaces<input name="cosmetic_faces" defaultValue={mg.cosmetic_faces ?? ""} placeholder="outer faces and the display surround" aria-label={`Cosmetic surfaces${tag}`} /></label>
+                          <label>Tolerances<input name="tolerance" defaultValue={mg.tolerance ?? ""} placeholder="ISO 20457 TG6 general" aria-label={`Tolerances${tag}`} /></label>
+                          <label className="span2">Critical dimensions (one per line)<textarea name="critical_dims" rows={2} defaultValue={mg.critical_dims ?? ""} placeholder="display opening 222.5 ± 0.1" aria-label={`Critical dimensions${tag}`} /></label>
+                          <label>Gates and ejector marks<input name="gates" defaultValue={mg.gates ?? ""} placeholder="no marks on the outer faces" aria-label={`Gates${tag}`} /></label>
+                          <label>Inserts and secondary operations<input name="inserts" defaultValue={mg.inserts ?? ""} placeholder="4 × M2.5 heat-staked inserts; pad print logo" aria-label={`Inserts${tag}`} /></label>
+                          <label>Cavities (blank: suggested)<input name="cavities" type="number" min={1} max={64} defaultValue={mg.cavities ?? ""} aria-label={`Cavities${tag}`} /></label>
+                          <label className="span2">Notes for the mold maker<textarea name="notes" rows={2} defaultValue={mg.notes ?? ""} aria-label={`Molding notes${tag}`} /></label>
+                        </div>
+                        <div className="row"><SubmitButton variant="secondary" pendingText="…">Save molding spec</SubmitButton>
+                          <a className="btn btn-primary" href={`/projects/${projectId}/manufacturing/${r.id}/mold-package`}>Download the mold maker&apos;s package</a></div>
+                      </form>
+                    )}
+                  </details>
+                );
+              })()}
               {canEdit && (
                 <details><summary className="small">Edit route</summary>
                   <form action={saveRoute.bind(null, projectId, r.id)} className="stack">

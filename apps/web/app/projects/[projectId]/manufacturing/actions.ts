@@ -57,3 +57,14 @@ export async function removeRoute(projectId: string, routeId: string) {
   if (error) fail(base(projectId), error);
   go(projectId, "Route removed.");
 }
+
+/** The injection molding spec of a part: pull, finish, cosmetic faces, tolerances, critical dimensions and more. */
+export async function saveMolding(projectId: string, routeId: string, form: FormData) {
+  const { supabase } = await requireUser();
+  const cav = int(form, "cavities");
+  const spec = Object.fromEntries(["pull", "finish", "grade", "flammability", "cosmetic_faces", "tolerance", "critical_dims", "gates", "inserts", "notes"]
+    .map((k) => [k, str(form, k) || null]));
+  const { error } = await supabase.rpc("save_part_molding", { p_id: routeId, p_molding: { ...spec, cavities: cav && cav > 0 ? cav : null } });
+  if (error) fail(base(projectId), error);
+  go(projectId, "Molding spec saved.");
+}

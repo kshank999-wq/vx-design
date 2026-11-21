@@ -539,6 +539,28 @@ now and how it will be made in production (`public.part_routes`).
   and plan the prototype builds and production tooling. The enclosure designer prototypes with the route's process and
   material, and keeps walls uniform when production is injection molding.
 
+## Injection molding package
+
+For a part whose production route is injection molding, **Manufacturing routes** adds a molding section
+(`@vx/dfm` molding.ts, `part_routes.molding`).
+- **Rules per material** (PC/ABS, ABS, PC, ASA, glass-filled PA66, PP, POM, TPE, acrylic): wall range, minimum draft,
+  shrinkage, rib ratio and a clamp pressure factor. Textured mold finishes add draft (e.g. MT-11010 adds 1.5°). These
+  are typical design-guide values; the grade's datasheet and the mold maker's DFM review decide.
+- **Design check of the STL:**
+  - **Draft:** surface nearly parallel to the pull with less than the required draft, and with none.
+  - **Undercuts:** surface a straight pull cannot release (a ray in the pull direction hits the part).
+  - **Walls:** rays from the surface inward, area-weighted, giving the nominal wall, thin and thick shares and how
+    much the walls vary.
+  - **Size:** projected area, a clamp force estimate (20% margin) and the shot weight.
+  - Large meshes are sampled. Rays from the ends of walls run along the wall, so a few percent of thick readings are
+    normal; thick areas are flagged above 5%.
+- **Spec:** pull direction, mold finish, material grade, flammability, cosmetic surfaces, tolerances, critical
+  dimensions, gate and ejector-mark notes, inserts, cavities and notes.
+- **Tool suggestion:** an SPI class and a cavity count from the yearly volume over three years.
+- **"Download the mold maker's package":** a ZIP with the part's STEP and STL, `MOLDING-SPEC.md` (the spec, the design
+  check, the suggested tool and what to quote: tool, part price at three volumes, DFM report before steel is cut, T1
+  samples with a dimensional report, tool ownership), `design-check.csv` and `critical-dimensions.txt`.
+
 ## Assembly instructions
 
 **Assembly instructions** (`/projects/<id>/assembly`) are the work instructions for building the finished product

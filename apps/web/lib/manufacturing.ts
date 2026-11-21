@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PartNeeds } from "@vx/dfm";
+import type { MoldingSpec, PartNeeds } from "@vx/dfm";
 
 /** A physical part with a model: a generated enclosure part, or a model file someone uploaded. */
 export interface PartModel {
@@ -14,6 +14,7 @@ export interface PartModel {
 export interface Route {
   id: string; name: string; source_key: string | null; needs: PartNeeds; prototype_option: string | null; prototype_qty: number | null;
   production_process: string | null; production_material: string | null; production_volume: number | null; finish: string | null; notes: string | null;
+  molding: MoldingSpec;
 }
 
 const PART_LABEL: Record<string, string> = { base: "Enclosure base", lid: "Enclosure lid" };

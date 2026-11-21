@@ -106,6 +106,33 @@ try {
   assert.match(sheet, /This print is a fair stand-in for fit, feel and light functional tests/);
   assert.match(strFromU8(files["parts.csv"]), /^Front bezel,bezel\.stl,fdm,ASA,3,matte black,40x30x20,24,15-23$/m);
 
+  // 3b. Injection molding: the design check flags the solid block (no draft, thick), the spec is saved, the package downloads.
+  const mold = page.locator("[data-route='Front bezel']").getByTestId("molding");
+  if (!(await mold.getAttribute("open") !== null)) await mold.locator("summary").first().click();
+  const facts = await mold.getByTestId("molding-facts").innerText();
+  assert.match(facts, /Draft\s+\d+(\.\d+)?% of the surface below 1° \(\d+(\.\d+)?% with none\), pulled \+z/);
+  assert.match(facts, /Tool\s+SPI Class 104/);
+  assert.match(await mold.innerText(), /Fix: .*no draft: add at least 1°/);
+  assert.match(await mold.innerText(), /Fix: .*thicker than 3\.5 mm/);
+  await mold.getByLabel("Mold finish Front bezel").selectOption("MT-11010");
+  await mold.getByLabel("Material grade Front bezel").fill("Cycoloy C2950 or equal");
+  await mold.getByLabel("Flammability Front bezel").selectOption("UL94 V-0");
+  await mold.getByLabel("Critical dimensions Front bezel").fill("display opening 222.5 ± 0.1");
+  await mold.getByRole("button", { name: "Save molding spec" }).click();
+  await page.getByText("Molding spec saved.").first().waitFor();
+  assert.match(await page.locator("[data-route='Front bezel']").getByTestId("molding-facts").innerText(), /below 2\.5°/, "a light texture needs more draft");
+  const [pkg] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download the mold maker's package" }).click()]);
+  assert.match(pkg.suggestedFilename(), /^mfg-\d+-front-bezel-mold-package-\d{4}-\d{2}-\d{2}\.zip$/);
+  const mz = unzipSync(new Uint8Array(readFileSync(await pkg.path())));
+  assert.deepEqual(Object.keys(mz).sort(), ["MOLDING-SPEC.md", "cad/bezel.stl", "critical-dimensions.txt", "design-check.csv"]);
+  const spec = strFromU8(mz["MOLDING-SPEC.md"]);
+  assert.match(spec, /^- \*\*Material:\*\* PC\/ABS, Cycoloy C2950 or equal, UL94 V-0$/m);
+  assert.match(spec, /mold finish MT-11010 \(light texture\)/);
+  assert.match(spec, /^- \*\*Volume:\*\* about 5,000 a year$/m);
+  assert.match(spec, /^- \*\*Prototypes so far:\*\* ASA \(fdm\)/m);
+  assert.match(strFromU8(mz["design-check.csv"]), /^error,.*no draft/m);
+  await shot(page, "02-molding");
+
   // 4. The planner reads the route.
   await page.goto(`${P}/inputs`);
   const planCtx = await page.getByTestId("plan-context").locator("pre").textContent();
