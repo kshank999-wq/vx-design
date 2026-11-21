@@ -521,6 +521,26 @@ now and how it will be made in production (`public.part_routes`).
   and plan the prototype builds and production tooling. The enclosure designer prototypes with the route's process and
   material, and keeps walls uniform when production is injection molding.
 
+## Assembly instructions
+
+**Assembly instructions** (`/projects/<id>/assembly`) are the work instructions for building the finished product
+(`public.assembly_instructions`, `@vx/planning` assembly.ts).
+- **Drafting:** Claude drafts them from the bought parts (Project inputs), the made parts (manufacturing routes), the
+  boards (committed layouts, or the Flux imports used for the plan), the enclosure design, and the relevant
+  requirements. The engineer can add guidance.
+- **Each step has:** parts, fasteners with a torque in N·m (or the reason there is none, e.g. heat-set inserts or
+  clips), tools, one action per line, cautions (ESD, battery, cable routing, cosmetic surfaces), a check, an optional
+  figure (a project image by its REF code) and a time estimate.
+- **Checks:** every made part, bought part and board must be fitted in some step; figures must exist; every fastener
+  needs a torque or a reason. Failing drafts go back for repair (2 rounds). Anything still failing is shown, and "Check
+  again" re-runs the checks after edits.
+- **Versions:** each draft is a numbered version. Engineers edit a draft step by step (move, add, delete). The owner
+  or a reviewer approves it, which locks it and supersedes the earlier approved version. "Start a revision" copies a
+  version into a new draft.
+- **Exports:** "Printable instructions" opens a standalone document to print or save as PDF; drafts are marked as not
+  approved. "Download for the assembler" gives a ZIP with that document, its figures, `steps.csv` and `bom.csv`
+  (parts and fasteners per unit).
+
 ## M-ENC: enclosure and fit
 
 Enclosure tasks (discipline `enclosure`) run on the KiCad engineering worker. They take the **committed

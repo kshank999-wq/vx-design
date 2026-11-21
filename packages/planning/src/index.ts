@@ -24,3 +24,4 @@ export * from "./lifecycle.ts";
 export * from "./plan-change.ts";
 export * from "./wizard.ts";
 export * from "./inspection.ts";
+export * from "./assembly.ts";

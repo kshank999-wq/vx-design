@@ -224,3 +224,4 @@ label.radio { flex-direction: row; align-items: center; color: var(--fg); }
 .toast { position: fixed; right: 16px; bottom: 16px; max-width: min(480px, calc(100vw - 32px)); z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.15); cursor: pointer; margin: 0; }
 .toast::before { content: attr(data-text); }
 ul.plain { list-style: none; padding: 0; margin: 0; }
+.steps-list { list-style: none; padding: 0; }
