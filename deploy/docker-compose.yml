@@ -69,7 +69,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/deploy:ro
-    entrypoint: ["/bin/sh", "/deploy/autoupdate.sh"]
+    # Strips Windows line endings first: a checkout on Windows may have converted the script to CRLF.
+    entrypoint: ["/bin/sh", "-c", "tr -d '\\r' < /deploy/autoupdate.sh > /tmp/autoupdate.sh && exec /bin/sh /tmp/autoupdate.sh"]
     logging:
       driver: json-file
       options: { max-size: "5m", max-file: "2" }
