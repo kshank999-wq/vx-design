@@ -96,6 +96,18 @@ On the worker host (Docker with Compose):
    start (missing keys are named). ClamAV downloads its signatures on first start, which takes a few minutes; workers
    wait for it.
 
+**Automatic updates.** Worker images are built on every push that changes worker code (Actions → Worker images).
+To have a host pick them up by itself:
+
+1. Add a GitHub token with `read:packages` to `deploy/workers.env` as `GHCR_USER=<GitHub user>` and `GHCR_TOKEN=<token>`.
+2. In `deploy/.env`, set `COMPOSE_PROFILES=engineering,autoupdate` (or `autoupdate` alone without the KiCad worker).
+3. Run `docker compose -f deploy/docker-compose.yml up -d`.
+
+The `updater` service (`deploy/autoupdate.sh`) checks every 15 minutes (`UPDATE_INTERVAL_SECONDS`) and recreates
+only the workers whose image changed. A worker stopped mid-job loses nothing: the job goes back to the queue and
+resumes from its last checkpoint. The updater logs each update (`docker compose -f deploy/docker-compose.yml logs
+updater`) and says plainly if the token is missing or has expired.
+
 More capacity: `VX_WORKERS=3` (plain workers) or a second host with the same files. Leases make it safe to run any
 number of workers, and to stop or restart them at any time (`docker compose restart`): work in progress goes back to
 the queue and resumes from its last checkpoint.
