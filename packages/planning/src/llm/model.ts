@@ -22,6 +22,8 @@ export interface GenerateRequest<T> {
   schema: z.ZodType<T>;
   /** Called with each piece of output text as it streams (the structured output's JSON, in order). */
   onText?: (delta: string) => void;
+  /** Output budget for this call (thinking and the answer share it); defaults to the model's setting. */
+  maxTokens?: number;
 }
 
 export interface GenerateResult<T> {
@@ -64,9 +66,10 @@ export class ClaudeModel implements LanguageModel {
   }
 
   async generate<T>(req: GenerateRequest<T>): Promise<GenerateResult<T>> {
+    const maxTokens = req.maxTokens ?? this.maxTokens;
     const stream = this.client.beta.messages.stream({
       model: this.model,
-      max_tokens: this.maxTokens,
+      max_tokens: maxTokens,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       thinking: { type: "adaptive" },
@@ -76,14 +79,23 @@ export class ClaudeModel implements LanguageModel {
       messages: req.messages,
     });
     if (req.onText) stream.on("text", (delta) => req.onText!(delta));
-    const message = await stream.finalMessage();
+    let message;
+    try {
+      message = await stream.finalMessage();
+    } catch (e) {
+      // A reply cut off at the token limit arrives as JSON that will not parse: say what happened.
+      if (/parse structured output|Unterminated|Unexpected end of JSON/i.test((e as Error).message)) {
+        throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it), so it could not be read.`);
+      }
+      throw e;
+    }
 
     if (message.stop_reason === "refusal") {
       const details = message.stop_details;
       throw new ModelOutputError(`${req.purpose}: the model declined (${details?.category ?? "no category"}).`);
     }
     if (message.stop_reason === "max_tokens") {
-      throw new ModelOutputError(`${req.purpose}: output hit the ${this.maxTokens}-token limit; the document may need to be split.`);
+      throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it).`);
     }
     if (message.parsed_output == null) {
       throw new ModelOutputError(`${req.purpose}: response did not match the expected schema.`);

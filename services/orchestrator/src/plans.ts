@@ -6,6 +6,9 @@
 import { generatePlan, planPayload, PlanValidationError, type LanguageModel, type PlanRequestPayload } from "@vx/planning";
 import type { WorkerDb } from "./db.ts";
 
+/** The model's full output budget (Claude Opus 5.5: 128K tokens), shared by its reasoning and the plan. */
+const PLAN_MAX_TOKENS = Number(process.env.VX_PLAN_MAX_TOKENS ?? 128000);
+
 export async function processPlanRequest(db: WorkerDb, model: { model: LanguageModel; label: string; offline: boolean }, workerId: string): Promise<number> {
   const req = await db.claimPlanRequest(workerId);
   if (!req) return 0;
@@ -13,7 +16,8 @@ export async function processPlanRequest(db: WorkerDb, model: { model: LanguageM
   console.log(`${tag}: generating`);
   const p = req.payload as PlanRequestPayload;
   try {
-    const plan = await generatePlan(p.requirements, model.model, { capabilities: p.capabilities, projectContext: p.context, inputIds: p.input_ids });
+    const plan = await generatePlan(p.requirements, model.model, { capabilities: p.capabilities, projectContext: p.context, inputIds: p.input_ids,
+                                                                     maxTokens: PLAN_MAX_TOKENS });
     for (const u of plan.usage) if (u.inputTokens || u.outputTokens) await db.recordProjectCost(req.project_id, "ai_tokens", "anthropic", u.model, u.inputTokens + u.outputTokens, "tokens");
     const payload = planPayload(plan, { model: model.label, offline: model.offline, supervisionMode: p.supervision_mode, inputs: p.inputs, requestId: req.id });
     const planId = await db.completePlanRequest(req.id, workerId, payload, model.label, null);

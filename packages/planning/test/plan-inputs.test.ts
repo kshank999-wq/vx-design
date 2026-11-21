@@ -79,3 +79,17 @@ test("offline plan builds on the inputs it is given", async () => {
   const bare = await generatePlan(reqs, new OfflineModel(), {});
   assert.ok(bare.tasks.every((t) => t.basis === null), "without inputs the offline plan states no basis");
 });
+
+test("a reply cut off at the token limit says so, with the budget used", async () => {
+  const { ClaudeModel } = await import("../src/llm/model.ts");
+  const { z } = await import("zod");
+  let asked = 0;
+  const client = { beta: { messages: { stream: (body: { max_tokens: number }) => {
+    asked = body.max_tokens;
+    return { on() {}, finalMessage: async () => { throw new Error("Failed to parse structured output: SyntaxError: Unterminated string in JSON at position 67900"); } };
+  } } } };
+  const m = new ClaudeModel({ client: client as never });
+  await assert.rejects(m.generate({ purpose: "generate_plan", system: "s", messages: [{ role: "user", content: "x" }], schema: z.object({}), maxTokens: 128000 }),
+    /generate_plan: the reply was cut off at the 128000-token limit \(the model's reasoning and its answer share it\)/);
+  assert.equal(asked, 128000, "the call's own budget is used");
+});

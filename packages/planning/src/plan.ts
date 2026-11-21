@@ -100,7 +100,7 @@ export class PlanValidationError extends Error {
 export async function generatePlan(
   requirements: RequirementInput[],
   model: LanguageModel,
-  opts: { capabilities?: CapabilityInput[]; projectContext?: string; inputIds?: string[] } = {},
+  opts: { capabilities?: CapabilityInput[]; projectContext?: string; inputIds?: string[]; maxTokens?: number } = {},
 ): Promise<PlanResult> {
   const inputIds = opts.inputIds ?? [];
   const active = requirements.filter((r) => r.status !== "rejected");
@@ -115,11 +115,13 @@ export async function generatePlan(
     role: "user",
     content: `${opts.projectContext ? `Project context:\n${opts.projectContext}\n\n` : ""}` +
       `Tool capabilities (verified tools are safe to automate; others need a manual or fallback path):\n${caps}\n\n` +
-      `Requirements:\n${reqs}\n\nProduce the plan.`,
+      `Requirements:\n${reqs}\n\n` +
+      (active.length > 150 ? `There are ${active.length} requirements. Keep the plan readable and compact: group related requirements into one task (a task may satisfy many), keep each description to one or two sentences and each acceptance test to one line.\n\n` : "") +
+      "Produce the plan.",
   }];
 
   for (let attempt = 1; ; attempt++) {
-    const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: SYSTEM, messages, schema: PlanOutput });
+    const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
     usage.push(result.usage);
     const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds);
     if (!problems.length) {
