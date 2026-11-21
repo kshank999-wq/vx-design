@@ -6,8 +6,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error, notice } = await searchParams;
   return (
     <main className="narrow">
-      <h1>VX Design</h1>
-      <p className="muted">Sign in to your workspace.</p>
+      <img src="/logo-large.png" alt="" width={720} height={240} style={{ width: "100%", height: "auto", margin: "0 0 8px" }} />
+      <h1>Sign in</h1>
+      <p className="muted">Spec-driven electronics and hardware engineering.</p>
       <Banner error={error} notice={notice} />
       <form className="card stack">
         <label>Email<input name="email" type="email" autoComplete="email" required /></label>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { StageBar } from "@/components/StageBar";
 import { Banner } from "@/components/Banner";
 import { PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { ScanBadge } from "@/components/ScanBadge";
@@ -71,29 +72,24 @@ export default async function ProjectPage({ params, searchParams }: {
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> /</p>
-      <div className="row spread"><h1>{project.name}</h1>{(docs ?? []).some((d) => d.extraction_status === "running") && <AutoRefresh intervalMs={4000} />}</div>
-      {project.description && <p className="muted">{project.description}</p>}
+      <div className="title-row">
+        <div><h1>{project.name}</h1>{project.description && <p className="muted" style={{ margin: 0 }}>{project.description}</p>}</div>
+        <div className="row">{(docs ?? []).some((d) => d.extraction_status === "running") && <AutoRefresh intervalMs={4000} />}
+          <Link href={`/projects/${projectId}/workspace`} className="btn btn-primary">Open the workspace</Link></div>
+      </div>
+      <StageBar supabase={supabase} projectId={projectId} />
       <Banner error={error} notice={notice} />
-      <p><Link href={`/projects/${projectId}/workspace`} className="btn">Open the workspace</Link>
-        <span className="muted small"> Chat, results and approval stops: the view your client sees.</span>{" "}
-        <Link href={`/projects/${projectId}/concepts`} className="btn">Concepts</Link>
-        {me?.role && me.role !== "client" && <> <Link href={`/projects/${projectId}/rfqs`} className="btn">RFQs</Link>{" "}
-          <Link href={`/projects/${projectId}/flux`} className="btn">Flux import</Link>{" "}
-          <Link href={`/projects/${projectId}/optimize`} className="btn">Optimize</Link>{" "}
-          <Link href={`/projects/${projectId}/manufacturing`} className="btn">Manufacturing routes</Link>{" "}
-          <Link href={`/projects/${projectId}/assembly`} className="btn">Assembly instructions</Link>{" "}
-          <Link href={`/projects/${projectId}/dfm`} className="btn">Manufacturing fit</Link></>}{" "}
-        <Link href={`/projects/${projectId}/trades`} className="btn">Trade studies</Link>{" "}
-        <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link>{" "}
-        <Link href={`/projects/${projectId}/compliance`} className="btn">Compliance</Link>{" "}
-        <Link href={`/projects/${projectId}/releases`} className="btn">Releases</Link>{" "}
-        <Link href={`/projects/${projectId}/production`} className="btn">Production</Link>{" "}
-        <Link href={`/projects/${projectId}/inspection`} className="btn">Inspection plans</Link>{" "}
-        <Link href={`/projects/${projectId}/lifecycle`} className="btn">Lifecycle</Link>{" "}
-        <Link href={`/projects/${projectId}/mechanical`} className="btn">Mechanical checks</Link>{" "}
-        <Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link>{" "}
-        <Link href={`/projects/${projectId}/wizard`} className="btn">Requirement wizard</Link>{" "}
-        <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link></p>
+      <div className="section-map" data-testid="section-map">
+        <div className="group"><h2>Define</h2><div className="links">
+          <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link><Link href={`/projects/${projectId}/wizard`} className="btn">Requirement wizard</Link><Link href={`/projects/${projectId}/concepts`} className="btn">Concepts</Link><Link href={`/projects/${projectId}/trades`} className="btn">Trade studies</Link><Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link></div></div>
+        <div className="group"><h2>Design</h2><div className="links">
+          <Link href={`/projects/${projectId}/workspace`} className="btn">Workspace</Link><Link href={`/projects/${projectId}/mechanical`} className="btn">Mechanical checks</Link>{me?.role && me.role !== "client" && <><Link href={`/projects/${projectId}/flux`} className="btn">Flux import</Link><Link href={`/projects/${projectId}/optimize`} className="btn">Optimize</Link></>}</div></div>
+        <div className="group"><h2>Make</h2><div className="links">
+          {me?.role && me.role !== "client" && <><Link href={`/projects/${projectId}/manufacturing`} className="btn">Manufacturing routes</Link><Link href={`/projects/${projectId}/assembly`} className="btn">Assembly instructions</Link><Link href={`/projects/${projectId}/dfm`} className="btn">Manufacturing fit</Link><Link href={`/projects/${projectId}/rfqs`} className="btn">RFQs</Link></>}
+          <Link href={`/projects/${projectId}/releases`} className="btn">Releases</Link><Link href={`/projects/${projectId}/production`} className="btn">Production</Link><Link href={`/projects/${projectId}/inspection`} className="btn">Inspection plans</Link></div></div>
+        <div className="group"><h2>Prove and support</h2><div className="links">
+          <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link><Link href={`/projects/${projectId}/compliance`} className="btn">Compliance</Link><Link href={`/projects/${projectId}/lifecycle`} className="btn">Lifecycle</Link></div></div>
+      </div>
 
       <p className="card small" data-testid="inputs-link"><Link href={`/projects/${projectId}/inputs`} className="btn btn-primary">Project inputs</Link>{" "}
         Add every specification at once, mock-ups and references, and work from other tools (Flux), then generate the plan from all of it.</p>

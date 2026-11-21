@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { StageBar } from "@/components/StageBar";
 import { STAGE_NAME, type StageRow } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -84,11 +85,12 @@ export default async function WorkspacePage({ params, searchParams }: {
       <div className="ws-head">
         <p className="crumbs">{role === "client" ? <Link href="/projects">Projects</Link> : <><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{ctx.project.name}</Link></>} /</p>
         <h1>{ctx.project.name} <span className="muted small">workspace</span></h1>
+        {role !== "client" && <StageBar supabase={supabase} projectId={projectId} />}
         <Banner error={error} notice={notice} />
       </div>
 
-      <section className="ws-chat card" aria-label="Project chat">
-        <h2>Chat</h2>
+      <section className="ws-chat card panel" aria-label="Project chat">
+        <h2 className="panel-head">Design agent</h2>
         <ol className="chat" data-testid="chat">
           {(messages ?? []).map((m) => {
             const d = (m.data ?? {}) as MessageData;
@@ -125,7 +127,8 @@ export default async function WorkspacePage({ params, searchParams }: {
         <ChatForm projectId={projectId} action={sendMessage.bind(null, projectId, selected ? selected.id : null)} />
       </section>
 
-      <section className="ws-view" aria-label="Results">
+      <section className="ws-view card panel" aria-label="Results">
+        <h2 className="panel-head panel-head-blue">Design viewer</h2>
         {showConcepts ? (
           <>
             <div className="row spread">
@@ -143,8 +146,8 @@ export default async function WorkspacePage({ params, searchParams }: {
             <iframe className="ws-frame" src={`/projects/${projectId}/artifacts/${selected.id}?embed=1`} title={selected.name} data-testid="viewer" />
           </>
         ) : (
-          <div className="card" data-testid="overview">
-            <h2>Overview</h2>
+          <div data-testid="overview">
+            <h3>Overview</h3>
             {ctx.plan ? (
               <>
                 <p>{ctx.plan.summary}</p>
@@ -177,8 +180,8 @@ export default async function WorkspacePage({ params, searchParams }: {
         )}
       </section>
 
-      <aside className="ws-checklist card" aria-label="Checklist" data-testid="checklist">
-        <div className="row spread"><h2>Checklist</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
+      <aside className="ws-checklist card panel" aria-label="Checklist" data-testid="checklist">
+        <div className="row spread panel-head"><h2>Agent activity</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
         <ol className="checklist">
           <li className={`check check-${stageStep}`} data-status={stageStep} data-testid="stage-step">
             <span className="check-icon" aria-hidden>{ICON[stageStep]}</span>

@@ -183,7 +183,7 @@ try {
   await opage.getByLabel("Access window (days)").fill("14");
   await opage.getByRole("button", { name: "Release to suppliers" }).click();
   await opage.getByText(/Released/).waitFor();
-  await opage.getByTestId("emails").locator("summary").first().click();
+  await opage.getByTestId("emails").locator("summary").first().click({ position: { x: 4, y: 6 } });
   const draft = await opage.getByTestId("email-draft").first().innerText();
   assert.match(draft, /Subject: SLATE-RFQ-001: request for quotation/);
   assert.match(draft, new RegExp(`${BASE.replace(/[/.:]/g, "\\$&")}/supplier`));
