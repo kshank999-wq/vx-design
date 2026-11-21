@@ -72,7 +72,7 @@ try {
   // 1. Units built from the approved fab package.
   const page = o.page;
   await page.goto(`${BASE}/projects/${project.id}`);
-  await page.getByRole("link", { name: "Validation" }).click();
+  await page.getByTestId("section-map").getByRole("link", { name: "Validation" }).click();
   for (const sn of ["SN-001", "SN-002"]) {
     await page.locator("summary", { hasText: "Register a unit" }).click();
     await page.getByLabel("Serial").fill(sn);

@@ -92,11 +92,13 @@ try {
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
   const projectUrl = page.url();
   const projectId = projectUrl.split("/").pop();
+  await page.goto(`${projectUrl}?tab=documents`);
   await page.getByLabel("Specification file").setInputFiles(SPEC);
   await page.getByRole("button", { name: "Upload" }).click();
   await page.getByText(/Uploaded sample-timecode-board\.md/).waitFor();
   await page.getByRole("button", { name: "Extract requirements" }).click();
-  await page.locator("table.reqs tbody tr").first().waitFor();
+  await page.getByText(/\d+ requirements · /).first().waitFor();
+  await page.goto(`${projectUrl}?tab=plans`);
   await page.getByRole("button", { name: "Generate plan from requirements" }).click();
   await page.waitForURL(/\/plans\/[0-9a-f-]{36}/);
   const planUrl = page.url().split("?")[0];
@@ -209,7 +211,7 @@ try {
   console.log("✓ exactly one model call and one committed version per task");
 
   // --- Project overview lists the runs; outsiders see nothing -----------------------------
-  await page.goto(projectUrl);
+  await page.goto(`${projectUrl}?tab=plans`);
   await page.getByText(/Overnight 1 \(continued\)/).first().waitFor();
   await shot(page, "project-runs");
   const other = await newPage(browser);

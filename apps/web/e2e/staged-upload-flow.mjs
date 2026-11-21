@@ -52,7 +52,7 @@ try {
 
   // 1. Upload: the browser sends the file to storage; requests to the web server stay small.
   const page = o.page;
-  await page.goto(`${BASE}/projects/${project.id}`);
+  await page.goto(`${BASE}/projects/${project.id}?tab=documents`);
   const input = page.getByLabel("Specification file");
   await input.setInputFiles(spec);
   await page.locator("input[data-staged='yes']").waitFor({ timeout: 60000 });

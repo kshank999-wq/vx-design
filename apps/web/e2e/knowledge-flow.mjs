@@ -141,7 +141,7 @@ try {
 
   // 6. A project: standards applicability and a licensed copy that stays inside it.
   const { data: project } = await ed.api.from("projects").insert({ name: `Slate KB e2e ${stamp}` }).select("id").single();
-  await page.goto(`${BASE}/projects/${project.id}`);
+  await page.goto(`${BASE}/projects/${project.id}?tab=standards`);
   const { data: ipc2152 } = await admin.from("standards").select("id").eq("identifier", "IPC-2152").single();
   await page.getByLabel("Standard", { exact: true }).selectOption(ipc2152.id);
   await page.getByLabel("Applicability").selectOption("applies");

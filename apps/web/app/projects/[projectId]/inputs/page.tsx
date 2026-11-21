@@ -20,13 +20,21 @@ const kindLabel = (k: string) => REFERENCE_KINDS.find(([x]) => x === k)?.[1] ?? 
 const partStatusLabel = (k: string) => PART_STATUS.find(([x]) => x === k)?.[1] ?? k;
 const NOT_VISUAL = ["prior_design", "datasheet", "model_3d"];
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const INPUT_STEPS = [
+  { title: "Specifications", sub: "Specs and requirements" }, { title: "Mock-ups", sub: "How it should look" },
+  { title: "Parts chosen", sub: "Datasheets, STEP models" }, { title: "Prior work", sub: "Flux, files, earlier work" },
+  { title: "Plan", sub: "Other inputs, generate" },
+];
+const DOCS_SHOWN = 8;
 
 /** Everything a plan is built from, in one place, and the plan built from it. */
 export default async function InputsPage({ params, searchParams }: {
-  params: Promise<{ projectId: string }>; searchParams: Promise<{ error?: string; notice?: string }>;
+  params: Promise<{ projectId: string }>; searchParams: Promise<{ error?: string; notice?: string; step?: string; docs?: string }>;
 }) {
   const { projectId } = await params;
-  const { error, notice } = await searchParams;
+  const sp = await searchParams;
+  const { error, notice } = sp;
+  const step = Math.min(5, Math.max(1, Number(sp.step) || 1));
   const { supabase, userId } = await requireUser();
   const [{ data: project }, { data: me }, { data: docs }, { data: reqs }, { data: refs }, { data: audits }, { data: intake }, { data: freeze },
          { count: standards }, { count: sources }, { data: plans }, { data: parts }, { data: registers }] = await Promise.all([
@@ -72,6 +80,16 @@ export default async function InputsPage({ params, searchParams }: {
   const registerNewer = ready?.completed_at && (!lastPlanAt || new Date(ready.completed_at) > new Date(lastPlanAt));
   const partsChangedSince = ready?.completed_at && (parts ?? []).some((p) => new Date(p.updated_at) > new Date(ready.completed_at!));
 
+  const stepDone = [(docs ?? []).length > 0 && active.length > 0, visual.length > 0, (parts ?? []).length > 0,
+    (audits ?? []).some((a) => a.status === "ready") || priorFiles.length > 0 || !!ready, (plans ?? []).length > 0];
+  const summary = [
+    { label: "Specifications", text: `${(docs ?? []).length} document(s) · ${active.length} requirement(s)`, done: stepDone[0]! },
+    { label: "Mock-ups", text: `${visual.length} reference(s)`, done: stepDone[1]! },
+    { label: "Parts chosen", text: `${(parts ?? []).length} part(s)`, done: stepDone[2]! },
+    { label: "Prior work", text: `${(audits ?? []).filter((a) => a.status === "ready").length} Flux import(s) · ${priorFiles.length} file(s)${ready ? ` · ${regItems.length} earlier-work item(s)` : ""}`, done: stepDone[3]! },
+    { label: "Plan", text: plans?.length ? `v${plans[0]!.version} · ${plans[0]!.status}` : "not generated yet", done: stepDone[4]! },
+  ];
+
   const refCard = (r: NonNullable<typeof refs>[number]) => (
     <div key={r.id} className="card small" data-ref={refCode(r.ref_no)}>
       {url.get(r.storage_path) ? <a href={url.get(r.storage_path)} target="_blank" rel="noreferrer"><img className="concept-thumb" src={url.get(r.storage_path)} alt={r.title} /></a>
@@ -106,20 +124,32 @@ export default async function InputsPage({ params, searchParams }: {
   };
 
   return (
-    <main>
+    <main className="setup">
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
-      <div className="row spread"><h1>Project inputs</h1>
+      <div className="title-row"><h1>Project inputs</h1>
         {((audits ?? []).some((a) => a.status === "queued" || a.status === "running") || (docs ?? []).some((d) => d.extraction_status === "running")) && !building && <AutoRefresh intervalMs={3000} />}</div>
-      <p className="muted">Everything the plan is built from: the specifications, mock-ups and references, parts already chosen, and work already done.
-        The plan cites these by their codes (REF-1, PW-1, PR-1) and says for each task whether it reuses earlier work, adapts it, replaces it or starts fresh,
-        so nothing that exists is done again. Imported work is never treated as verified: the plan includes the checks that re-establish it.</p>
       <Banner error={error} notice={notice} />
-
+      <div className="setup-grid">
+        <nav className="card setup-rail" aria-label="Input steps" data-testid="input-steps">
+          <h2 className="eyebrow">Inputs</h2>
+          {INPUT_STEPS.map((x, k) => (
+            <Link key={x.title} href={`/projects/${projectId}/inputs?step=${k + 1}`} className={`setup-step${k + 1 === step ? " active" : ""}${stepDone[k] ? " done" : ""}`}
+              aria-current={k + 1 === step ? "step" : undefined}>
+              <span className="step-num">{stepDone[k] && k + 1 !== step ? "✓" : String(k + 1).padStart(2, "0")}</span>
+              <span><strong>{x.title}</strong><small>{x.sub}</small></span>
+            </Link>
+          ))}
+          <p className="small muted setup-hint">The plan cites these by their codes (REF-1, PW-1, PR-1) and says for each task whether it reuses earlier work, adapts it,
+            replaces it or starts fresh. Imported work is never treated as verified.</p>
+        </nav>
+        <div className="card setup-main" data-testid="input-step" data-step={step}>
+          <p className="eyebrow tech">Step {String(step).padStart(2, "0")} / 05</p>
+      {step === 1 && <>
       <section>
-        <h2>1. Specifications</h2>
+        <h2 className="setup-title">Specifications</h2>
         <table className="small" data-testid="specs">
           <thead><tr><th>Document</th><th>Requirements</th><th /></tr></thead>
-          <tbody>{(docs ?? []).map((d) => {
+          <tbody>{(docs ?? []).slice(0, sp.docs === "all" ? undefined : DOCS_SHOWN).map((d) => {
             const report = (d.extraction_report ?? {}) as { error?: string; model?: string };
             return <tr key={d.id} data-doc={d.filename} data-status={d.extraction_status}>
               <td><strong>{d.title}</strong><div className="muted">{d.filename}</div></td>
@@ -130,6 +160,7 @@ export default async function InputsPage({ params, searchParams }: {
             </tr>;
           })}{!docs?.length && <tr><td colSpan={3} className="muted">No specifications yet. Add every spec you have: one per board, the enclosure, the software.</td></tr>}</tbody>
         </table>
+        {(docs ?? []).length > DOCS_SHOWN && sp.docs !== "all" && <p><Link className="btn" href={`/projects/${projectId}/inputs?step=1&docs=all`}>{`Show all ${(docs ?? []).length} documents`}</Link></p>}
         {canEdit && <>
           <InputsUpload projectId={projectId} mode="specification" />
           {pending.length > 0 && (
@@ -148,8 +179,11 @@ export default async function InputsPage({ params, searchParams }: {
         )}
       </section>
 
+      </>}
+
+      {step === 2 && <>
       <section>
-        <h2>2. Mock-ups and references</h2>
+        <h2 className="setup-title">Mock-ups and references</h2>
         <p className="small muted">How the product should look: sketches, renders, photos of a prototype or a product you like, dimensioned drawings. Say in the
           note what each one shows and what to keep. Images can also be given to a concept round. Part datasheets and 3D models go under 3, files from
           other tools or engineers under 4.</p>
@@ -157,8 +191,11 @@ export default async function InputsPage({ params, searchParams }: {
         {canEdit && <InputsUpload projectId={projectId} mode="reference" kinds={VISUAL_KINDS} />}
       </section>
 
+      </>}
+
+      {step === 3 && <>
       <section>
-        <h2>3. Parts already chosen</h2>
+        <h2 className="setup-title">Parts already chosen</h2>
         <p className="small muted">Parts you or another engineer have already picked: the display, the compute module, the timecode clock, connectors. Say how
           far each got (selected, in the schematic, laid out, tested) and attach its datasheet, 3D model (STEP) and drawings. The plan must continue,
           adapt or replace each one, and give its reasons, concerns and alternatives when it replaces one.</p>
@@ -205,8 +242,11 @@ export default async function InputsPage({ params, searchParams }: {
         )}
       </section>
 
+      </>}
+
+      {step === 4 && <>
       <section>
-        <h2>4. Prior work</h2>
+        <h2 className="setup-title">Prior work</h2>
         <p className="small muted">Designs already started elsewhere. Add a Flux project's exported files here (or on the <Link href={`/projects/${projectId}/flux`}>Flux import</Link> page)
           and run the audit: its parts, board, design notes, earlier decisions and open problems become prior work the plan builds on.</p>
         <table className="small" data-testid="prior-work">
@@ -284,7 +324,7 @@ export default async function InputsPage({ params, searchParams }: {
               {partsChangedSince && <span className="warn-text"> · parts changed since: rebuild to include them</span>}
               {registerNewer && plans?.length ? <span className="warn-text"> · newer than the latest plan: generate the plan again to use it</span> : null}</p>
             {SUBSYSTEMS.filter((sub) => regItems.some((i) => i.subsystem === sub)).map((sub) => (
-              <details key={sub} className="small" open data-testid={`register-${sub}`}>
+              <details key={sub} className="small" open={regItems.length <= 30} data-testid={`register-${sub}`}>
                 <summary><strong>{cap(subsystemLabel(sub))}</strong> ({regItems.filter((i) => i.subsystem === sub).length})</summary>
                 <table className="small">
                   <thead><tr><th>Item</th><th>Status</th><th>What</th><th>From</th></tr></thead>
@@ -327,8 +367,11 @@ export default async function InputsPage({ params, searchParams }: {
         </div>
       </section>
 
+      </>}
+
+      {step === 5 && <>
       <section>
-        <h2>5. Other inputs</h2>
+        <h2>Other inputs</h2>
         <ul className="small" data-testid="other-inputs">
           <li>Intake: {intake?.intended_use || intake?.quantity || intake?.max_dimensions ? "filled in" : "not filled in"} · <Link href={`/projects/${projectId}/wizard`}>requirement wizard</Link> · <Link href={`/projects/${projectId}/risks`}>intake and risks</Link></li>
           <li>Design freeze: {freeze ? `frozen ${new Date(freeze.frozen_at).toLocaleDateString()}` : "none yet"} · <Link href={`/projects/${projectId}/concepts`}>concepts</Link></li>
@@ -336,9 +379,8 @@ export default async function InputsPage({ params, searchParams }: {
         </ul>
       </section>
 
-      <section className="card">
-        <h2>6. The plan</h2>
-        <PlanRequestStatus supabase={supabase} projectId={projectId} />
+      <section>
+        <h2>The plan</h2>
         <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.length} of which the plan must address` : ""}.</p>
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
         {canEdit && (
@@ -350,6 +392,20 @@ export default async function InputsPage({ params, searchParams }: {
         {!!plans?.length && <ul className="small">{plans.map((p) => <li key={p.id}><Link href={`/projects/${projectId}/plans/${p.id}`}>Plan v{p.version}</Link> · {p.status}
           {(p.inputs as unknown[]).length ? ` · built on ${(p.inputs as { id: string }[]).map((x) => x.id).join(", ")}` : ""}</li>)}</ul>}
       </section>
+      </>}
+          <div className="setup-actions">
+            {step > 1 ? <Link className="btn" href={`/projects/${projectId}/inputs?step=${step - 1}`}>← Back</Link> : <span />}
+            {step < 5 && <Link className="btn btn-primary" href={`/projects/${projectId}/inputs?step=${step + 1}`}>{`Continue: ${INPUT_STEPS[step]!.title} →`}</Link>}
+          </div>
+        </div>
+        <aside className="setup-side">
+          <div className="card" data-testid="inputs-summary">
+            <h2 className="eyebrow">The plan builds on</h2>
+            <ul className="manifest">{summary.map((m) => <li key={m.label} className={m.done ? "done" : ""}><span className="mdot" /><span><strong>{m.label}</strong><small>{m.text}</small></span></li>)}</ul>
+          </div>
+          <PlanRequestStatus supabase={supabase} projectId={projectId} />
+        </aside>
+      </div>
     </main>
   );
 }

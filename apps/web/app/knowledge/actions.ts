@@ -134,23 +134,23 @@ export async function reviewStandard(standardId: string, form: FormData) {
 }
 
 export async function proposeStandard(projectId: string, form: FormData) {
-  const path = `/projects/${projectId}`;
+  const base = `/projects/${projectId}`, path = `${base}?tab=standards`;
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("set_project_standard", {
     p_project_id: projectId, p_standard_id: str(form, "standard_id"), p_applicability: str(form, "applicability"), p_rationale: str(form, "rationale"),
   });
   if (error) fail(path, error);
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent("Proposed: an owner or reviewer confirms it.")}`);
+  revalidatePath(base);
+  redirect(`${path}&notice=${encodeURIComponent("Proposed: an owner or reviewer confirms it.")}`);
 }
 
 export async function confirmStandard(projectId: string, id: string) {
-  const path = `/projects/${projectId}`;
+  const base = `/projects/${projectId}`, path = `${base}?tab=standards`;
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("confirm_project_standard", { p_id: id, p_note: null });
   if (error) fail(path, error);
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent("Confirmed.")}`);
+  revalidatePath(base);
+  redirect(`${path}&notice=${encodeURIComponent("Confirmed.")}`);
 }
 
 export async function fetchSource(sourceId: string) {

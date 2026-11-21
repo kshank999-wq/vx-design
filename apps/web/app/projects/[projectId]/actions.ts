@@ -9,19 +9,19 @@ import { markExtractionFailed, persistExtraction, prepareExtraction, storeDocume
 import { loadPlanInputs } from "@/lib/plan-inputs";
 
 export async function uploadDocument(projectId: string, form: FormData) {
-  const path = `/projects/${projectId}`;
+  const base = `/projects/${projectId}`, path = `${base}?tab=documents`;
   const { supabase, userId } = await requireUser();
   let file: File | null = null;
   try { file = await formFile(supabase, form, "file"); } catch (e) { fail(path, (e as Error).message); }
   if (!file) fail(path, "Choose a DOCX, PDF, Markdown or text file.");
   let stored;
   try { stored = await storeDocument(supabase, userId, projectId, file); } catch (e) { fail(path, (e as Error).message); }
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent(`Uploaded ${file.name}: ${stored.sections} sections.`)}`);
+  revalidatePath(base);
+  redirect(`${path}&notice=${encodeURIComponent(`Uploaded ${file.name}: ${stored.sections} sections.`)}`);
 }
 
 export async function runExtraction(projectId: string, documentId: string, from?: string) {
-  const path = from === "inputs" ? `/projects/${projectId}/inputs` : `/projects/${projectId}`;
+  const path = from === "inputs" ? `/projects/${projectId}/inputs?step=1` : `/projects/${projectId}?tab=documents`;
   const { supabase } = await requireUser();
   let choice;
   try { choice = getModel(); } catch (e) { fail(path, e); }
@@ -34,17 +34,17 @@ export async function runExtraction(projectId: string, documentId: string, from?
     await markExtractionFailed(supabase, documentId, (e as Error).message, choice.label);
     fail(path, `Extraction failed: ${(e as Error).message}`);
   }
-  revalidatePath(path);
+  revalidatePath(path.split("?")[0]!);
   redirect(path);
 }
 
 export async function setRequirementStatus(projectId: string, requirementId: string, status: string) {
-  const path = `/projects/${projectId}`;
+  const base = `/projects/${projectId}`, path = `${base}?tab=requirements`;
   const { supabase } = await requireUser();
   if (!["confirmed", "rejected", "extracted", "ambiguous"].includes(status)) fail(path, "Invalid status.");
   const { error } = await supabase.from("requirements").update({ status }).eq("id", requirementId);
   if (error) fail(path, error);
-  revalidatePath(path);
+  revalidatePath(base);
 }
 
 /** Above this many active requirements the plan is made by a worker: the web server's request limit is 5 minutes. */
@@ -52,7 +52,7 @@ const WEB_PLAN_LIMIT = Number(process.env.VX_WEB_PLAN_MAX_REQUIREMENTS ?? 80);
 
 /** A plan from every project input: requirements (with acceptance criteria), intake, freeze, standards, references, prior work. */
 export async function createPlan(projectId: string, from?: string) {
-  const path = from === "inputs" ? `/projects/${projectId}/inputs` : `/projects/${projectId}`;
+  const path = from === "inputs" ? `/projects/${projectId}/inputs?step=5` : `/projects/${projectId}?tab=plans`;
   const { supabase } = await requireUser();
   const [{ data: project }, { data: reqs }, { data: caps }, loaded] = await Promise.all([
     supabase.from("projects").select("name, description, supervision_mode").eq("id", projectId).single(),
@@ -73,8 +73,8 @@ export async function createPlan(projectId: string, from?: string) {
   if (active.length > WEB_PLAN_LIMIT) {
     const { error } = await supabase.rpc("request_plan", { p_project: projectId, p_payload: request });
     if (error) fail(path, error);
-    revalidatePath(path);
-    redirect(`${path}?notice=${encodeURIComponent(`Planning ${active.length} requirements: a worker is generating the plan. This page updates by itself and links to the plan when it is ready (usually 5 to 15 minutes).`)}`);
+    revalidatePath(path.split("?")[0]!);
+    redirect(`${path}&notice=${encodeURIComponent(`Planning ${active.length} requirements: a worker is generating the plan. This page updates by itself and links to the plan when it is ready (usually 5 to 15 minutes).`)}`);
   }
 
   let choice;
@@ -98,15 +98,15 @@ export async function createPlan(projectId: string, from?: string) {
 const INVITE_ROLES = ["client", "reviewer", "engineer", "viewer"];
 
 export async function inviteMember(projectId: string, form: FormData) {
-  const path = `/projects/${projectId}`;
+  const base = `/projects/${projectId}`, path = `${base}?tab=team`;
   const { supabase } = await requireUser();
   const email = String(form.get("email") ?? "").trim();
   const role = String(form.get("role") ?? "client");
   if (!INVITE_ROLES.includes(role)) fail(path, "Unknown role.");
   const { data, error } = await supabase.rpc("invite_member", { p_project_id: projectId, p_email: email, p_role: role });
   if (error) fail(path, error);
-  revalidatePath(path);
+  revalidatePath(base);
   const notice = data === "added" ? `${email} already has an account and was added as ${role}.`
     : `Invitation recorded: when ${email} signs up with that address, they join as ${role}. Send them the sign-up link yourself; VX Design does not email yet.`;
-  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
+  redirect(`${path}&notice=${encodeURIComponent(notice)}`);
 }

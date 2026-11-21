@@ -24,16 +24,23 @@ interface ExtractionReport {
   error?: string;
 }
 
+const TABS: [string, string][] = [["overview", "Overview"], ["documents", "Documents"], ["requirements", "Requirements"], ["plans", "Plans and runs"],
+  ["standards", "Standards"], ["team", "Team"]];
+const PAGE = 50;
+const DOCS_SHOWN = 8;
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft", awaiting_approval: "Awaiting approval", approved: "Approved baseline", superseded: "Superseded",
 };
 
 export default async function ProjectPage({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; tab?: string; page?: string; status?: string; q?: string; doc?: string }>;
 }) {
   const { projectId } = await params;
-  const { error, notice } = await searchParams;
+  const sp = await searchParams;
+  const { error, notice } = sp;
+  const tab = TABS.some(([k]) => k === sp.tab) ? sp.tab! : "overview";
   const { supabase, userId } = await requireUser();
 
   const [{ data: project }, { data: docs }, { data: reqs }, { data: plans }, { data: me }, { data: runs }] = await Promise.all([
@@ -69,6 +76,16 @@ export default async function ProjectPage({ params, searchParams }: {
   const counts = { total: reqs?.length ?? 0, rejected: reqs?.filter((r) => r.status === "rejected").length ?? 0,
     ambiguous: reqs?.filter((r) => r.status === "ambiguous").length ?? 0, confirmed: reqs?.filter((r) => r.status === "confirmed").length ?? 0 };
 
+  const filtered = (reqs ?? []).filter((r) => (!sp.status || r.status === sp.status) && (!sp.doc || r.document_id === sp.doc)
+    && (!sp.q || `${r.ref_code} ${r.text}`.toLowerCase().includes(sp.q.toLowerCase())));
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const pageNo = Math.min(pages, Math.max(1, Number(sp.page) || 1));
+  const shown = filtered.slice((pageNo - 1) * PAGE, pageNo * PAGE);
+  const pageHref = (n: number) => `/projects/${projectId}?${new URLSearchParams({ tab: "requirements", page: String(n), ...(sp.q ? { q: sp.q } : {}), ...(sp.status ? { status: sp.status } : {}), ...(sp.doc ? { doc: sp.doc } : {}) })}`;
+  const latestPlan = (plans ?? [])[0];
+  const tabCount: Record<string, string> = { documents: String((docs ?? []).length), requirements: String(counts.total - counts.rejected), plans: String((plans ?? []).length),
+    standards: String((projectStandards ?? []).length), team: String((members ?? []).length) };
+
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> /</p>
@@ -80,6 +97,18 @@ export default async function ProjectPage({ params, searchParams }: {
       </div>
       <StageBar supabase={supabase} projectId={projectId} />
       <Banner error={error} notice={notice} />
+      <nav className="tabs" aria-label="Project sections" data-testid="project-tabs">{TABS.map(([k, l]) => (
+        <Link key={k} href={k === "overview" ? `/projects/${projectId}` : `/projects/${projectId}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className="tab">
+          {l}{tabCount[k] ? <span className="tab-count">{tabCount[k]}</span> : null}</Link>))}</nav>
+      {tab === "overview" && <>
+      <div className="tiles overview-tiles" data-testid="overview-tiles">
+        <Link className="tile" href={`/projects/${projectId}?tab=documents`}><strong>{(docs ?? []).length}</strong> specification document(s)<span className="muted small">{(docs ?? []).filter((d) => d.extraction_status === "done").length} extracted</span></Link>
+        <Link className="tile" href={`/projects/${projectId}?tab=requirements`}><strong>{counts.total - counts.rejected}</strong> requirement(s)<span className="muted small">{counts.confirmed} confirmed · {counts.ambiguous} ambiguous</span></Link>
+        <Link className="tile" href={latestPlan ? `/projects/${projectId}/plans/${latestPlan.id}` : `/projects/${projectId}?tab=plans`}><strong>{latestPlan ? `v${latestPlan.version}` : "—"}</strong> latest plan<span className="muted small">{latestPlan ? STATUS_LABEL[latestPlan.status] ?? latestPlan.status : "not generated yet"}</span></Link>
+        <Link className="tile" href={`/projects/${projectId}?tab=plans`}><strong>{(runs ?? []).length}</strong> run(s)<span className="muted small">{(runs ?? [])[0] ? `last: ${(runs ?? [])[0]!.status}` : "none yet"}</span></Link>
+      </div>
+      <p className="card small" data-testid="inputs-link"><Link href={`/projects/${projectId}/inputs`} className="btn btn-primary">Project inputs</Link>{" "}
+        Add every specification at once, mock-ups and references, and work from other tools (Flux), then generate the plan from all of it.</p>
       <div className="section-map" data-testid="section-map">
         <div className="group"><h2>Define</h2><div className="links">
           <Link href={`/projects/${projectId}/risks`} className="btn">Intake and risks</Link><Link href={`/projects/${projectId}/wizard`} className="btn">Requirement wizard</Link><Link href={`/projects/${projectId}/concepts`} className="btn">Concepts</Link><Link href={`/projects/${projectId}/trades`} className="btn">Trade studies</Link><Link href={`/projects/${projectId}/stages`} className="btn">Stages</Link></div></div>
@@ -92,15 +121,21 @@ export default async function ProjectPage({ params, searchParams }: {
           <Link href={`/projects/${projectId}/validation`} className="btn">Validation</Link><Link href={`/projects/${projectId}/compliance`} className="btn">Compliance</Link><Link href={`/projects/${projectId}/lifecycle`} className="btn">Lifecycle</Link></div></div>
       </div>
 
-      <p className="card small" data-testid="inputs-link"><Link href={`/projects/${projectId}/inputs`} className="btn btn-primary">Project inputs</Link>{" "}
-        Add every specification at once, mock-ups and references, and work from other tools (Flux), then generate the plan from all of it.</p>
 
+      <section className="card small">
+        <h3>3D model library</h3>
+        <p className="small">Manufacturer STEP models for this project&apos;s parts, checked against their footprints and verified before layouts
+          use them. <Link href={`/projects/${projectId}/models`}>Open the model library</Link></p>
+      </section>
+
+      </>}
+      {tab === "documents" && <>
       <section>
-        <h2>1. Specification documents</h2>
+        <h2>Specification documents</h2>
         <table>
           <thead><tr><th>Document</th><th>Extraction</th><th /></tr></thead>
           <tbody>
-            {(docs ?? []).map((d) => {
+            {(docs ?? []).slice(0, sp.doc === "all" ? undefined : DOCS_SHOWN).map((d) => {
               const report = (d.extraction_report ?? {}) as ExtractionReport;
               return (
                 <tr key={d.id}>
@@ -130,6 +165,7 @@ export default async function ProjectPage({ params, searchParams }: {
             {!docs?.length && <tr><td colSpan={3} className="muted">Upload the product specification to begin.</td></tr>}
           </tbody>
         </table>
+        {(docs ?? []).length > DOCS_SHOWN && sp.doc !== "all" && <p><Link className="btn" href={`/projects/${projectId}?tab=documents&doc=all`}>{`Show all ${(docs ?? []).length} documents`}</Link></p>}
         {canEdit && (
           <form action={uploadDocument.bind(null, projectId)} className="row upload">
             <StagedFileInput name="file" bucket="project-files" prefix={`${projectId}/uploads`} accept=".docx,.pdf,.md,.txt" required ariaLabel="Specification file" />
@@ -145,16 +181,29 @@ export default async function ProjectPage({ params, searchParams }: {
         )}
       </section>
 
+      </>}
+      {tab === "requirements" && <>
       <section>
-        <h2>2. Requirements</h2>
+        <h2>Requirements</h2>
         <p className="muted small">
           {counts.total} total · {counts.confirmed} confirmed · {counts.ambiguous} ambiguous · {counts.rejected} rejected.
           Every requirement links to the exact text it came from.
         </p>
+        <form method="get" className="row filters" data-testid="req-filters">
+          <input type="hidden" name="tab" value="requirements" />
+          <input name="q" defaultValue={sp.q ?? ""} placeholder="Search text or REQ code" aria-label="Search requirements" style={{ flex: 1, minWidth: 200 }} />
+          <select name="status" defaultValue={sp.status ?? ""} aria-label="Status filter"><option value="">All statuses</option>
+            {["extracted", "confirmed", "ambiguous", "rejected"].map((x) => <option key={x}>{x}</option>)}</select>
+          <select name="doc" defaultValue={sp.doc ?? ""} aria-label="Document filter"><option value="">All documents</option>
+            {(docs ?? []).map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select>
+          <button className="btn" type="submit">Filter</button>
+          {(sp.q || sp.status || sp.doc) && <Link className="btn btn-link" href={`/projects/${projectId}?tab=requirements`}>Clear</Link>}
+        </form>
+        <p className="small muted" data-testid="req-page">{shown.length ? `Showing ${(pageNo - 1) * PAGE + 1}–${(pageNo - 1) * PAGE + shown.length} of ${filtered.length}` : `None of ${counts.total} match`}</p>
         <table className="reqs">
           <thead><tr><th>Ref</th><th>Requirement</th><th>Source</th><th>Status</th></tr></thead>
           <tbody>
-            {(reqs ?? []).map((r) => (
+            {shown.map((r) => (
               <tr key={r.id} className={r.status === "rejected" ? "rejected" : ""}>
                 <td className="mono">{r.ref_code}<div className="muted small">{r.kind} · {r.priority}</div></td>
                 <td>{r.text}{r.notes && <div className="small warn-text">Open: {r.notes}</div>}</td>
@@ -187,10 +236,16 @@ export default async function ProjectPage({ params, searchParams }: {
             {!reqs?.length && <tr><td colSpan={4} className="muted">No requirements yet.</td></tr>}
           </tbody>
         </table>
+        {pages > 1 && <nav className="row pager" aria-label="Requirement pages">
+          {pageNo > 1 && <Link className="btn" href={pageHref(pageNo - 1)}>← Previous</Link>}
+          <span className="small muted">Page {pageNo} of {pages}</span>
+          {pageNo < pages && <Link className="btn" href={pageHref(pageNo + 1)}>Next →</Link>}</nav>}
       </section>
 
+      </>}
+      {tab === "plans" && <>
       <section>
-        <h2>3. Plans</h2>
+        <h2>Plans</h2>
         <PlanRequestStatus supabase={supabase} projectId={projectId} />
         <ul className="list">
           {(plans ?? []).map((p) => (
@@ -213,7 +268,7 @@ export default async function ProjectPage({ params, searchParams }: {
       </section>
 
       <section>
-        <h2>4. Runs</h2>
+        <h2>Runs</h2>
         <ul className="list">
           {(runs ?? []).map((r) => (
             <li key={r.id}>
@@ -227,14 +282,10 @@ export default async function ProjectPage({ params, searchParams }: {
         </ul>
       </section>
 
+      </>}
+      {tab === "standards" && <>
       <section>
-        <h2>5. 3D model library</h2>
-        <p className="small">Manufacturer STEP models for this project&apos;s parts, checked against their footprints and verified before layouts
-          use them. <Link href={`/projects/${projectId}/models`}>Open the model library</Link></p>
-      </section>
-
-      <section>
-        <h2>6. Standards and references</h2>
+        <h2>Standards and references</h2>
         <p className="small muted">Which standards apply to this product, and why. Engineers propose; an owner or reviewer confirms.
           The assistant and design tasks cite these. <Link href={`/knowledge?project=${projectId}`}>Search the knowledge base with this project&apos;s sources</Link></p>
         <table className="small" data-testid="project-standards">
@@ -283,8 +334,10 @@ export default async function ProjectPage({ params, searchParams }: {
         {canEdit && <details><summary>Add a project source</summary><SourceForm projectId={projectId} heading="Add a source to this project" /></details>}
       </section>
 
+      </>}
+      {tab === "team" && <>
       <section id="members">
-        <h2>7. People</h2>
+        <h2>People</h2>
         <p className="small muted">{roleCounts.map(([r, n]) => `${n} ${r}${n > 1 ? "s" : ""}`).join(" · ")}. Clients see the workspace only:
           requirements, the checklist, results and checks, and the chat. They approve or return work at approval stops, and never see
           runs, worker logs, costs or the audit trail.</p>
@@ -311,6 +364,7 @@ export default async function ProjectPage({ params, searchParams }: {
           </>
         )}
       </section>
+      </>}
     </main>
   );
 }

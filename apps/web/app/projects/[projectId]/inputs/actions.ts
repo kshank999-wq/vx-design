@@ -1,6 +1,7 @@
 "use server";
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { extractRequirements } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
@@ -11,10 +12,16 @@ import { markExtractionFailed, persistExtraction, prepareExtraction, storeDocume
 import { REFERENCE_KINDS } from "@/lib/plan-inputs";
 
 const base = (projectId: string) => `/projects/${projectId}/inputs`;
+/** The inputs page at the step the form was sent from (the page is one step at a time). */
+async function here(projectId: string): Promise<string> {
+  const ref = (await headers()).get("referer") ?? "";
+  const step = /[?&]step=(\d)/.exec(ref)?.[1];
+  return `${base(projectId)}${step ? `?step=${step}` : ""}`;
+}
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 function go(path: string, notice: string): never {
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
+  revalidatePath(path.split("?")[0]!);
+  redirect(`${path}${path.includes("?") ? "&" : "?"}notice=${encodeURIComponent(notice)}`);
 }
 export interface UploadOutcome { ok: boolean; message: string }
 
@@ -44,7 +51,7 @@ export async function addSpecification(projectId: string, ref: string, name: str
  * the same time; the results are stored one after another so requirement numbers continue across documents.
  */
 export async function extractAll(projectId: string) {
-  const path = base(projectId);
+  const path = await here(projectId);
   const { supabase } = await requireUser();
   let choice;
   try { choice = getModel(); } catch (e) { fail(path, e); }
@@ -68,10 +75,10 @@ export async function extractAll(projectId: string) {
       problems.push(`${p.title}: ${(e as Error).message}`);
     }
   }
-  revalidatePath(path);
+  revalidatePath(base(projectId));
   const msg = `Extracted ${total} requirement(s) from ${done} document(s).${problems.length ? ` Not extracted: ${problems.join(" | ")}` : ""}`;
   if (problems.length && !done) fail(path, msg);
-  redirect(`${path}?notice=${encodeURIComponent(msg)}`);
+  redirect(`${path}${path.includes("?") ? "&" : "?"}notice=${encodeURIComponent(msg)}`);
 }
 
 /** A mock-up, sketch, drawing or prior-work file staged by the browser: checked, stored under references/ and numbered. */
@@ -112,23 +119,23 @@ export async function updateReference(projectId: string, id: string, form: FormD
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("update_project_reference", { p_id: id, p_kind: str(form, "kind"), p_title: str(form, "title"),
     p_note: str(form, "note") || null, p_use_in_plan: form.get("use_in_plan") === "on" });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), "Reference saved.");
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), "Reference saved.");
 }
 
 export async function removeReference(projectId: string, id: string) {
   const { supabase } = await requireUser();
   const { data: path, error } = await supabase.rpc("remove_project_reference", { p_id: id });
-  if (error) fail(base(projectId), error);
+  if (error) fail(await here(projectId), error);
   await supabase.storage.from("project-files").remove([path as string]);
-  go(base(projectId), "Reference removed.");
+  go(await here(projectId), "Reference removed.");
 }
 
 export async function setAuditInPlan(projectId: string, auditId: string, use: boolean) {
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("set_flux_audit_in_plan", { p_audit: auditId, p_use: use });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), use ? "The plan will build on this prior work." : "The plan will not use this prior work.");
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), use ? "The plan will build on this prior work." : "The plan will not use this prior work.");
 }
 
 /** A part already chosen (or a candidate): added, or edited when partId is given. */
@@ -138,24 +145,24 @@ export async function savePart(projectId: string, partId: string | null, form: F
     p_project: projectId, p_id: partId, p_mpn: str(form, "mpn"), p_manufacturer: str(form, "manufacturer") || null, p_role: str(form, "role"),
     p_subsystem: str(form, "subsystem") || "other", p_status: str(form, "status") || "selected", p_note: str(form, "note") || null,
   });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), partId ? "Part saved." : `${str(form, "mpn")} added. Attach its datasheet and 3D model below it.`);
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), partId ? "Part saved." : `${str(form, "mpn")} added. Attach its datasheet and 3D model below it.`);
 }
 
 /** Removes a part; its files stay as project files, no longer attached. */
 export async function removePart(projectId: string, partId: string) {
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("remove_project_part", { p_id: partId });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), "Part removed. Its files are kept under Prior work; remove them there if they are not needed.");
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), "Part removed. Its files are kept under Prior work; remove them there if they are not needed.");
 }
 
 /** Asks a worker to read every earlier design document and list what was already done. */
 export async function requestRegister(projectId: string) {
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("request_prior_work_register", { p_project: projectId });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), "A worker is reading the earlier work. This page updates by itself; the list appears when it is ready.");
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), "A worker is reading the earlier work. This page updates by itself; the list appears when it is ready.");
 }
 
 /** A person's correction to one item of the register: status, a note, or leaving it out. Kept across rebuilds. */
@@ -164,6 +171,6 @@ export async function editRegisterItem(projectId: string, registerId: string, it
   const { error } = await supabase.rpc("edit_prior_work_item", {
     p_register: registerId, p_item: itemId, p_status: str(form, "status") || null, p_note: str(form, "note") || null, p_excluded: form.get("excluded") === "on",
   });
-  if (error) fail(base(projectId), error);
-  go(base(projectId), `${itemId} saved.`);
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), `${itemId} saved.`);
 }

@@ -70,7 +70,7 @@ try {
   assert.equal((await o.rpc("invite_member", { p_project_id: project.id, p_email: client.email, p_role: "client" })).data, "added");
 
   // 2. Upload inspection, then a scanned-clean document.
-  await page.goto(`${BASE}/projects/${project.id}`);
+  await page.goto(`${BASE}/projects/${project.id}?tab=documents`);
   await page.getByLabel("Specification file").setInputFiles(fakePdf);
   await page.getByRole("button", { name: "Upload" }).first().click();
   await page.getByRole("alert").filter({ hasText: /not accepted: this is a program \(executable\), not a document; named \.pdf but the content is executable/ }).waitFor();
@@ -111,7 +111,12 @@ try {
   await page.getByLabel("Message").fill("What is the status?");
   await page.getByRole("button", { name: "Send" }).click();
   await page.locator(".msg-assistant").last().waitFor();
-  const { data: msgs } = await admin.from("project_messages").select("author_kind, signature").eq("project_id", project.id).order("id");
+  // The reply streams in a placeholder first; wait until the question and the answer are stored.
+  let msgs = [];
+  await until("chat stored", async () => {
+    msgs = (await admin.from("project_messages").select("author_kind, signature").eq("project_id", project.id).order("id")).data ?? [];
+    return msgs.length >= 2;
+  });
   assert.deepEqual(msgs.map((m) => m.author_kind), ["user", "assistant"]);
   assert.match(msgs[1].signature, /^[0-9a-f]{64}$/);
   console.log("✓ forged assistant messages refused; the server-signed chat works");

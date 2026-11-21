@@ -5,16 +5,16 @@ import { fail, requireUser } from "@/lib/auth";
 
 const page = (projectId: string, auditId: string) => `/projects/${projectId}/flux/${auditId}`;
 function done(path: string, notice: string): never {
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
+  revalidatePath(path.split("?")[0]!);
+  redirect(`${path}${path.includes("?") ? "&" : "?"}notice=${encodeURIComponent(notice)}`);
 }
 
 export async function createAudit(projectId: string, form: FormData) {
   const fromInputs = form.get("from") === "inputs";
   const { supabase } = await requireUser();
   const { data, error } = await supabase.rpc("create_flux_audit", { p_project_id: projectId, p_title: String(form.get("title") ?? "") });
-  if (error) fail(fromInputs ? `/projects/${projectId}/inputs` : `/projects/${projectId}/flux`, error);
-  if (fromInputs) done(`/projects/${projectId}/inputs`, "Flux import started. Add the exported files below, then run the audit.");
+  if (error) fail(fromInputs ? `/projects/${projectId}/inputs?step=4` : `/projects/${projectId}/flux`, error);
+  if (fromInputs) done(`/projects/${projectId}/inputs?step=4`, "Flux import started. Add the exported files below, then run the audit.");
   done(page(projectId, data as string), "Import created. Upload the Flux export, then run the audit.");
 }
 
@@ -30,7 +30,7 @@ export async function removeFile(projectId: string, auditId: string, fileId: str
 }
 
 export async function runAudit(projectId: string, auditId: string, from?: string) {
-  const path = from === "inputs" ? `/projects/${projectId}/inputs` : page(projectId, auditId);
+  const path = from === "inputs" ? `/projects/${projectId}/inputs?step=4` : page(projectId, auditId);
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("run_flux_audit", { p_audit_id: auditId });
   if (error) fail(path, error);

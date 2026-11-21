@@ -86,7 +86,9 @@ try {
   assert.match(await page.getByTestId("duplicates").innerText(), /1 requirement\(s\) appear in more than one document/);
   await shot(page, "01-specs");
 
-  // 2. References: a mock-up and a prior-design file.
+  // 2. References: a mock-up (step 2) and a prior-design file (step 4).
+  await page.getByRole("link", { name: "Continue: Mock-ups →" }).click();
+  await page.waitForURL(/inputs\?step=2/);
   const up = page.getByTestId("upload-reference");
   await up.getByLabel("Reference kind").selectOption("mockup");
   await up.getByLabel("Reference title").fill("Front view");
@@ -94,16 +96,18 @@ try {
   await up.getByLabel("Reference files").setInputFiles([{ name: "front.png", mimeType: "image/png", buffer: PNG }]);
   await up.getByRole("button", { name: "Add references" }).click();
   await page.getByTestId("upload-reference-status").getByText("front.png: added").waitFor();
+  await page.goto(`${P}/inputs?step=4`);
   const pu = page.getByTestId("upload-prior");
   await pu.getByLabel("Prior-work title").fill("Old slate schematic");
   await pu.getByLabel("Prior-work files").setInputFiles([{ name: "old-slate.pdf", mimeType: "application/pdf", buffer: PDF }]);
   await pu.getByRole("button", { name: "Add prior-work files" }).click();
   await page.getByTestId("upload-prior-status").getByText("old-slate.pdf: added").waitFor();
   await page.reload();
+  assert.match(await page.getByTestId("prior-files").locator("[data-ref='REF-2']").innerText(), /Old slate schematic\s+Prior design/);
+  await page.goto(`${P}/inputs?step=2`);
   const cards = page.getByTestId("references");
   assert.equal(await cards.locator("[data-ref='REF-1'] img").count(), 1, "the mock-up shows as an image");
   assert.equal(await cards.locator("[data-ref='REF-2']").count(), 0, "prior-work files are not shown with the mock-ups");
-  assert.match(await page.getByTestId("prior-files").locator("[data-ref='REF-2']").innerText(), /Old slate schematic\s+Prior design/);
   // A refused file: SVG can carry script.
   await up.getByLabel("Reference files").setInputFiles([{ name: "x.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>") }]);
   await up.getByRole("button", { name: "Add references" }).click();
@@ -111,6 +115,7 @@ try {
   await shot(page, "02-references");
 
   // 2b. A part already chosen, with its files; the same part number cannot be listed twice.
+  await page.goto(`${P}/inputs?step=3`);
   const add = page.getByTestId("add-part");
   await add.getByLabel("Part number").fill("RVT101HVHNWC00-B");
   await add.getByLabel("Manufacturer").fill("Riverdi");
@@ -131,7 +136,7 @@ try {
   const files = await page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']").innerText();
   assert.match(files, /Datasheet\s+rvt101-datasheet\.pdf/);
   assert.match(files, /3D model \(STEP or STL\)\s+rvt101\.step/);
-  assert.equal(await page.getByTestId("prior-files").locator("[data-ref]").count(), 1, "part files stay with the part");
+
   await page.getByTestId("add-part").locator("summary").click();
   await page.getByTestId("add-part").getByLabel("Part number").fill("rvt101hvhnwc00b");
   await page.getByTestId("add-part").getByLabel("What it is for").fill("duplicate");
@@ -139,6 +144,8 @@ try {
   await page.getByText(/already listed/).waitFor();
 
   // 2c. The earlier-work register (a worker builds it; here it is stored as a worker would) is reviewed and corrected.
+  await page.goto(`${P}/inputs?step=4`);
+  assert.equal(await page.getByTestId("prior-files").locator("[data-ref]").count(), 1, "part files stay with the part");
   await page.getByRole("button", { name: "Build the list of earlier work" }).click();
   await page.getByTestId("register-building").waitFor();
   const { data: reg } = await admin.from("prior_work_registers").select("id").eq("project_id", project.id).single();
@@ -165,6 +172,8 @@ try {
   // 3. What the planner reads, and the plan.
   await page.reload();
   assert.match(await page.getByTestId("prior-work").innerText(), /Flux audit #1 VC Smart Slate\s+ready\s+2 parts, 0 blocker\(s\), 1 warning\(s\)\s+yes/);
+  await page.getByRole("link", { name: "Continue: Plan →" }).click();
+  await page.waitForURL(/inputs\?step=5/);
   const ctx = await page.getByTestId("plan-context").locator("pre").textContent();
   assert.match(ctx, /^- \[REF-1\] Front view \(mockup, file front\.png\): 7 inch screen, clapper bar on top, three buttons on the right$/m);
   assert.match(ctx, /^Prior work \[PW-1\] Flux audit #1: VC Smart Slate, revision 2026-11-20/m);
@@ -184,7 +193,7 @@ try {
   await shot(page, "03-plan");
 
   // 4. Leave a reference out; use the mock-up for concepts.
-  await page.goto(`${P}/inputs`);
+  await page.goto(`${P}/inputs?step=4`);
   const r2 = page.getByTestId("prior-files").locator("[data-ref='REF-2']");
   await r2.locator("summary").click();
   await r2.getByLabel("Use REF-2 in the plan").uncheck();
@@ -194,6 +203,8 @@ try {
   await page.getByTestId("toast").waitFor();
   assert.ok(await page.evaluate(() => window.scrollY) > Math.min(before, 300) - 50, "the page stays where it was after a form is sent");
   assert.equal(await page.getByTestId("toast").getAttribute("data-text"), "Reference saved.");
+  assert.equal(await page.getByTestId("input-step").getAttribute("data-step"), "4", "the form returns to the step it was sent from");
+  await page.goto(`${P}/inputs?step=5`);
   assert.doesNotMatch(await page.getByTestId("plan-context").locator("pre").textContent(), /REF-2/);
   await page.goto(`${P}/concepts`);
   await page.getByLabel("Use REF-1 Front view").check();
@@ -206,10 +217,11 @@ try {
   await admin.from("concept_rounds").update({ status: "canceled" }).eq("project_id", project.id);
 
   // 5. A Flux export dropped on the specifications box is pointed to prior work; a Flux import runs from this page.
-  await page.goto(`${P}/inputs`);
+  await page.goto(`${P}/inputs?step=1`);
   await page.getByLabel("Specification files").setInputFiles([{ name: "vc-smart-slate - Flux project data.zip", mimeType: "application/zip", buffer: Buffer.from("PK\x03\x04") }]);
   await page.getByRole("button", { name: "Upload specifications" }).click();
   await page.getByTestId("upload-specification-status").getByText(/this looks like a Flux or CAD export, not a specification\. Add it under 4\. Prior work/).waitFor();
+  await page.goto(`${P}/inputs?step=4`);
   await page.getByTestId("flux-start").getByLabel("Flux import title").fill("Timecode board");
   await page.getByRole("button", { name: "Start a Flux import" }).click();
   await page.getByText("Flux import started.").waitFor();

@@ -76,6 +76,8 @@ try {
   const projectUrl = page.url();
   console.log("✓ project created");
 
+  await page.getByTestId("project-tabs").getByRole("link", { name: /^Documents/ }).click();
+  await page.waitForURL(/tab=documents/);
   await page.getByLabel("Specification file").setInputFiles(SPEC);
   await page.getByRole("button", { name: "Upload" }).click();
   await page.getByText(/Uploaded sample-timecode-board\.md: \d+ sections/).waitFor();
@@ -89,6 +91,8 @@ try {
   console.log("✓ duplicate upload refused");
 
   await page.getByRole("button", { name: "Extract requirements" }).click();
+  await page.getByText(/\d+ requirements · /).first().waitFor();
+  await page.goto(`${projectUrl}?tab=requirements`);
   await page.locator("table.reqs tbody tr").first().waitFor();
   await page.waitForLoadState("networkidle");
   await expectNoError(page);
@@ -109,6 +113,7 @@ try {
   await page.locator("tr.rejected").first().waitFor();
   console.log(`✓ rejected ${rejectedRef}`);
 
+  await page.goto(`${projectUrl}?tab=plans`);
   await page.getByRole("button", { name: "Generate plan from requirements" }).click();
   await page.waitForURL(/\/plans\/[0-9a-f-]{36}/);
   await expectNoError(page);

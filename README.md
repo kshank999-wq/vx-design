@@ -81,6 +81,16 @@ one at a time:
 A readiness ring shows how much of what the planner needs is filled in. A manifest and the project's recent activity
 sit beside the steps.
 
+**Screens, not long pages:**
+- **Project page tabs:** Overview, Documents, Requirements, Plans and runs, Standards and Team (`?tab=`).
+  - **Overview:** summary tiles, the Project inputs button and the grouped sections.
+  - **Requirements:** 50 per page, with search and status and document filters.
+  - **Documents:** the first 8 are shown, with a button for the rest.
+- **Project inputs:** five screens (Specifications, Mock-ups, Parts chosen, Prior work, Plan) with the step list on the
+  left, Back and Continue, and a summary of what the plan builds on (`?step=`). Forms return to the step they were sent
+  from.
+- **Long lists:** the earlier-work register's subsystem groups start closed when there are more than 30 items.
+
 **Look:** the clean light design is the template: a blue-grey background with a faint blueprint grid, white cards,
 navy panel headers in the workspace, and the S0–S8 stage strip on the project page and the workspace. Dark mode follows
 the system until someone picks one with the switch in the header. The logo and favicon come from

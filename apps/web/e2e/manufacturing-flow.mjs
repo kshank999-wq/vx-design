@@ -134,7 +134,7 @@ try {
   await shot(page, "02-molding");
 
   // 4. The planner reads the route.
-  await page.goto(`${P}/inputs`);
+  await page.goto(`${P}/inputs?step=5`);
   const planCtx = await page.getByTestId("plan-context").locator("pre").textContent();
   assert.match(planCtx, /^- Front bezel: prototype ASA \(fdm\) × 3; production Injection molding, PC\/ABS, about 5,000 a year; finish matte black$/m);
   console.log("Manufacturing flow passed: model upload, needs from requirements, ranked suggestions, chosen material, 3D-print export, route in the plan context.");

@@ -74,7 +74,7 @@ try {
   console.log("✓ power task ran and stopped for approval");
 
   // Owner invites the client by email before the client has an account.
-  await page.goto(`${BASE}/projects/${project.id}`);
+  await page.goto(`${BASE}/projects/${project.id}?tab=team`);
   await page.getByLabel("Email to invite").fill(client.email);
   await page.getByLabel("Role").selectOption("client");
   await page.getByRole("button", { name: "Invite" }).click();
