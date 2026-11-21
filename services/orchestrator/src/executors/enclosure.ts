@@ -56,10 +56,12 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
             db.project(task.project_id), db.taskRequirements(task.id), db.upstreamOutputs(task.id), db.reviewNotes(task.id),
             db.upstreamJson(task.id, "design"), db.partRouteLines(task.project_id),
           ]);
+          const draft = await db.enclosureDraft(task.project_id, task.key);
           const circuit = design ? CircuitDesign.safeParse(design.value) : null;
           const input: EnclosureInput = {
             projectContext: `${project.name}${project.description ? `: ${project.description}` : ""}` +
-              (routes.length ? `\n\nManufacturing routes:\n${routes.map((r) => `- ${r}`).join("\n")}` : ""),
+              (routes.length ? `\n\nManufacturing routes:\n${routes.map((r) => `- ${r}`).join("\n")}` : "") +
+              (draft.deg ? `\n\nDraft: ${draft.why}, so the walls need at least ${draft.deg}° of draft (draft_deg).` : ""),
             task: { key: task.key, title: task.title, description: task.description },
             requirements: reqs.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, text: r.text })),
             acceptanceTests: task.acceptance_tests.map((a) => ({ id: a.id, description: a.description, method: a.method })),
@@ -67,7 +69,7 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
             reviewNotes: notes, facts,
             components: circuit?.success ? circuit.data.components.map((c) => ({ ref: c.ref, value: c.value, purpose: c.purpose })) : [],
           };
-          return { input, source: { taskKey: v.taskKey, versionId: v.versionId, storagePath: v.storagePath, offline: !!v.toolConfig?.offline } };
+          return { input, draft, source: { taskKey: v.taskKey, versionId: v.versionId, storagePath: v.storagePath, offline: !!v.toolConfig?.offline } };
         });
         if (!board) {
           return { status: "blocked", reason: "The enclosure needs a committed routed board from an upstream PCB layout task " +
@@ -83,7 +85,8 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
             const builds = new Map<number, { dir: string; result: EnclosureResult }>();
             const r = await generateEnclosure(board.input, ctx.model, async (design, round) => {
               const dir = join(work, `round-${round}`);
-              const result = await buildEnclosure(tools, zip, design, dir);
+              // Molded parts get at least the draft their route needs, whatever the model chose.
+              const result = await buildEnclosure(tools, zip, { ...design, draft_deg: Math.max(design.draft_deg ?? 0, board.draft?.deg ?? 0) }, dir);
               builds.set(round, { dir, result });
               return toEnclosureCheck(result);
             }, async (round, check, usage) => {
@@ -92,6 +95,7 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
                             { round, problems: check.problems.slice(0, 20), warnings: check.warnings.slice(0, 20) }, check.ok ? "info" : "warn");
             });
             const { dir, result } = builds.get(r.rounds)!;
+            r.design.draft_deg = Math.max(r.design.draft_deg ?? 0, board.draft?.deg ?? 0);   // record the draft actually built
             const stash: Partial<Record<FileKey, Stashed>> = {};
             for (const f of FILES) {
               const name = result.files?.[f.key];

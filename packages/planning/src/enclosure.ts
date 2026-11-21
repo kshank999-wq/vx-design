@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
-export const ENCLOSURE_PROMPT_VERSION = "enclosure-v2";
+export const ENCLOSURE_PROMPT_VERSION = "enclosure-v3";
 export const MAX_ENCLOSURE_REPAIRS = 3;
 
 export const EnclosureDesign = z.object({
@@ -19,6 +19,7 @@ export const EnclosureDesign = z.object({
   top_clearance_mm: z.number().describe("Gap above the tallest part inside (parts with a top opening may pass through the lid)"),
   standoff_height_mm: z.number().describe("Floor to the board's underside; must clear through-hole pins and take the fastener"),
   fastening: z.enum(["heat_set_insert", "self_tapping", "tapped"]).describe("How board screws hold in the standoffs"),
+  draft_deg: z.number().describe("Side-wall draft in degrees for parts that will be injection molded (walls flare toward the split; bosses taper); 0 for straight walls"),
   openings: z.array(z.object({
     kind: z.enum(["edge", "top"]).describe("edge: through the nearest wall, for connectors and switches; top: through the lid"),
     ref: z.string(),
@@ -72,7 +73,7 @@ The housing is generated around the board's real outline and every part's 3D mod
 - top openings go through the lid: windows for tall headers or displays, round light holes for LEDs (give a diameter), button holes.
 The lid sits above the tallest part without a top opening plus the top clearance.
 
-Choose the process and material from the requirements (default FDM PETG for a first prototype), a wall at or above the process minimum, standoffs tall enough to clear through-hole pins below the board and to take the fastener, and a fastening the process supports (heat-set inserts or thread-forming screws in prints, tapped holes in aluminium). If the project lists manufacturing routes for the enclosure base or lid, prototype with that process and material (map SLS or MJF nylon to "sls"; a cast or machined plastic prototype is out of scope here: choose the closest print and say so in the assumptions). When the production route is injection molding, keep the walls a uniform thickness and avoid thick solid sections so the printed geometry carries over to the mold; say what will change for molding (draft, ribs, bosses) in the assumptions.
+Choose the process and material from the requirements (default FDM PETG for a first prototype), a wall at or above the process minimum, standoffs tall enough to clear through-hole pins below the board and to take the fastener, and a fastening the process supports (heat-set inserts or thread-forming screws in prints, tapped holes in aluminium). If the project lists manufacturing routes for the enclosure base or lid, prototype with that process and material (map SLS or MJF nylon to "sls"; a cast or machined plastic prototype is out of scope here: choose the closest print and say so in the assumptions). When the production route is injection molding, set draft_deg to at least the draft the project states (the material's minimum, more for textured finishes) so the printed prototype already has the molded part's geometry: the side walls flare toward the split, the bosses taper, and the lid locates with a stepped lip joint, which needs a wall of at least 1.8 mm. Keep the walls a uniform thickness and avoid thick solid sections; say what else will change for molding (ribs, gates) in the assumptions. Otherwise set draft_deg to 0.
 
 Record assumptions (e.g. an enclosure style you chose because none was specified) and open questions.`;
 
@@ -127,7 +128,7 @@ export async function generateEnclosure(
 /** Offline stand-in for the fixture board (LDO+LED): labelled, not derived from your requirements. */
 export const OFFLINE_FIXTURE_ENCLOSURE: EnclosureDesign = {
   process: "fdm", material: "PETG", wall_mm: 2, edge_gap_mm: 0.5, top_clearance_mm: 2, standoff_height_mm: 6,
-  fastening: "heat_set_insert",
+  fastening: "heat_set_insert", draft_deg: 0,
   openings: [
     { kind: "top", ref: "J1", side: null, shape: "rect", size_mm: null, margin_mm: 0.5 },
     { kind: "top", ref: "D1", side: null, shape: "round", size_mm: 2.5, margin_mm: 0.5 },

@@ -1,6 +1,6 @@
 {
   "process": "fdm", "material": "PETG", "wall_mm": 2, "edge_gap_mm": 0.5, "top_clearance_mm": 2, "standoff_height_mm": 6,
-  "fastening": "heat_set_insert",
+  "fastening": "heat_set_insert", "draft_deg": 0,
   "openings": [
     {"kind": "top", "ref": "J1", "side": null, "shape": "rect", "size_mm": null, "margin_mm": 0.5},
     {"kind": "top", "ref": "D1", "side": null, "shape": "round", "size_mm": 2.5, "margin_mm": 0.5}

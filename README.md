@@ -561,6 +561,20 @@ For a part whose production route is injection molding, **Manufacturing routes**
   check, the suggested tool and what to quote: tool, part price at three volumes, DFM report before steel is cut, T1
   samples with a dimensional report, tool ownership), `design-check.csv` and `critical-dimensions.txt`.
 
+**Draft in the generated enclosure.** When the enclosure base or lid has an injection molding route (by the part it
+points at, or named "Enclosure base" / "Enclosure lid"), the enclosure task builds it with draft. The worker sets at
+least the material's minimum plus what the mold finish needs, whatever the model chose, and records it in the design.
+- **Walls:** they flare toward the split, so the base and the lid each release from their mold. The inside is never
+  narrower than the straight cavity, so the fit checks still hold.
+- **Bosses:** they taper toward their open end. The insert holes stay straight.
+- **Lid joint:** the lid locates with the standard molded joint. Its lip is the inner part of the lid wall continued
+  below the split, and the base wall is stepped to take it. An inward lip would trap the core. This joint needs a wall
+  of at least 1.8 mm.
+- **Prints:** printed enclosures keep straight walls and the inward lip, now joined to the lid by a ledge (before, the
+  lip was a separate piece).
+- **Geometry check:** every join is checked for lost or unjoined geometry, and the lid and base must reach their full
+  height.
+
 ## Assembly instructions
 
 **Assembly instructions** (`/projects/<id>/assembly`) are the work instructions for building the finished product

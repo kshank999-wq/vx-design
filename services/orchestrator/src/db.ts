@@ -1,4 +1,4 @@
-import { routeLine } from "@vx/dfm";
+import { moldable, requiredDraft, routeLine } from "@vx/dfm";
 /**
  * The worker's view of the database. Every state change goes through a Postgres function
  * that checks the worker still holds the execution (see supabase/migrations/*_g2_worker.sql).
@@ -265,6 +265,26 @@ export class WorkerDb {
     const { data, error } = await this.client.from("part_routes").select("*").eq("project_id", projectId).order("name");
     if (error) throw new Error(`part routes: ${error.message}`);
     return (data ?? []).map((r) => routeLine(r));
+  }
+
+  /**
+   * The draft an enclosure task's base and lid need when their route is injection molding (the material's minimum plus
+   * the finish's), with the reason; 0 when neither is molded. Routes are matched by the enclosure part they point at,
+   * or by the names "Enclosure base" and "Enclosure lid".
+   */
+  async enclosureDraft(projectId: string, taskKey: string): Promise<{ deg: number; why: string | null }> {
+    const { data, error } = await this.client.from("part_routes").select("name, source_key, production_process, production_material, molding")
+      .eq("project_id", projectId).eq("production_process", "injection_molding");
+    if (error) throw new Error(`part routes: ${error.message}`);
+    let deg = 0, why: string | null = null;
+    for (const r of data ?? []) {
+      const ours = r.source_key === `artifact:${taskKey}/base` || r.source_key === `artifact:${taskKey}/lid` || /^enclosure (base|lid)$/i.test(r.name.trim());
+      if (!ours) continue;
+      const finish = (r.molding as { finish?: string } | null)?.finish;
+      const need = moldable(r.production_material) ? requiredDraft(r.production_material!, finish) : 1;
+      if (need > deg) { deg = need; why = `${r.name} is injection molded${r.production_material ? ` in ${r.production_material}` : ""}${finish ? ` with a ${finish} finish` : ""}`; }
+    }
+    return { deg, why };
   }
 
   async reviewNotes(taskId: string): Promise<string[]> {

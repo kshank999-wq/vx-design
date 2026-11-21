@@ -616,6 +616,15 @@ class EnclosureTests(unittest.TestCase):
         # Material check: walls 2 mm around a 35 x 23 mm cavity (0.5 mm gap) plus floor and top (each 39 x 27 x 2 with rounded corners).
         self.assertLess(r["volume_cm3"]["base"] + r["volume_cm3"]["lid"], 12, "no doubled shell")
 
+    def test_drafted_enclosure_for_molding(self):
+        r = self.build("molded", draft_deg=2)
+        self.assertTrue(r["ok"], r["problems"])
+        self.assertEqual(r["levels_mm"]["draft_deg"], 2)
+        import cadquery as cq
+        lid = cq.importers.importStep(str(Path(self.tmp.name) / "molded" / r["files"]["lid_step"]))
+        self.assertEqual(len(lid.solids().vals()), 1, "the lid is one piece")
+        self.assertAlmostEqual(lid.val().BoundingBox().zmax, r["levels_mm"]["top_outer"], delta=0.01)
+
     def test_lid_grows_over_parts_without_an_opening(self):
         r = self.build("no-window", openings=[{"kind": "top", "ref": "D1", "shape": "round", "size_mm": 2.5}])
         self.assertTrue(r["ok"], r["problems"])

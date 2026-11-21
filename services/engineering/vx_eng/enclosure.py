@@ -62,6 +62,7 @@ FASTENER_HOLES: dict[str, dict[str, tuple[float, float]]] = {
 SIDES = ("left", "right", "front", "back")
 LIP_HEIGHT_MM = 2.0
 SPLIT_ABOVE_BOARD_MM = 2.5
+MIN_MOLDED_LIP_MM = 0.8
 
 
 @dataclass
@@ -84,6 +85,9 @@ class EnclosureSpec:
     standoff_height_mm: float
     fastening: str
     openings: list[Opening] = field(default_factory=list)
+    # Draft on the side walls (degrees) for parts that will be injection molded: walls flare toward the split so the
+    # base and the lid each release from their mold. 0 keeps straight walls (prints, machining).
+    draft_deg: float = 0.0
 
     @staticmethod
     def from_json(d: dict[str, Any]) -> "EnclosureSpec":
@@ -95,6 +99,7 @@ class EnclosureSpec:
             openings=[Opening(kind=str(o["kind"]), ref=str(o["ref"]), side=o.get("side"), shape=str(o.get("shape") or "rect"),
                               size_mm=o.get("size_mm"), margin_mm=float(o.get("margin_mm") if o.get("margin_mm") is not None else 0.5))
                       for o in d.get("openings") or []],
+            draft_deg=min(max(float(d.get("draft_deg") or 0), 0.0), 10.0),
         )
 
 
@@ -176,6 +181,32 @@ def _prism(face, offset: float, z0: float, z1: float):
     return cq.Solid.extrudeLinear(base, cq.Vector(0, 0, z1 - z0))
 
 
+def _taper(face, off0: float, z0: float, off1: float, z1: float):
+    """A solid lofted between the outline offset by off0 at z0 and by off1 at z1 (straight, ruled sides)."""
+    cq = _cq()
+    w0 = face.outerWire().offset2D(off0, "arc")[0].translate(cq.Vector(0, 0, z0))
+    w1 = face.outerWire().offset2D(off1, "arc")[0].translate(cq.Vector(0, 0, z1))
+    try:
+        solid = cq.Solid.makeLoft([w0, w1], True)
+    except Exception:   # noqa: BLE001 - offsets with different edge counts: smooth loft instead
+        solid = cq.Solid.makeLoft([w0, w1], False)
+    if not solid.isValid() or solid.Volume() <= 0:
+        raise kicad.KicadError("the geometry kernel could not build a drafted wall; try a little less draft or a larger edge gap")
+    return solid
+
+
+def _fuse(a, b):
+    """Fuse, then confirm nothing was lost and the result is one piece (OCCT can drop a solid silently)."""
+    out = a.fuse(b).clean()
+    for tol in (1e-4, 1e-3):   # OCCT sometimes returns both solids unjoined; a fuzzy fuse usually merges them
+        if len(out.Solids()) == 1:
+            break
+        out = a.fuse(b, tol=tol).clean()
+    if len(out.Solids()) != 1 or out.Volume() < max(a.Volume(), b.Volume()) - 1e-3:
+        raise kicad.KicadError("the geometry kernel failed to join two parts of the enclosure; adjust the wall or edge gap slightly")
+    return out
+
+
 def _box(x0, x1, y0, y1, z0, z1):
     cq = _cq()
     return cq.Solid.makeBox(x1 - x0, y1 - y0, z1 - z0, cq.Vector(x0, y0, z0))
@@ -203,23 +234,62 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
         iw = face.outerWire().offset2D(inner_off, "arc")[0].translate(cq.Vector(0, 0, z0))
         return cq.Solid.extrudeLinear(cq.Face.makeFromWires(ow, [iw]), cq.Vector(0, 0, z1 - z0))
 
-    outer = _prism(face, g + w, floor_bottom, top_outer)
     cavity = _prism(face, g, floor_top, top_inner)
-    base = _prism(face, g + w, floor_bottom, floor_top).fuse(ring(g + w, g, floor_top, split))
-    lid = ring(g + w, g, split, top_inner).fuse(_prism(face, g + w, top_inner, top_outer))
-
-    # Lid lip: a ring just inside the base wall, below the split plane.
     lip_h = min(LIP_HEIGHT_MM, max(0.0, split - t - 0.3))
-    if lip_h > 0:
-        lip_t = max(proc.min_wall_mm, w / 2)
-        lid = lid.fuse(ring(g - proc.fit_clearance_mm, g - proc.fit_clearance_mm - lip_t, split - lip_h, split))
+    lip_t = max(proc.min_wall_mm, w / 2)
+    if spec.draft_deg > 0:
+        # Drafted walls: the inner offset is widest at the split and narrows by tan(draft) per mm away from it, never
+        # below the edge gap (so the fit checks against the straight cavity stay valid); outer = inner + wall.
+        k = math.tan(math.radians(spec.draft_deg))
+        s_in = g + max(split - floor_top, top_inner - split) * k
+        def inner_at(z: float) -> float: return s_in - abs(z - split) * k
+        outer = _prism(face, s_in + w, floor_bottom, top_outer)            # bounding box for the openings
+        base = _checked_cut(_taper(face, inner_at(floor_bottom) + w, floor_bottom, s_in + w, split),
+                            _taper(face, inner_at(floor_top), floor_top, s_in + k, split + 1))
+        # The lid and its lip in one go: the lid's outer shell plus the lip's outer face, minus one cavity whose wall is
+        # the lid's inside continued down through the lip (fewer booleans: OCCT dropped the top when fusing a separate lip).
+        c = proc.fit_clearance_mm
+        lip_m = (w - c) / 2                       # lip thickness at the split; the base keeps the same behind it
+        if lip_h > 0 and lip_m < MIN_MOLDED_LIP_MM:
+            raise kicad.KicadError(f"a {w} mm wall is too thin for a molded lip joint: use at least {2 * MIN_MOLDED_LIP_MM + c:.1f} mm")
+        shell = _taper(face, s_in + w, split, inner_at(top_outer) + w, top_outer)
+        if lip_h > 0:
+            # Overlaps the still-solid shell a little (touching faces can stay two solids).
+            shell = _fuse(shell, _taper(face, s_in + lip_m - lip_h * k, split - lip_h, s_in + lip_m + 0.3 * k, split + 0.3))
+        lid = _checked_cut(shell, _taper(face, s_in + (lip_h + 1) * k, split - lip_h - 1, inner_at(top_inner), top_inner))
+        lip_out = 0.0   # molded parts use the stepped joint below
+    else:
+        outer = _prism(face, g + w, floor_bottom, top_outer)
+        base = _prism(face, g + w, floor_bottom, floor_top).fuse(ring(g + w, g, floor_top, split))
+        lid = ring(g + w, g, split, top_inner).fuse(_prism(face, g + w, top_inner, top_outer))
+        lip_out = g - proc.fit_clearance_mm
+
+    # Lid lip. Printed (no draft): a ring just inside the base wall below the split, joined to the lid wall by a ledge
+    # of the lip's thickness just above the split. Molded (draft): the standard molded joint, because an inward lip
+    # traps the core: the lip is the inner part of the lid wall continued below the split (flush with the lid's inside,
+    # thinning slightly downward), and the base wall is stepped at the top to take it.
+    if lip_h > 0 and spec.draft_deg > 0:
+        # The base wall is stepped at the top to take the lid's lip.
+        base = _checked_cut(base, _taper(face, s_in + lip_m + c - lip_h * k, split - lip_h, s_in + lip_m + c + k, split + 1))
+        lip_t = lip_m
+    elif lip_h > 0:
+        up = min(lip_t, top_inner - split)     # the ledge stops at the lid's top (OCCT drops overlapping slabs)
+        lip = ring(lip_out, lip_out - lip_t, split - lip_h, split + up)
+        ledge = ring(g + w / 2, lip_out - lip_t / 2, split, split + up)
+        lid = _fuse(lid, _fuse(lip, ledge))
+    if lip_h > 0 and len(lid.Solids()) != 1:
+        raise kicad.KicadError("the lid's lip did not join the lid; adjust the wall or edge gap")
 
     # Standoffs with fastener holes under the mounting holes.
     hole_d = {}
     for h in facts["holes"]:
         d, _depth = FASTENER_HOLES.get(spec.fastening, FASTENER_HOLES["heat_set_insert"]).get(h["size"], (3.2, 5.0))
         od = d + 2 * proc.min_boss_wall_mm + 0.4
-        boss = cq.Solid.makeCylinder(od / 2, spec.standoff_height_mm, cq.Vector(h["x"], h["y"], floor_top))
+        if spec.draft_deg > 0:   # narrows toward the open end so the core releases it
+            top_r = max(od / 2 - spec.standoff_height_mm * math.tan(math.radians(spec.draft_deg)), d / 2 + proc.min_boss_wall_mm)
+            boss = cq.Solid.makeCone(od / 2, top_r, spec.standoff_height_mm, cq.Vector(h["x"], h["y"], floor_top))
+        else:
+            boss = cq.Solid.makeCylinder(od / 2, spec.standoff_height_mm, cq.Vector(h["x"], h["y"], floor_top))
         hole = cq.Solid.makeCylinder(d / 2, spec.standoff_height_mm + 0.01, cq.Vector(h["x"], h["y"], floor_top))
         base = base.fuse(boss).cut(hole)
         hole_d[h["ref"]] = {"hole_mm": d, "boss_od_mm": _r(od)}
@@ -264,11 +334,14 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
     # Sanity check on the geometry kernel: base and lid stay on their side of the split, and the walls,
     # floor and top add up to the outer prism minus the cavity (before bosses, lip and openings).
     bz, lz = base.BoundingBox(), lid.BoundingBox()
+    if abs(lz.zmax - top_outer) > 0.05 or abs(bz.zmin - floor_bottom) > 0.05:
+        raise kicad.KicadError(f"enclosure geometry is wrong: the lid reaches {lz.zmax:.2f} mm (top {top_outer:.2f}) and the base "
+                               f"{bz.zmin:.2f} mm (floor {floor_bottom:.2f}); part of it was lost")
     if bz.zmax > split + 0.01 or lz.zmin < split - lip_h - 0.01:
         raise kicad.KicadError(f"enclosure geometry is wrong: base reaches {bz.zmax:.2f} mm and lid {lz.zmin:.2f} mm around the {split:.2f} mm split")
     return {"base": base, "lid": lid, "cavity": cavity, "outer_bb": ob,
             "levels": {"floor_bottom": _r(floor_bottom), "floor_top": _r(floor_top), "board_top": t, "split": _r(split),
-                       "lid_inner": _r(top_inner), "top_outer": _r(top_outer), "lip_height": _r(lip_h)},
+                       "lid_inner": _r(top_inner), "top_outer": _r(top_outer), "lip_height": _r(lip_h), "draft_deg": spec.draft_deg},
             "holes": hole_d, "openings": opening_facts}
 
 
