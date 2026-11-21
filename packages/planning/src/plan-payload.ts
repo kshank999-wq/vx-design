@@ -8,6 +8,8 @@ export interface PlanRequestPayload {
   inputs: { id: string; kind: string; label: string; ref?: string }[];
   capabilities: { toolName: string; operation: string; status: string }[];
   supervision_mode: string;
+  /** Earlier work (PR-n) every plan must address; absent in requests made before the register existed. */
+  must_address?: { id: string; label: string }[];
 }
 
 /** A generated plan as public.create_plan_version takes it (the same shape whether the web app or a worker made it). */

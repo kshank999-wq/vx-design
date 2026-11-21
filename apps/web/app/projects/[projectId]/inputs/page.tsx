@@ -8,14 +8,18 @@ import { PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { crossDocumentDuplicates } from "@/lib/documents";
-import { IMAGE_TYPES, loadPlanInputs, refCode, REFERENCE_KINDS } from "@/lib/plan-inputs";
+import { SUBSYSTEMS, subsystemLabel, type RegisterItem } from "@vx/planning";
+import { IMAGE_TYPES, ITEM_STATUS_LABEL, loadPlanInputs, PART_STATUS, refCode, REFERENCE_KINDS, VISUAL_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
-import { extractAll, removeReference, setAuditInPlan, updateReference } from "./actions";
+import { editRegisterItem, extractAll, removePart, removeReference, requestRegister, savePart, setAuditInPlan, updateReference } from "./actions";
 import { createAudit, runAudit } from "../flux/actions";
 
 export const maxDuration = 300;
 
 const kindLabel = (k: string) => REFERENCE_KINDS.find(([x]) => x === k)?.[1] ?? k;
+const partStatusLabel = (k: string) => PART_STATUS.find(([x]) => x === k)?.[1] ?? k;
+const NOT_VISUAL = ["prior_design", "datasheet", "model_3d"];
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Everything a plan is built from, in one place, and the plan built from it. */
 export default async function InputsPage({ params, searchParams }: {
@@ -25,7 +29,7 @@ export default async function InputsPage({ params, searchParams }: {
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
   const [{ data: project }, { data: me }, { data: docs }, { data: reqs }, { data: refs }, { data: audits }, { data: intake }, { data: freeze },
-         { count: standards }, { count: sources }, { data: plans }] = await Promise.all([
+         { count: standards }, { count: sources }, { data: plans }, { data: parts }, { data: registers }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("documents").select("id, title, filename, extraction_status, extraction_report").eq("project_id", projectId).order("created_at"),
@@ -37,6 +41,9 @@ export default async function InputsPage({ params, searchParams }: {
     supabase.from("project_standards").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "confirmed"),
     supabase.from("sources").select("id", { count: "exact", head: true }).eq("project_id", projectId),
     supabase.from("plans").select("id, version, status, inputs, created_at").eq("project_id", projectId).order("version", { ascending: false }).limit(3),
+    supabase.from("project_parts").select("*").eq("project_id", projectId).order("created_at"),
+    supabase.from("prior_work_registers").select("id, status, items, sources, edits, progress, error, model, created_at, completed_at")
+      .eq("project_id", projectId).order("created_at", { ascending: false }).limit(5),
   ]);
   if (!project) notFound();
   if (me?.role === "client") redirect(`/projects/${projectId}/workspace`);
@@ -52,14 +59,59 @@ export default async function InputsPage({ params, searchParams }: {
   const { data: files } = (refs ?? []).length ? await supabase.storage.from("project-files").createSignedUrls((refs ?? []).map((r) => r.storage_path), 3600, { download: true }) : { data: [] };
   const dl = new Map<string, string>((files ?? []).filter((s) => s.path && s.signedUrl).map((s) => [s.path!, s.signedUrl!]));
   const loaded = await loadPlanInputs(supabase, projectId);
+  const visual = (refs ?? []).filter((r) => !r.part_id && !NOT_VISUAL.includes(r.kind));
+  const priorFiles = (refs ?? []).filter((r) => !r.part_id && NOT_VISUAL.includes(r.kind));
+  const filesOf = (partId: string) => (refs ?? []).filter((r) => r.part_id === partId);
+  const building = (registers ?? []).find((r) => r.status === "queued" || r.status === "running");
+  const lastFailed = (registers ?? [])[0]?.status === "failed" ? (registers ?? [])[0] : null;
+  const ready = (registers ?? []).find((r) => r.status === "ready");
+  const regItems = (ready?.items ?? []) as RegisterItem[];
+  const regEdits = (ready?.edits ?? {}) as Record<string, { status?: string; note?: string; excluded?: boolean }>;
+  const regSources = (ready?.sources ?? []) as { file: string; origin: string; chars: number; items: number; note?: string }[];
+  const lastPlanAt = plans?.[0]?.created_at;
+  const registerNewer = ready?.completed_at && (!lastPlanAt || new Date(ready.completed_at) > new Date(lastPlanAt));
+  const partsChangedSince = ready?.completed_at && (parts ?? []).some((p) => new Date(p.updated_at) > new Date(ready.completed_at!));
+
+  const refCard = (r: NonNullable<typeof refs>[number]) => (
+    <div key={r.id} className="card small" data-ref={refCode(r.ref_no)}>
+      {url.get(r.storage_path) ? <a href={url.get(r.storage_path)} target="_blank" rel="noreferrer"><img className="concept-thumb" src={url.get(r.storage_path)} alt={r.title} /></a>
+        : <p className="muted">{r.filename}</p>}
+      <p><strong>{refCode(r.ref_no)}</strong> {r.title} <span className="pill">{kindLabel(r.kind)}</span>{!r.use_in_plan && <span className="pill">not in the plan</span>}</p>
+      {r.note && <p>{r.note}</p>}
+      <p className="muted">{r.filename}{dl.get(r.storage_path) && <> · <a href={dl.get(r.storage_path)}>download</a></>}</p>
+      {canEdit && (
+        <details><summary>Edit</summary>
+          <form action={updateReference.bind(null, projectId, r.id)} className="stack">
+            <label>Title<input name="title" defaultValue={r.title} required aria-label={`Title ${refCode(r.ref_no)}`} /></label>
+            <label>Kind<select name="kind" defaultValue={r.kind} aria-label={`Kind ${refCode(r.ref_no)}`}>{REFERENCE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+            <label>Note<textarea name="note" rows={3} defaultValue={r.note ?? ""} aria-label={`Note ${refCode(r.ref_no)}`} /></label>
+            <label className="inline"><input type="checkbox" name="use_in_plan" defaultChecked={r.use_in_plan} aria-label={`Use ${refCode(r.ref_no)} in the plan`} /> Use in the plan</label>
+            <div className="row"><SubmitButton variant="secondary" pendingText="…">Save</SubmitButton></div>
+          </form>
+          <form action={removeReference.bind(null, projectId, r.id)}><SubmitButton variant="secondary" pendingText="…">Remove</SubmitButton></form>
+        </details>
+      )}
+    </div>
+  );
+  const partFields = (p?: NonNullable<typeof parts>[number]) => {
+    const tag = p ? ` ${p.mpn}` : "";
+    return <div className="grid2">
+      <label>Part number<input name="mpn" required defaultValue={p?.mpn ?? ""} aria-label={`Part number${tag}`} placeholder="RVT101HVHNWC00-B" /></label>
+      <label>Manufacturer<input name="manufacturer" defaultValue={p?.manufacturer ?? ""} aria-label={`Manufacturer${tag}`} placeholder="Riverdi" /></label>
+      <label className="span2">What it is for<input name="role" required defaultValue={p?.role ?? ""} aria-label={`What it is for${tag}`} placeholder="10.1-inch front touchscreen" /></label>
+      <label>Subsystem<select name="subsystem" defaultValue={p?.subsystem ?? "other"} aria-label={`Subsystem${tag}`}>{SUBSYSTEMS.map((x) => <option key={x} value={x}>{cap(subsystemLabel(x))}</option>)}</select></label>
+      <label>How far it got<select name="status" defaultValue={p?.status ?? "selected"} aria-label={`Status${tag}`}>{PART_STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+      <label className="span2">Note (why it was chosen, samples, problems)<textarea name="note" rows={2} defaultValue={p?.note ?? ""} aria-label={`Part note${tag}`} /></label>
+    </div>;
+  };
 
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
       <div className="row spread"><h1>Project inputs</h1>
-        {((audits ?? []).some((a) => a.status === "queued" || a.status === "running") || (docs ?? []).some((d) => d.extraction_status === "running")) && <AutoRefresh intervalMs={3000} />}</div>
-      <p className="muted">Everything the plan is built from: the specifications, mock-ups and references, and work already done in other tools.
-        The plan cites these by their codes (REF-1, PW-1) and says for each task whether it reuses earlier work, adapts it or starts fresh,
+        {((audits ?? []).some((a) => a.status === "queued" || a.status === "running") || (docs ?? []).some((d) => d.extraction_status === "running")) && !building && <AutoRefresh intervalMs={3000} />}</div>
+      <p className="muted">Everything the plan is built from: the specifications, mock-ups and references, parts already chosen, and work already done.
+        The plan cites these by their codes (REF-1, PW-1, PR-1) and says for each task whether it reuses earlier work, adapts it, replaces it or starts fresh,
         so nothing that exists is done again. Imported work is never treated as verified: the plan includes the checks that re-establish it.</p>
       <Banner error={error} notice={notice} />
 
@@ -98,35 +150,63 @@ export default async function InputsPage({ params, searchParams }: {
 
       <section>
         <h2>2. Mock-ups and references</h2>
-        <p className="small muted">Sketches, renders, photos of a prototype, drawings, datasheets, and files from other tools or another engineer (a KiCad
-          project, a BOM spreadsheet, a schematic PDF: choose “Prior design”). Say in the note what each one shows and what to keep. Images can also be
-          given to a concept round as references.</p>
-        <div className="ref-grid" data-testid="references">{(refs ?? []).map((r) => (
-          <div key={r.id} className="card small" data-ref={refCode(r.ref_no)}>
-            {url.get(r.storage_path) ? <a href={url.get(r.storage_path)} target="_blank" rel="noreferrer"><img className="concept-thumb" src={url.get(r.storage_path)} alt={r.title} /></a>
-              : <p className="muted">{r.filename}</p>}
-            <p><strong>{refCode(r.ref_no)}</strong> {r.title} <span className="pill">{kindLabel(r.kind)}</span>{!r.use_in_plan && <span className="pill">not in the plan</span>}</p>
-            {r.note && <p>{r.note}</p>}
-            <p className="muted">{r.filename}{dl.get(r.storage_path) && <> · <a href={dl.get(r.storage_path)}>download</a></>}</p>
-            {canEdit && (
-              <details><summary>Edit</summary>
-                <form action={updateReference.bind(null, projectId, r.id)} className="stack">
-                  <label>Title<input name="title" defaultValue={r.title} required aria-label={`Title ${refCode(r.ref_no)}`} /></label>
-                  <label>Kind<select name="kind" defaultValue={r.kind} aria-label={`Kind ${refCode(r.ref_no)}`}>{REFERENCE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-                  <label>Note<textarea name="note" rows={3} defaultValue={r.note ?? ""} aria-label={`Note ${refCode(r.ref_no)}`} /></label>
-                  <label className="inline"><input type="checkbox" name="use_in_plan" defaultChecked={r.use_in_plan} aria-label={`Use ${refCode(r.ref_no)} in the plan`} /> Use in the plan</label>
-                  <div className="row"><SubmitButton variant="secondary" pendingText="…">Save</SubmitButton></div>
-                </form>
-                <form action={removeReference.bind(null, projectId, r.id)}><SubmitButton variant="secondary" pendingText="…">Remove</SubmitButton></form>
-              </details>
-            )}
-          </div>
-        ))}{!refs?.length && <p className="muted">None yet.</p>}</div>
-        {canEdit && <InputsUpload projectId={projectId} mode="reference" kinds={REFERENCE_KINDS} />}
+        <p className="small muted">How the product should look: sketches, renders, photos of a prototype or a product you like, dimensioned drawings. Say in the
+          note what each one shows and what to keep. Images can also be given to a concept round. Part datasheets and 3D models go under 3, files from
+          other tools or engineers under 4.</p>
+        <div className="ref-grid" data-testid="references">{visual.map(refCard)}{!visual.length && <p className="muted">None yet.</p>}</div>
+        {canEdit && <InputsUpload projectId={projectId} mode="reference" kinds={VISUAL_KINDS} />}
       </section>
 
       <section>
-        <h2>3. Prior work</h2>
+        <h2>3. Parts already chosen</h2>
+        <p className="small muted">Parts you or another engineer have already picked: the display, the compute module, the timecode clock, connectors. Say how
+          far each got (selected, in the schematic, laid out, tested) and attach its datasheet, 3D model (STEP) and drawings. The plan must continue,
+          adapt or replace each one, and give its reasons, concerns and alternatives when it replaces one.</p>
+        {SUBSYSTEMS.filter((sub) => (parts ?? []).some((p) => p.subsystem === sub)).map((sub) => (
+          <div key={sub} data-testid={`parts-${sub}`}>
+            <h3 className="small">{cap(subsystemLabel(sub))}</h3>
+            <table className="small">
+              <thead><tr><th>Part</th><th>What it is for</th><th>Status</th><th>Files</th></tr></thead>
+              <tbody>{(parts ?? []).filter((p) => p.subsystem === sub).map((p) => (
+                <tr key={p.id} data-part={p.mpn}>
+                  <td><strong className="mono">{p.mpn}</strong>{p.manufacturer && <div className="muted">{p.manufacturer}</div>}</td>
+                  <td>{p.role}{p.note && <div className="muted">{p.note}</div>}</td>
+                  <td><span className={`pill pill-${p.status === "rejected" ? "rejected" : p.status === "candidate" ? "draft" : "complete"}`}>{partStatusLabel(p.status)}</span></td>
+                  <td>
+                    <ul className="plain">{filesOf(p.id).map((f) => <li key={f.id}><span className="pill">{kindLabel(f.kind)}</span>{" "}
+                      {dl.get(f.storage_path) ? <a href={dl.get(f.storage_path)}>{f.filename}</a> : f.filename}</li>)}
+                      {!filesOf(p.id).length && <li className="muted">no files yet</li>}</ul>
+                    {canEdit && (
+                      <details><summary>Attach files or edit</summary>
+                        <InputsUpload projectId={projectId} mode="part" partId={p.id} partLabel={p.mpn} />
+                        <form action={savePart.bind(null, projectId, p.id)} className="stack">
+                          {partFields(p)}
+                          <div className="row"><SubmitButton variant="secondary" pendingText="…">Save part</SubmitButton></div>
+                        </form>
+                        <form action={removePart.bind(null, projectId, p.id)}><SubmitButton variant="secondary" pendingText="…">{`Remove ${p.mpn}`}</SubmitButton></form>
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ))}
+        {!parts?.length && <p className="muted" data-testid="parts-none">No parts recorded yet.</p>}
+        {canEdit && (
+          <details className="card" open={!parts?.length} data-testid="add-part">
+            <summary>Add a part</summary>
+            <form action={savePart.bind(null, projectId, null)} className="stack">
+              {partFields()}
+              <div className="row"><SubmitButton pendingText="Adding…">Add part</SubmitButton>
+                <span className="small muted">Then attach its datasheet and STEP model from its row.</span></div>
+            </form>
+          </details>
+        )}
+      </section>
+
+      <section>
+        <h2>4. Prior work</h2>
         <p className="small muted">Designs already started elsewhere. Add a Flux project's exported files here (or on the <Link href={`/projects/${projectId}/flux`}>Flux import</Link> page)
           and run the audit: its parts, board, design notes, earlier decisions and open problems become prior work the plan builds on.</p>
         <table className="small" data-testid="prior-work">
@@ -171,10 +251,84 @@ export default async function InputsPage({ params, searchParams }: {
             </div>
           );
         })()}
+
+        <h3>Files from other tools or engineers</h3>
+        <p className="small muted">A KiCad or Altium project, a schematic or layout PDF, a BOM spreadsheet, design notes, a power budget, test reports. Say where
+          each came from and how far it got.</p>
+        <div className="ref-grid" data-testid="prior-files">{priorFiles.map(refCard)}{!priorFiles.length && <p className="muted">None yet.</p>}</div>
+        {canEdit && <InputsUpload projectId={projectId} mode="prior" />}
+
+        <div className="card stack" data-testid="register">
+          <h3>What was already done</h3>
+          <p className="small muted">A worker reads every earlier design document in full (the documents inside the Flux imports used for the plan, the files
+            above and the parts' datasheets) and lists each part and design decision with how far it got, quoting the document it came from. Correct
+            anything it got wrong: your corrections are kept when the list is rebuilt. The plan must say for each selected, designed, laid-out or verified
+            item whether it continues with it, adapts it or replaces it.</p>
+          {building ? (
+            <p className="banner banner-notice" data-testid="register-building" data-status={building.status}>
+              {building.status === "queued" ? "Waiting for a worker…" : `Reading the earlier work: ${building.progress ?? "starting"}.`} This page updates by itself.
+              <AutoRefresh intervalMs={5000} /></p>
+          ) : canEdit && (
+            <form action={requestRegister.bind(null, projectId)} className="row">
+              <SubmitButton variant={ready ? "secondary" : "primary"} pendingText="Requesting…">{ready ? "Rebuild the list" : "Build the list of earlier work"}</SubmitButton>
+              <span className="small muted">Takes 5 to 20 minutes depending on how many documents there are. Claude reads each document once; the tokens are added to
+                the project&apos;s costs. Rebuild after adding parts or files.</span>
+            </form>
+          )}
+          {lastFailed && !building && <p className="error-text small" data-testid="register-failed">The last build failed: {lastFailed.error}</p>}
+          {ready && <>
+            <p className="small" data-testid="register-summary">
+              {regItems.length} item(s) from {regSources.filter((x) => x.chars > 0).length} document(s), built {new Date(ready.completed_at!).toLocaleString()}
+              {" · "}{loaded.mustAddress.length} the plan must address
+              {Object.values(regEdits).some((e) => e.excluded) && <> · {Object.values(regEdits).filter((e) => e.excluded).length} left out</>}
+              {partsChangedSince && <span className="warn-text"> · parts changed since: rebuild to include them</span>}
+              {registerNewer && plans?.length ? <span className="warn-text"> · newer than the latest plan: generate the plan again to use it</span> : null}</p>
+            {SUBSYSTEMS.filter((sub) => regItems.some((i) => i.subsystem === sub)).map((sub) => (
+              <details key={sub} className="small" open data-testid={`register-${sub}`}>
+                <summary><strong>{cap(subsystemLabel(sub))}</strong> ({regItems.filter((i) => i.subsystem === sub).length})</summary>
+                <table className="small">
+                  <thead><tr><th>Item</th><th>Status</th><th>What</th><th>From</th></tr></thead>
+                  <tbody>{regItems.filter((i) => i.subsystem === sub).map((i) => {
+                    const e = regEdits[i.id] ?? {};
+                    const st = e.status ?? i.status;
+                    return <tr key={i.id} data-item={i.id} data-status={st} className={e.excluded ? "muted" : ""}>
+                      <td className="mono">{i.id}</td>
+                      <td><span className={`pill pill-${st === "rejected" ? "rejected" : st === "open" ? "open" : st === "considered" ? "draft" : "complete"}`}>{ITEM_STATUS_LABEL[st] ?? st}</span>
+                        {e.status && <div className="muted">corrected</div>}{e.excluded && <div>left out</div>}</td>
+                      <td><strong>{i.mpn ? `${i.mpn} ` : ""}{i.title}</strong>{i.manufacturer && <span className="muted"> ({i.manufacturer})</span>}
+                        <div>{i.detail}</div>
+                        {i.issues.length > 0 && <div className="warn-text">Issues: {i.issues.join("; ")}</div>}
+                        {e.note && <div><strong>Your note:</strong> {e.note}</div>}
+                        {canEdit && (
+                          <details><summary>Correct</summary>
+                            <form action={editRegisterItem.bind(null, projectId, ready.id, i.id)} className="stack">
+                              <label>Status<select name="status" defaultValue={e.status ?? ""} aria-label={`Status ${i.id}`}>
+                                <option value="">{`As found (${ITEM_STATUS_LABEL[i.status] ?? i.status})`}</option>
+                                {Object.entries(ITEM_STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+                              <label>Note for the plan<textarea name="note" rows={2} defaultValue={e.note ?? ""} aria-label={`Note ${i.id}`} /></label>
+                              <label className="inline"><input type="checkbox" name="excluded" defaultChecked={!!e.excluded} aria-label={`Leave out ${i.id}`} /> Leave out (wrong or irrelevant)</label>
+                              <div className="row"><SubmitButton variant="secondary" pendingText="…">{`Save ${i.id}`}</SubmitButton></div>
+                            </form>
+                          </details>
+                        )}</td>
+                      <td>{i.sources.slice(0, 4).map((x, k) => <div key={k} title={x.quote}>{x.file}{x.origin !== "owner" && <span className="muted"> ({x.origin})</span>}</div>)}
+                        {i.sources.length > 4 && <div className="muted">and {i.sources.length - 4} more</div>}</td>
+                    </tr>;
+                  })}</tbody>
+                </table>
+              </details>
+            ))}
+            {regSources.length > 0 && (
+              <details className="small" data-testid="register-sources"><summary>Documents read ({regSources.length})</summary>
+                <ul>{regSources.map((x, k) => <li key={k}>{x.file} <span className="muted">({x.origin})</span>: {x.note ?? `${x.items} item(s)`}</li>)}</ul>
+              </details>
+            )}
+          </>}
+        </div>
       </section>
 
       <section>
-        <h2>4. Other inputs</h2>
+        <h2>5. Other inputs</h2>
         <ul className="small" data-testid="other-inputs">
           <li>Intake: {intake?.intended_use || intake?.quantity || intake?.max_dimensions ? "filled in" : "not filled in"} · <Link href={`/projects/${projectId}/wizard`}>requirement wizard</Link> · <Link href={`/projects/${projectId}/risks`}>intake and risks</Link></li>
           <li>Design freeze: {freeze ? `frozen ${new Date(freeze.frozen_at).toLocaleDateString()}` : "none yet"} · <Link href={`/projects/${projectId}/concepts`}>concepts</Link></li>
@@ -183,9 +337,9 @@ export default async function InputsPage({ params, searchParams }: {
       </section>
 
       <section className="card">
-        <h2>5. The plan</h2>
+        <h2>6. The plan</h2>
         <PlanRequestStatus supabase={supabase} projectId={projectId} />
-        <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}.</p>
+        <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.length} of which the plan must address` : ""}.</p>
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
         {canEdit && (
           <form action={createPlan.bind(null, projectId, "inputs")} className="row">

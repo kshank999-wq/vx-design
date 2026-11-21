@@ -49,7 +49,9 @@ export default async function PlanPage({ params, searchParams }: {
   const canRun = plan.status === "approved" && !activeRun && (role === "owner" || role === "engineer");
   const riskInPlan = new Set((tasks ?? []).map((t) => t.risk_level));
   const inputs = (plan.inputs ?? []) as { id: string; kind: string; label: string }[];
-  const reuses = (tasks ?? []).filter((t) => (t.basis as { mode?: string } | null)?.mode && (t.basis as { mode: string }).mode !== "new").length;
+  const modeOf = (t: { basis: unknown }) => (t.basis as { mode?: string } | null)?.mode;
+  const reuses = (tasks ?? []).filter((t) => modeOf(t) === "reuse" || modeOf(t) === "adapt").length;
+  const replaces = (tasks ?? []).filter((t) => modeOf(t) === "replace").length;
 
   return (
     <main>
@@ -67,8 +69,9 @@ export default async function PlanPage({ params, searchParams }: {
         {plan.revised_from_id && <> · revised from an earlier version</>}
       </p>
       {inputs.length > 0 && (
-        <p className="small" data-testid="built-from">Built on {inputs.map((x) => <span key={x.id}><strong>{x.id}</strong> {x.label}; </span>)}
-          {reuses} task(s) reuse or adapt earlier work. <Link href={`/projects/${projectId}/inputs`}>Project inputs</Link></p>
+        <p className="small" data-testid="built-from">Built on {inputs.filter((x) => x.kind !== "register_item").map((x) => <span key={x.id}><strong>{x.id}</strong> {x.label}; </span>)}
+          {inputs.some((x) => x.kind === "register_item") && <>the earlier-work register ({inputs.filter((x) => x.kind === "register_item").length} item(s), PR-1 onwards); </>}
+          {reuses} task(s) reuse or adapt earlier work{replaces ? `, ${replaces} replace it` : ""}. <Link href={`/projects/${projectId}/inputs`}>Project inputs</Link></p>
       )}
 
       <div className="card row spread">
@@ -168,12 +171,18 @@ export default async function PlanPage({ params, searchParams }: {
                 </div>
                 {t.description && <p>{t.description}</p>}
                 {(() => {
-                  const b = t.basis as { mode: string; sources: string[]; reason: string } | null;
+                  const b = t.basis as { mode: string; sources: string[]; reason: string; concerns?: string[]; alternatives?: string[] } | null;
                   if (!b) return null;
-                  const label = b.mode === "reuse" ? "reuses" : b.mode === "adapt" ? "adapts" : "starts fresh";
-                  return <p className="small" data-testid="basis" data-mode={b.mode}><span className={`pill pill-${b.mode === "new" ? "draft" : "complete"}`}>{label}</span>
-                    {b.sources.length > 0 && <> {b.sources.map((x) => { const inp = inputs.find((i) => i.id === x); return <strong key={x} title={inp?.label}>{x}</strong>; })
-                      .flatMap((el, k) => (k ? [", ", el] : [el]))}</>} {b.reason}</p>;
+                  const label = b.mode === "reuse" ? "reuses" : b.mode === "adapt" ? "adapts" : b.mode === "replace" ? "replaces" : "starts fresh";
+                  const pill = b.mode === "new" ? "draft" : b.mode === "replace" ? "replace" : "complete";
+                  return <div className="small" data-testid="basis" data-mode={b.mode}>
+                    <p><span className={`pill pill-${pill}`}>{label}</span>
+                      {b.sources.length > 0 && <> {b.sources.map((x) => { const inp = inputs.find((i) => i.id === x);
+                        return <span key={x}><strong title={inp?.label}>{x}</strong>{inp?.kind === "register_item" && <span className="muted"> {inp.label}</span>}</span>; })
+                        .flatMap((el, k) => (k ? [", ", el] : [el]))}</>} {b.reason}</p>
+                    {!!b.concerns?.length && <p data-testid="basis-concerns"><strong>Concerns:</strong> {b.concerns.join("; ")}</p>}
+                    {!!b.alternatives?.length && <p data-testid="basis-alternatives"><strong>Alternatives:</strong> {b.alternatives.join("; ")}</p>}
+                  </div>;
                 })()}
                 <dl className="facts small">
                   <dt>After</dt><dd>{deps.length ? deps.join(", ") : <span className="muted">start</span>}</dd>

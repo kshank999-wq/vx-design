@@ -1,7 +1,8 @@
 // End-to-end test of project inputs.
 //  - Two specifications uploaded at once and extracted together; a requirement that both state is flagged.
-//  - A mock-up (image) and a prior-design file added as numbered references; a Flux audit as prior work.
-//  - The plan is generated from all of it: it cites REF-1 and PW-1, and tasks say whether they adapt earlier work.
+//  - A mock-up (image) as a reference and a prior-design file under prior work; a Flux audit as prior work.
+//  - A part already chosen, with its datasheet and STEP model attached; the earlier-work register reviewed and corrected.
+//  - The plan is generated from all of it: it cites REF-1, PW-1 and PR-1, and tasks say whether they adapt earlier work.
 //  - A reference left out of the plan disappears from what the planner reads; a concept round takes the mock-up.
 //
 // Needs the app running (VX_LLM=offline) and the local Supabase stack (./scripts/test-e2e-inputs.sh).
@@ -93,21 +94,73 @@ try {
   await up.getByLabel("Reference files").setInputFiles([{ name: "front.png", mimeType: "image/png", buffer: PNG }]);
   await up.getByRole("button", { name: "Add references" }).click();
   await page.getByTestId("upload-reference-status").getByText("front.png: added").waitFor();
-  await up.getByLabel("Reference kind").selectOption("prior_design");
-  await up.getByLabel("Reference title").fill("Old slate schematic");
-  await up.getByLabel("Reference note").fill("");
-  await up.getByLabel("Reference files").setInputFiles([{ name: "old-slate.pdf", mimeType: "application/pdf", buffer: PDF }]);
-  await up.getByRole("button", { name: "Add references" }).click();
-  await page.getByTestId("upload-reference-status").getByText("old-slate.pdf: added").waitFor();
+  const pu = page.getByTestId("upload-prior");
+  await pu.getByLabel("Prior-work title").fill("Old slate schematic");
+  await pu.getByLabel("Prior-work files").setInputFiles([{ name: "old-slate.pdf", mimeType: "application/pdf", buffer: PDF }]);
+  await pu.getByRole("button", { name: "Add prior-work files" }).click();
+  await page.getByTestId("upload-prior-status").getByText("old-slate.pdf: added").waitFor();
   await page.reload();
   const cards = page.getByTestId("references");
   assert.equal(await cards.locator("[data-ref='REF-1'] img").count(), 1, "the mock-up shows as an image");
-  assert.match(await cards.locator("[data-ref='REF-2']").innerText(), /Old slate schematic\s+Prior design/);
+  assert.equal(await cards.locator("[data-ref='REF-2']").count(), 0, "prior-work files are not shown with the mock-ups");
+  assert.match(await page.getByTestId("prior-files").locator("[data-ref='REF-2']").innerText(), /Old slate schematic\s+Prior design/);
   // A refused file: SVG can carry script.
   await up.getByLabel("Reference files").setInputFiles([{ name: "x.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>") }]);
   await up.getByRole("button", { name: "Add references" }).click();
   await page.getByTestId("upload-reference-status").getByText(/^x\.svg: This file was not accepted/).waitFor();
   await shot(page, "02-references");
+
+  // 2b. A part already chosen, with its files; the same part number cannot be listed twice.
+  const add = page.getByTestId("add-part");
+  await add.getByLabel("Part number").fill("RVT101HVHNWC00-B");
+  await add.getByLabel("Manufacturer").fill("Riverdi");
+  await add.getByLabel("What it is for").fill("10.1-inch front touchscreen");
+  await add.getByLabel("Subsystem").selectOption("display");
+  await add.getByLabel("Status").selectOption("selected");
+  await add.getByRole("button", { name: "Add part" }).click();
+  await page.getByText(/RVT101HVHNWC00-B added\./).waitFor();
+  const row = page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']");
+  await row.locator("summary").click();
+  const STEP = Buffer.from("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n");
+  await row.getByLabel("Files for RVT101HVHNWC00-B").setInputFiles([
+    { name: "rvt101-datasheet.pdf", mimeType: "application/pdf", buffer: Buffer.concat([PDF, Buffer.from("% datasheet\n")]) }, { name: "rvt101.step", mimeType: "application/step", buffer: STEP }]);
+  await row.getByRole("button", { name: "Attach files" }).click();
+  await row.getByText("rvt101.step: attached").waitFor();
+  await row.getByText("rvt101-datasheet.pdf: attached").waitFor();
+  await page.reload();
+  const files = await page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']").innerText();
+  assert.match(files, /Datasheet\s+rvt101-datasheet\.pdf/);
+  assert.match(files, /3D model \(STEP\)\s+rvt101\.step/);
+  assert.equal(await page.getByTestId("prior-files").locator("[data-ref]").count(), 1, "part files stay with the part");
+  await page.getByTestId("add-part").locator("summary").click();
+  await page.getByTestId("add-part").getByLabel("Part number").fill("rvt101hvhnwc00b");
+  await page.getByTestId("add-part").getByLabel("What it is for").fill("duplicate");
+  await page.getByTestId("add-part").getByRole("button", { name: "Add part" }).click();
+  await page.getByText(/already listed/).waitFor();
+
+  // 2c. The earlier-work register (a worker builds it; here it is stored as a worker would) is reviewed and corrected.
+  await page.getByRole("button", { name: "Build the list of earlier work" }).click();
+  await page.getByTestId("register-building").waitFor();
+  const { data: reg } = await admin.from("prior_work_registers").select("id").eq("project_id", project.id).single();
+  assert.ifError((await admin.from("prior_work_registers").update({ status: "ready", completed_at: new Date().toISOString(), model: "offline",
+    sources: [{ file: "Display Study.md", origin: "Flux import #1", chars: 4000, items: 2 }],
+    items: [
+      { id: "PR-1", key: "display:mpn:RVT101HVHNWC00B", subsystem: "display", kind: "part", title: "10.1-inch front touchscreen", detail: "IPS, PCAP touch",
+        mpn: "RVT101HVHNWC00-B", manufacturer: "Riverdi", status: "selected", issues: ["frame freeze blocked"], stated_by_owner: true,
+        sources: [{ file: "parts chosen (entered by the owner)", origin: "owner", quote: "RVT101HVHNWC00-B" }, { file: "Display Study.md", origin: "Flux import #1", quote: "Riverdi RVT101HVHNWC00-B" }] },
+      { id: "PR-2", key: "timecode:mpn:DS3231", subsystem: "timecode", kind: "part", title: "RTC", detail: "Real-time clock", mpn: "DS3231", manufacturer: null,
+        status: "designed", issues: [], sources: [{ file: "Old Basis.md", origin: "Flux import #1", quote: "DS3231 RTC" }] },
+    ] }).eq("id", reg.id)).error);
+  await page.reload();
+  assert.match(await page.getByTestId("register-summary").innerText(), /^2 item\(s\) from 1 document\(s\).*· 2 the plan must address/);
+  assert.match(await page.getByTestId("register-display").locator("tr[data-item='PR-1']").innerText(), /Selected[\s\S]*RVT101HVHNWC00-B 10\.1-inch front touchscreen[\s\S]*Issues: frame freeze blocked/);
+  const pr2 = page.getByTestId("register-timecode").locator("tr[data-item='PR-2']");
+  await pr2.locator("summary").click();
+  await pr2.getByLabel("Note PR-2").fill("replaced by the TCXO");
+  await pr2.getByLabel("Leave out PR-2").check();
+  await pr2.getByRole("button", { name: "Save PR-2" }).click();
+  await page.getByText("PR-2 saved.").waitFor();
+  assert.match(await page.getByTestId("register-summary").innerText(), /1 the plan must address · 1 left out/);
 
   // 3. What the planner reads, and the plan.
   await page.reload();
@@ -116,9 +169,13 @@ try {
   assert.match(ctx, /^- \[REF-1\] Front view \(mockup, file front\.png\): 7 inch screen, clapper bar on top, three buttons on the right$/m);
   assert.match(ctx, /^Prior work \[PW-1\] Flux audit #1: VC Smart Slate, revision 2026-11-20/m);
   assert.match(ctx, /^- board: 160 × 100 mm, 1\.46 mm thick, 4 copper layers; parts placed but NOT routed$/m);
+  assert.match(ctx, /^ {2}- \[PR-1\] \(selected, owner\) part: RVT101HVHNWC00-B \(Riverdi\) — 10\.1-inch front touchscreen\./m);
+  assert.doesNotMatch(ctx, /DS3231/, "a left-out item is not given to the planner");
   await page.getByRole("button", { name: "Generate plan from these inputs" }).click();
   await page.waitForURL(/\/plans\//);
-  assert.match(await page.getByTestId("built-from").innerText(), /Built on REF-1 Front view \(mockup\); REF-2 Old slate schematic \(prior design\); PW-1 Flux audit #1: VC Smart Slate;/);
+  assert.match(await page.getByTestId("built-from").innerText(), /Built on REF-1 Front view \(mockup\); REF-2 Old slate schematic \(prior design\); PW-1 Flux audit #1: VC Smart Slate; the earlier-work register \(1 item\(s\), PR-1 onwards\);/);
+  assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(),
+    /^adapts PW-1, REF-2, PR-1 RVT101HVHNWC00-B 10\.1-inch front touchscreen \(selected\) Continue the earlier work/);
   const schematic = page.locator("li.task", { hasText: "Schematic capture" }).getByTestId("basis");
   assert.equal(await schematic.getAttribute("data-mode"), "adapt");
   assert.match(await schematic.innerText(), /^adapts PW-1, REF-2 Start from the prior design/);
@@ -128,7 +185,7 @@ try {
 
   // 4. Leave a reference out; use the mock-up for concepts.
   await page.goto(`${P}/inputs`);
-  const r2 = page.getByTestId("references").locator("[data-ref='REF-2']");
+  const r2 = page.getByTestId("prior-files").locator("[data-ref='REF-2']");
   await r2.locator("summary").click();
   await r2.getByLabel("Use REF-2 in the plan").uncheck();
   const before = await page.evaluate(() => window.scrollY);
@@ -152,7 +209,7 @@ try {
   await page.goto(`${P}/inputs`);
   await page.getByLabel("Specification files").setInputFiles([{ name: "vc-smart-slate - Flux project data.zip", mimeType: "application/zip", buffer: Buffer.from("PK\x03\x04") }]);
   await page.getByRole("button", { name: "Upload specifications" }).click();
-  await page.getByTestId("upload-specification-status").getByText(/this looks like a Flux or CAD export, not a specification\. Add it under 3\. Prior work/).waitFor();
+  await page.getByTestId("upload-specification-status").getByText(/this looks like a Flux or CAD export, not a specification\. Add it under 4\. Prior work/).waitFor();
   await page.getByTestId("flux-start").getByLabel("Flux import title").fill("Timecode board");
   await page.getByRole("button", { name: "Start a Flux import" }).click();
   await page.getByText("Flux import started.").waitFor();

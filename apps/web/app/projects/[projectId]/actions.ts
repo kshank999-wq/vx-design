@@ -64,7 +64,7 @@ export async function createPlan(projectId: string, from?: string) {
   if (!active.length) fail(path, "Extract or add requirements before generating a plan.");
   const request: PlanRequestPayload = {
     requirements: active.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, status: r.status, text: r.text, notes: r.notes, acceptanceCriteria: r.acceptance_criteria })),
-    context: loaded.context, input_ids: loaded.sources.map((x) => x.id), inputs: loaded.record,
+    context: loaded.context, input_ids: loaded.inputIds, inputs: loaded.record, must_address: loaded.mustAddress,
     capabilities: (caps ?? []).map((c) => ({ toolName: c.tool_name, operation: c.operation, status: c.status })),
     supervision_mode: project?.supervision_mode ?? "guided",
   };
@@ -81,7 +81,7 @@ export async function createPlan(projectId: string, from?: string) {
   try { choice = getModel(); } catch (e) { fail(path, e); }
   let planId: string;
   try {
-    const plan = await generatePlan(request.requirements, choice.model, { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids });
+    const plan = await generatePlan(request.requirements, choice.model, { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids, mustAddress: request.must_address });
     const payload = planPayload(plan, { model: choice.label, offline: choice.offline, supervisionMode: request.supervision_mode, inputs: request.inputs });
     const { data, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: payload });
     if (error) throw new Error(error.message);

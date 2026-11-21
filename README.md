@@ -81,28 +81,43 @@ from comes together, and where the plan is generated:
    - **Duplicates:** requirements that say nearly the same thing in two documents (word overlap ≥ 75%) are listed for
      a person to merge or keep.
 2. **Mock-ups and references (`REF-n`).**
-   - **What they are:** sketches, renders, photos, drawings, datasheets, and files from other tools or another
-     engineer (a KiCad project, a BOM spreadsheet, a schematic PDF: kind "Prior design").
+   - **What they are:** how the product should look: sketches, renders, photos, dimensioned drawings.
    - **Each one has:** a kind, a title, a note on what it shows and what to keep, and a "use in the plan" switch.
-   - **Files accepted:** PNG, JPEG, WebP, GIF, PDF, DOCX, XLSX, ZIP, STEP and text, checked on their bytes. SVG is
-     refused because it can carry script.
+   - **Files accepted:** PNG, JPEG, WebP, GIF and PDF, checked on their bytes. SVG is refused because it can carry
+     script.
    - **Concepts:** image references can be given to a concept round. The image model gets them as reference images,
      and their notes go into the brief.
-3. **Prior work (`PW-n`).** Finished Flux audits marked for the plan. The planner gets, for each:
-   - **Board:** size, layers, and whether it is routed.
-   - **Parts:** grouped by part number and role, with the designer's notes.
-   - **Design facts:** rails and connectors.
-   - **History:** earlier decisions and claimed validations, all marked unverified.
-   - **Audit results:** its open problems and suggested next steps.
-4. **Other inputs.** The intake, the design freeze, confirmed standards and knowledge sources are shown with links,
+3. **Parts already chosen.** Parts someone has already picked (`public.project_parts`), grouped by subsystem:
+   - **Each one has:** part number, manufacturer, what it is for, subsystem, how far it got (candidate, selected,
+     designed in, laid out, verified, rejected) and a note. A part number is listed once, ignoring case and punctuation.
+   - **Files:** datasheets, 3D models (STEP) and drawings are attached to the part. The kind is worked out from the
+     file: STEP is a 3D model, PDF a datasheet.
+4. **Prior work.**
+   - **Flux audits (`PW-n`).** Finished Flux audits marked for the plan. The planner gets, for each: board size, layers
+     and whether it is routed; parts grouped by part number and role; rails and connectors; earlier decisions and
+     claimed validations, all marked unverified; open problems and suggested next steps.
+   - **Files from other tools or engineers (`REF-n`, kind "Prior design").** A KiCad project, a schematic PDF, a BOM
+     spreadsheet, design notes, with a note on where each came from.
+   - **What was already done: the earlier-work register (`PR-n`).** "Build the list of earlier work" asks a worker to read
+     every earlier design document in full: the documents inside the Flux imports, the prior-design files and the
+     parts' datasheets. It lists each part and design decision by subsystem with how far it got (considered, selected,
+     designed, laid out, verified, rejected, open), quoting the document it came from. Items not quoted word for word
+     are dropped. Parts entered by the owner override what the documents say.
+   - **Corrections:** people can correct an item's status, add a note or leave it out. Corrections are kept by item
+     across rebuilds.
+5. **Other inputs.** The intake, the design freeze, confirmed standards and knowledge sources are shown with links,
    and also go to the planner.
-5. **The plan.** "What the planner reads" shows the exact context. "Generate plan from these inputs" builds the plan.
-   - **Each task** states its basis: it **reuses** earlier work, **adapts** it, or **starts fresh**, citing the inputs
-     it builds on and saying what remains.
+6. **The plan.** "What the planner reads" shows the exact context. "Generate plan from these inputs" builds the plan.
+   - **Each task** states its basis: it **reuses** earlier work, **adapts** it, **replaces** it, or **starts fresh**,
+     citing the inputs it builds on and saying what remains.
+   - **Earlier work must be addressed:** every register item that is selected, designed, laid out or verified must be
+     cited by some task. A plan that ignores one is sent back for repair.
+   - **Replacing:** a task that replaces earlier work must give its concerns and suggest alternatives.
    - **Validation:** a task citing an input that does not exist, or reusing work without citing any, is sent back for
      repair. Imported work is never treated as verified, so reused work still gets acceptance tests that
      re-establish it.
-   - **Display:** the plan page shows each task's basis and the inputs the plan was built on.
+   - **Display:** the plan page shows each task's basis (with the earlier-work items named, and concerns and
+     alternatives for replacements) and the inputs the plan was built on.
    - **Kept through changes:** the basis and the input list are stored with the plan and survive revisions and changes
      made from the workspace chat.
 
