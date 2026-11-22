@@ -99,6 +99,7 @@ try {
   const { data: refs } = await admin.from("requirements").select("ref_code").eq("project_id", project.id);
   assert.equal(new Set(refs.map((r) => r.ref_code)).size, refs.length, "numbering continues across documents");
   assert.match(await page.getByTestId("duplicates").innerText(), /1 requirement\(s\) appear in more than one document/);
+  assert.deepEqual(await page.getByTestId("specs").getByTestId("read-by").allInnerTexts(), ["2 by rules", "2 by rules"], "shall-statements are read without AI");
   await shot(page, "01-specs");
 
   // 2. References: a mock-up (step 2) and a prior-design file (step 4).
@@ -280,7 +281,8 @@ try {
   // Every AI call is recorded with its activity (offline here, so priced at $0).
   await page.goto(`${P}/usage`);
   const acts = await page.getByTestId("usage-by-activity").locator("tbody tr").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-activity")));
-  for (const a of ["Reading specifications", "Reading part datasheets", "Planning: full plan", "Planning: plan update"]) assert.ok(acts.includes(a), `${a} recorded: ${acts}`);
+  for (const a of ["Reading part datasheets", "Planning: full plan", "Planning: plan update"]) assert.ok(acts.includes(a), `${a} recorded: ${acts}`);
+  assert.ok(!acts.includes("Reading specifications"), "the specifications were read by rules: no AI call to record");
   assert.match(await page.getByTestId("usage-tiles").innerText(), /\$0\.00\s+this month/);
 
   // 4. Leave a reference out; use the mock-up for concepts.
@@ -327,6 +329,16 @@ try {
   await page.getByTestId("flux-running").waitFor();
   await page.locator(".live-dot").waitFor();   // the page refreshes itself while the audit runs
   await shot(page, "04-flux-import");
+
+  // 6. A revised specification: unchanged paragraphs reuse what was read before; only the new one is read.
+  await page.goto(`${P}/inputs?step=1`);
+  await page.getByLabel("Specification files").setInputFiles([{ name: "timecode-board-rev-b.md", mimeType: "text/markdown",
+    buffer: Buffer.from(`${SPEC_TC}\nThe timecode board should accept an external LTC input on a 3.5 mm jack.\n`) }]);
+  await page.getByRole("button", { name: "Upload specifications" }).click();
+  await page.getByTestId("upload-specification-status").getByText(/^timecode-board-rev-b\.md: \d+ sections$/).waitFor();
+  await page.getByRole("button", { name: "Extract requirements from 1 document(s)" }).click();
+  await page.getByText(/^Extracted \d+ requirement\(s\) from 1 document\(s\)\.$/).waitFor();
+  assert.equal(await page.getByTestId("specs").locator("tr", { hasText: "timecode-board-rev-b.md" }).getByTestId("read-by").innerText(), "1 by rules · 2 reused");
   console.log("Inputs flow passed: two specs extracted together with a duplicate flagged, references, prior work, plan built on REF/PW with task basis, concepts from a mock-up, Flux import from the inputs page.");
 } catch (e) {
   if (page && process.env.FAIL_SHOT) await page.screenshot({ path: process.env.FAIL_SHOT, fullPage: true });

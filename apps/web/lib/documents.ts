@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseDocument, UnsupportedDocumentError, type ExtractionResult, type ParsedDocument } from "@vx/planning";
+import { normalizeText, parseDocument, UnsupportedDocumentError, type ExtractionResult, type ParsedDocument, type ReusableRequirement } from "@vx/planning";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -75,9 +75,37 @@ export async function persistExtraction(supabase: SupabaseClient, projectId: str
   await supabase.from("documents").update({
     extraction_status: "done",
     extraction_report: { prompt_version: result.promptVersion, model: model.label, offline: model.offline, requirements: rows.length,
-                         dropped: result.dropped, open_questions: result.openQuestions, usage: result.usage, completed_at: new Date().toISOString() },
+                         dropped: result.dropped, open_questions: result.openQuestions, usage: result.usage, sources: result.sources ?? null,
+                         completed_at: new Date().toISOString() },
   }).eq("id", p.id);
   return rows.length;
+}
+
+/**
+ * Requirements already read from the project's other specifications, by the exact text of the block they came from:
+ * a new revision of a document reuses them for every block that did not change, so only changed blocks are read
+ * again. Requirements people rejected are not carried over.
+ */
+export async function reusableRequirements(supabase: SupabaseClient, projectId: string, exceptDocumentIds: string[]): Promise<Map<string, ReusableRequirement[]>> {
+  const out = new Map<string, ReusableRequirement[]>();
+  const { data: docs } = await supabase.from("documents").select("id, parsed").eq("project_id", projectId).eq("extraction_status", "done");
+  const others = (docs ?? []).filter((d) => !exceptDocumentIds.includes(d.id) && d.parsed);
+  if (!others.length) return out;
+  const { data: reqs } = await supabase.from("requirements").select("document_id, block_id, text, kind, priority, source_excerpt, acceptance_criteria, notes, status")
+    .in("document_id", others.map((d) => d.id)).eq("origin", "extracted").neq("status", "rejected");
+  for (const d of others) {
+    const blocks = new Map(((d.parsed as ParsedDocument).sections ?? []).flatMap((s) => s.blocks).map((b) => [b.id, b.text]));
+    for (const r of (reqs ?? []).filter((x) => x.document_id === d.id && x.block_id && x.source_excerpt)) {
+      const text = blocks.get(r.block_id!);
+      if (!text) continue;
+      const key = normalizeText(text);
+      const list = out.get(key) ?? [];
+      if (!list.some((x) => x.statement === r.text)) list.push({ statement: r.text, kind: r.kind, priority: r.priority, excerpt: r.source_excerpt!,
+        acceptance_criteria: r.acceptance_criteria, ambiguity: r.notes });
+      out.set(key, list);
+    }
+  }
+  return out;
 }
 
 export async function markExtractionFailed(supabase: SupabaseClient, documentId: string, message: string, model: string) {

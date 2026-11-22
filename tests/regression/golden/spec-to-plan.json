@@ -7,7 +7,7 @@
  "versions": {
   "planning": "@vx/planning@0.0.0"
  },
- "output_sha256": "d31acd1c1d6f596c2d7f739dbf7bebbf00521c84f75b726eaa11d118ff0a24dc",
+ "output_sha256": "789e0749103bb037c4ac4f512a31aaeea5006ac2e1e0d6adbc228a3a42b993a7",
  "output": {
   "plan": {
    "adjustments": [],
@@ -34,7 +34,6 @@
      "key": "architecture",
      "requiredTools": [],
      "requirementRefs": [
-      "REQ-FUN-004",
       "REQ-FUN-012",
       "REQ-POW-001",
       "REQ-POW-002",
@@ -42,8 +41,7 @@
       "REQ-INT-005",
       "REQ-INT-006",
       "REQ-INT-007",
-      "REQ-INT-011",
-      "REQ-MAN-013"
+      "REQ-INT-011"
      ],
      "riskLevel": "high",
      "timeoutSeconds": 3600,
@@ -66,7 +64,10 @@
      "estimatedHours": 4,
      "key": "power-budget",
      "requiredTools": [],
-     "requirementRefs": [],
+     "requirementRefs": [
+      "REQ-ELE-004",
+      "REQ-ELE-013"
+     ],
      "riskLevel": "medium",
      "timeoutSeconds": 3600,
      "title": "Preliminary power budget",
@@ -198,7 +199,7 @@
   },
   "requirements": [
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): 5 V, 4.5 V to 5.5 V.",
     "blockId": "S2.p1",
     "excerpt": "The board shall run from the motherboard 5 V rail with an input range of 4.5 V to 5.5 V.",
     "kind": "power",
@@ -212,7 +213,7 @@
     "text": "The board shall run from the motherboard 5 V rail with an input range of 4.5 V to 5.5 V."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): 60 mA.",
     "blockId": "S2.p2",
     "excerpt": "Total current draw shall not exceed 60 mA in normal operation.",
     "kind": "power",
@@ -226,7 +227,7 @@
     "text": "Total current draw shall not exceed 60 mA in normal operation."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): 3.3 V.",
     "blockId": "S2.p3",
     "excerpt": "The board shall generate a 3.3 V rail for all logic using a low-dropout regulator.",
     "kind": "power",
@@ -240,21 +241,21 @@
     "text": "The board shall generate a 3.3 V rail for all logic using a low-dropout regulator."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): ±1 ppm, 0 °C to 40 °C.",
     "blockId": "S2.p4",
     "excerpt": "The timecode reference oscillator shall have a frequency stability of ±1 ppm or better from 0 °C to 40 °C.",
-    "kind": "functional",
+    "kind": "electrical",
     "notes": null,
     "page": null,
     "priority": "must",
-    "refCode": "REQ-FUN-001",
+    "refCode": "REQ-ELE-001",
     "sectionId": "S2",
     "sectionTitle": "2 Electrical requirements",
     "status": "extracted",
     "text": "The timecode reference oscillator shall have a frequency stability of ±1 ppm or better from 0 °C to 40 °C."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): 30 fps.",
     "blockId": "S2.1.p1",
     "excerpt": "The board shall output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps.",
     "kind": "interface",
@@ -268,7 +269,7 @@
     "text": "The board shall output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): -10 dBu to +4 dBu, 10 kΩ.",
     "blockId": "S2.1.p2",
     "excerpt": "LTC output level shall be adjustable from -10 dBu to +4 dBu into a 10 kΩ load.",
     "kind": "interface",
@@ -282,7 +283,7 @@
     "text": "LTC output level shall be adjustable from -10 dBu to +4 dBu into a 10 kΩ load."
    },
    {
-    "acceptanceCriteria": null,
+    "acceptanceCriteria": "Measured or inspected value meets the stated figure(s): 2 frames.",
     "blockId": "S2.1.p3",
     "excerpt": "The board shall read external LTC and jam-sync its internal clock within 2 frames.",
     "kind": "interface",
@@ -359,7 +360,7 @@
     "notes": null,
     "page": null,
     "priority": "must",
-    "refCode": "REQ-FUN-002",
+    "refCode": "REQ-FUN-001",
     "sectionId": "S4",
     "sectionTitle": "4 Verification",
     "status": "extracted",
@@ -369,11 +370,11 @@
     "acceptanceCriteria": null,
     "blockId": "S4.p2",
     "excerpt": "All boards shall pass ERC and DRC with zero unwaived errors before ordering.",
-    "kind": "manufacturing",
+    "kind": "electrical",
     "notes": null,
     "page": null,
     "priority": "must",
-    "refCode": "REQ-MFG-001",
+    "refCode": "REQ-ELE-002",
     "sectionId": "S4",
     "sectionTitle": "4 Verification",
     "status": "extracted",

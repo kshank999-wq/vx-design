@@ -6,6 +6,7 @@ export * from "./llm/partial.ts";
 export * from "./llm/pricing.ts";
 export * from "./llm/metered.ts";
 export * from "./extract.ts";
+export * from "./extract-rules.ts";
 export * from "./plan.ts";
 export * from "./plan-inputs.ts";
 export * from "./plan-revise.ts";

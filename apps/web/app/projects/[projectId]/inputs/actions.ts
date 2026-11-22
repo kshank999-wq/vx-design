@@ -9,7 +9,7 @@ import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
-import { markExtractionFailed, persistExtraction, prepareExtraction, storeDocument, type PreparedExtraction } from "@/lib/documents";
+import { markExtractionFailed, persistExtraction, prepareExtraction, reusableRequirements, storeDocument, type PreparedExtraction } from "@/lib/documents";
 import { REFERENCE_KINDS } from "@/lib/plan-inputs";
 
 const base = (projectId: string) => `/projects/${projectId}/inputs`;
@@ -206,7 +206,8 @@ export async function extractAll(projectId: string) {
   for (const d of docs) {
     try { ready.push(await prepareExtraction(supabase, d.id)); } catch (e) { problems.push((e as Error).message); }
   }
-  const results = await Promise.allSettled(ready.map((p) => extractRequirements(p.parsed, choice.model)));
+  const reuse = await reusableRequirements(supabase, projectId, ready.map((p) => p.id));
+  const results = await Promise.allSettled(ready.map((p) => extractRequirements(p.parsed, choice.model, { reuse })));
   let total = 0, done = 0;
   for (const [i, r] of results.entries()) {
     const p = ready[i]!;

@@ -159,10 +159,11 @@ export default async function InputsPage({ params, searchParams }: {
         <table className="small" data-testid="specs">
           <thead><tr><th>Document</th><th>Requirements</th><th /></tr></thead>
           <tbody>{(docs ?? []).slice(0, sp.docs === "all" ? undefined : DOCS_SHOWN).map((d) => {
-            const report = (d.extraction_report ?? {}) as { error?: string; model?: string };
+            const report = (d.extraction_report ?? {}) as { error?: string; model?: string; sources?: { reused: number; rules: number; ai: number } | null };
+            const how = report.sources ? [report.sources.rules && `${report.sources.rules} by rules`, report.sources.reused && `${report.sources.reused} reused`, report.sources.ai && `${report.sources.ai} by AI`].filter(Boolean).join(" · ") : "";
             return <tr key={d.id} data-doc={d.filename} data-status={d.extraction_status}>
               <td><strong>{d.title}</strong><div className="muted">{d.filename}</div></td>
-              <td><span className={`pill pill-${d.extraction_status}`}>{d.extraction_status}</span>{d.extraction_status === "done" && <> {reqCount(d.id)} requirement(s)</>}
+              <td><span className={`pill pill-${d.extraction_status}`}>{d.extraction_status}</span>{d.extraction_status === "done" && <> {reqCount(d.id)} requirement(s){how && <div className="muted small" data-testid="read-by">{how}</div>}</>}
                 {report.error && <div className="error-text">{report.error}</div>}</td>
               <td className="right">{canEdit && d.extraction_status !== "pending" && d.extraction_status !== "running" && (
                 <form action={runExtraction.bind(null, projectId, d.id, "inputs")}><SubmitButton variant="secondary" pendingText="Extracting…">Re-extract</SubmitButton></form>)}</td>

@@ -3,10 +3,11 @@
  */
 import { z } from "zod";
 import { RequirementKind, RequirementPriority } from "@vx/contracts";
-import { findBlock, renderForPrompt, verifyCitation, type ParsedDocument } from "./ingest/document.ts";
+import { findBlock, normalizeText, renderForPrompt, verifyCitation, type ParsedDocument } from "./ingest/document.ts";
+import { ruleExtract, subsetDocument } from "./extract-rules.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
-export const EXTRACTION_PROMPT_VERSION = "extract-v1";
+export const EXTRACTION_PROMPT_VERSION = "extract-v2";
 
 /** Wire schema returned by the model (kept simple for structured outputs). */
 const ExtractionOutput = z.object({
@@ -63,41 +64,78 @@ export interface ExtractionResult {
   /** Requirements whose citation could not be verified after a correction round. */
   dropped: { statement: string; blockId: string; excerpt: string; reason: string }[];
   usage: Usage[];
+  /** How the requirements were read: reused from identical blocks, by rules, or by AI (and how many blocks went to AI). */
+  sources?: { reused: number; rules: number; ai: number; aiBlocks: number; skippedBlocks: number; blocks: number };
 }
 
-export async function extractRequirements(doc: ParsedDocument, model: LanguageModel): Promise<ExtractionResult> {
+/** A requirement already read from an identical block (another revision of the same specification). */
+export interface ReusableRequirement {
+  statement: string; kind: RequirementKind; priority: "must" | "should" | "may"; excerpt: string;
+  acceptance_criteria: string | null; ambiguity: string | null;
+}
+
+/**
+ * Requirements from a document, with as little AI as possible: blocks identical to ones already read in another
+ * document of the project reuse those requirements; clear shall/must/should sentences are read by rules; only the
+ * blocks that need judgment go to the model (none: no AI call at all).
+ */
+export async function extractRequirements(doc: ParsedDocument, model: LanguageModel,
+                                          opts: { reuse?: Map<string, ReusableRequirement[]> } = {}): Promise<ExtractionResult> {
   const usage: Usage[] = [];
-  const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{
-    role: "user",
-    content: `Document${doc.title ? ` "${doc.title}"` : ""}:\n\n${renderForPrompt(doc)}\n\nExtract all requirements.`,
-  }];
-
-  let result = await model.generate({ purpose: "extract_requirements", system: SYSTEM, messages, schema: ExtractionOutput });
-  usage.push(result.usage);
-  let failures = checkCitations(doc, result.output);
-
-  if (failures.length) {
-    // One correction round: show exactly which citations failed and why.
-    messages.push(result.assistantMessage, {
+  type Item = ExtractionOutput["requirements"][number];
+  const collected: { r: Item; blockId: string }[] = [];
+  // 1. Blocks read before, unchanged: their requirements again.
+  const reusedBlocks = new Set<string>();
+  for (const s of doc.sections) for (const b of s.blocks) {
+    const items = opts.reuse?.get(normalizeText(b.text));
+    if (!items) continue;
+    reusedBlocks.add(b.id);
+    for (const it of items) collected.push({ r: { ...it, block_id: b.id }, blockId: b.id });
+  }
+  const reusedCount = collected.length;
+  // 2. Clear statements by rules.
+  const rules = ruleExtract(doc, { reused: reusedBlocks });
+  for (const r of rules.requirements) {
+    collected.push({ r: { statement: r.statement, kind: r.kind, priority: r.priority, block_id: r.blockId, excerpt: r.excerpt,
+                          acceptance_criteria: r.acceptanceCriteria, ambiguity: r.ambiguity }, blockId: r.blockId });
+  }
+  // 3. The rest by the model, only the blocks that need it.
+  let failures: ReturnType<typeof checkCitations> = [];
+  let openQuestions: ExtractionOutput["open_questions"] = [];
+  if (rules.aiBlocks.length) {
+    const part = subsetDocument(doc, new Set(rules.aiBlocks));
+    const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{
       role: "user",
-      content: "These citations could not be verified against the document:\n" +
-        failures.map((f) => `- [${f.item.block_id}] "${f.item.excerpt}" (${f.reason})`).join("\n") +
-        "\n\nReturn the complete requirement list again with each excerpt copied exactly from its block. " +
-        "Drop any requirement the document does not actually state.",
-    });
-    result = await model.generate({ purpose: "extract_requirements_repair", system: SYSTEM, messages, schema: ExtractionOutput });
+      content: `Document${doc.title ? ` "${doc.title}"` : ""} (only the blocks that need reading are shown; the rest were read already):\n\n${renderForPrompt(part)}\n\nExtract all requirements.`,
+    }];
+    let result = await model.generate({ purpose: "extract_requirements", system: SYSTEM, messages, schema: ExtractionOutput });
     usage.push(result.usage);
     failures = checkCitations(doc, result.output);
+    if (failures.length) {
+      // One correction round: show exactly which citations failed and why.
+      messages.push(result.assistantMessage, {
+        role: "user",
+        content: "These citations could not be verified against the document:\n" +
+          failures.map((f) => `- [${f.item.block_id}] "${f.item.excerpt}" (${f.reason})`).join("\n") +
+          "\n\nReturn the complete requirement list again with each excerpt copied exactly from its block. " +
+          "Drop any requirement the document does not actually state.",
+      });
+      result = await model.generate({ purpose: "extract_requirements_repair", system: SYSTEM, messages, schema: ExtractionOutput });
+      usage.push(result.usage);
+      failures = checkCitations(doc, result.output);
+    }
+    const failed = new Set(failures.map((f) => f.item));
+    for (const r of result.output.requirements) if (!failed.has(r)) collected.push({ r, blockId: r.block_id });
+    openQuestions = result.output.open_questions;
   }
+  const byAi = collected.length - reusedCount - rules.requirements.length;
 
-  const failed = new Set(failures.map((f) => f.item));
-  const verified = result.output.requirements
-    .filter((r) => !failed.has(r))
-    .map((r) => {
-      const check = verifyCitation(doc, r.block_id, r.excerpt);
-      const where = findBlock(doc, check.blockId!)!;
-      return { r, blockId: check.blockId!, section: where.section, page: where.block.page ?? null };
-    });
+  const verified = collected.flatMap(({ r }) => {
+    const check = verifyCitation(doc, r.block_id, r.excerpt);
+    if (!check.ok) return [];
+    const where = findBlock(doc, check.blockId!)!;
+    return [{ r, blockId: check.blockId!, section: where.section, page: where.block.page ?? null }];
+  });
 
   // Deterministic ordering and numbering: document order, then model order within a block.
   const blockOrder = new Map<string, number>();
@@ -132,7 +170,9 @@ export async function extractRequirements(doc: ParsedDocument, model: LanguageMo
   return {
     promptVersion: EXTRACTION_PROMPT_VERSION,
     requirements,
-    openQuestions: result.output.open_questions.map((q) => ({ question: q.question, blockId: q.block_id })),
+    openQuestions: openQuestions.map((q) => ({ question: q.question, blockId: q.block_id })),
+    sources: { reused: reusedCount, rules: rules.requirements.length, ai: byAi, aiBlocks: rules.aiBlocks.length, skippedBlocks: rules.skipped,
+               blocks: doc.sections.reduce((n, s) => n + s.blocks.length, 0) },
     dropped: failures.map((f) => ({ statement: f.item.statement, blockId: f.item.block_id, excerpt: f.item.excerpt, reason: f.reason })),
     usage,
   };

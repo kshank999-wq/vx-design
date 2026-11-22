@@ -5,7 +5,7 @@ import { extractRequirements, generatePlan, planPayload, PlanValidationError, re
 import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
-import { markExtractionFailed, persistExtraction, prepareExtraction, storeDocument } from "@/lib/documents";
+import { markExtractionFailed, persistExtraction, prepareExtraction, reusableRequirements, storeDocument } from "@/lib/documents";
 import { loadPlanInputs, loadPreviousPlan } from "@/lib/plan-inputs";
 
 export async function uploadDocument(projectId: string, form: FormData) {
@@ -28,7 +28,7 @@ export async function runExtraction(projectId: string, documentId: string, from?
   let prepared;
   try { prepared = await prepareExtraction(supabase, documentId); } catch (e) { fail(path, (e as Error).message); }
   try {
-    const result = await extractRequirements(prepared.parsed, choice.model);
+    const result = await extractRequirements(prepared.parsed, choice.model, { reuse: await reusableRequirements(supabase, projectId, [prepared.id]) });
     await persistExtraction(supabase, projectId, prepared, result, choice);
   } catch (e) {
     await markExtractionFailed(supabase, documentId, (e as Error).message, choice.label);

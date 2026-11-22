@@ -14,27 +14,28 @@ const req = (statement: string, block_id: string, excerpt: string, kind = "elect
   statement, kind, priority: "must", block_id, excerpt, acceptance_criteria: null, ambiguity: null, ...extra,
 });
 
-test("extraction: verified citations, document-order numbering, one repair round", async () => {
+test("extraction: clear statements by rules, the rest by the model with verified citations, one repair round", async () => {
   const model = new ScriptedModel([
-    () => ({
-      requirements: [
-        // Returned out of document order on purpose.
-        req("LTC output at standard frame rates", "S2.1.p1", "output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps", "interface"),
-        req("Current draw at most 60 mA", "S2.p2", "Total current draw shall not exceed 60 mA", "power"),
-        req("Input range 4.5-5.5 V", "S2.p1", "input range of 4.5 V to 5.5 V", "power"),
-        req("Board is waterproof", "S3.p1", "The board shall be waterproof"), // invented
-      ],
-      open_questions: [{ question: "Which Lemo part number?", block_id: "S3.p5" }],
-    }),
+    (r) => {
+      const prompt = r.messages[0]!.content as string;
+      assert.match(prompt, /\[S3\.p2\] Board outline/, "table rows go to the model");
+      assert.match(prompt, /\[S4\.p1\] - Timecode drift shall be measured/, "a sentence with two obligations goes to the model");
+      assert.doesNotMatch(prompt, /\[S2\.p1\]|\[S1\.p1\]/, "clear statements and the overview are not sent");
+      return {
+        requirements: [
+          req("Timecode drift within 1 frame over 8 hours", "S4.p1", "must stay within 1 frame", "functional"),
+          req("Board is waterproof", "S3.p1", "The board shall be waterproof"), // invented
+        ],
+        open_questions: [{ question: "Which Lemo part number?", block_id: "S3.p5" }],
+      };
+    },
     (r) => {
       const last = r.messages.at(-1)!.content as string;
       assert.match(last, /The board shall be waterproof/);
       assert.match(last, /excerpt not found/);
       return {
         requirements: [
-          req("LTC output at standard frame rates", "S2.1.p1", "output SMPTE 12M LTC at 23.976, 24, 25, 29.97 DF and 30 fps", "interface"),
-          req("Current draw at most 60 mA", "S2.p2", "Total current draw shall not exceed 60 mA", "power"),
-          req("Input range 4.5-5.5 V", "S2.p1", "input range of 4.5 V to 5.5 V", "power", { ambiguity: "Is reverse polarity protection needed?" }),
+          req("Timecode drift within 1 frame over 8 hours", "S4.p1", "must stay within 1 frame", "functional", { ambiguity: "Which reference generator?" }),
           // Wrong block cited, but the text exists elsewhere: corrected, not dropped.
           req("Board outline at most 40 x 25 mm", "S2.p1", "Board outline | 40 mm x 25 mm maximum", "mechanical"),
         ],
@@ -45,26 +46,47 @@ test("extraction: verified citations, document-order numbering, one repair round
   const out = await extractRequirements(doc, model);
   assert.equal(model.calls.length, 2);
   assert.deepEqual(out.requirements.map((r) => [r.refCode, r.blockId]), [
-    ["REQ-PWR-001", "S2.p1"],
-    ["REQ-PWR-002", "S2.p2"],
-    ["REQ-IFC-001", "S2.1.p1"],
-    ["REQ-MEC-001", "S3.p2"],
+    ["REQ-PWR-001", "S2.p1"], ["REQ-PWR-002", "S2.p2"], ["REQ-PWR-003", "S2.p3"], ["REQ-ELE-001", "S2.p4"],
+    ["REQ-IFC-001", "S2.1.p1"], ["REQ-IFC-002", "S2.1.p2"], ["REQ-IFC-003", "S2.1.p3"],
+    ["REQ-MEC-001", "S3.p2"], ["REQ-IFC-004", "S3.p5"], ["REQ-FUN-001", "S4.p1"], ["REQ-ELE-002", "S4.p2"],
   ]);
-  assert.equal(out.requirements[0]!.status, "ambiguous");
-  assert.equal(out.requirements[0]!.notes, "Is reverse polarity protection needed?");
-  assert.equal(out.requirements[2]!.sectionTitle, "2.1 Timecode interface");
+  const drift = out.requirements.find((r) => r.blockId === "S4.p1")!;
+  assert.equal(drift.status, "ambiguous");
+  assert.equal(drift.notes, "Which reference generator?");
+  assert.equal(out.requirements[4]!.sectionTitle, "2.1 Timecode interface");
+  assert.equal(out.requirements[1]!.acceptanceCriteria, "Measured or inspected value meets the stated figure(s): 60 mA.");
+  assert.deepEqual(out.sources, { reused: 0, rules: 9, ai: 2, aiBlocks: 6, skippedBlocks: 1, blocks: 16 });
+  assert.match(model.calls[0]!.messages[0]!.content as string, /\[S3\.p3\] Layer count/, "every table row with a figure is read");
   assert.deepEqual(out.dropped, []);
 });
 
-test("extraction: citations still invalid after repair are dropped and reported", async () => {
+test("extraction: citations still invalid after repair are dropped and reported; the rule requirements stand", async () => {
   const bad = () => ({ requirements: [req("Made up", "S1.p1", "this text is not in the document")], open_questions: [] });
   const model = new ScriptedModel([bad, bad]);
   const out = await extractRequirements(doc, model);
-  assert.equal(out.requirements.length, 0);
+  assert.equal(out.requirements.length, 9);
   assert.equal(out.dropped.length, 1);
   assert.equal(out.dropped[0]!.reason, "excerpt not found in the document");
 });
 
+test("extraction: a document of clear statements needs no AI; blocks read before are reused", async () => {
+  const clear = parseText("# Spec\n\n## 1. Power\n\n- The slate shall run for 8 hours on one charge.\n- The battery should be user-replaceable.\n- The housing shall be robust.\n", "text/markdown", Buffer.from("x"));
+  const none = new ScriptedModel([]);
+  const out = await extractRequirements(clear, none);
+  assert.equal(none.calls.length, 0, "no model call");
+  assert.deepEqual(out.requirements.map((r) => [r.priority, r.status, r.kind]), [["must", "extracted", "power"], ["should", "extracted", "power"], ["must", "ambiguous", "mechanical"]]);
+  assert.equal(out.requirements[2]!.notes, '"robust" has no measurable criterion.');
+  // A new revision: the table rows were read before (by AI) and are reused; only the changed block is read again.
+  const reuse = new Map([[ "Board outline | 40 mm x 25 mm maximum", [{ statement: "Board outline at most 40 x 25 mm", kind: "mechanical" as const, priority: "must" as const,
+    excerpt: "Board outline | 40 mm x 25 mm maximum", acceptance_criteria: null, ambiguity: null }]]]);
+  const model = new ScriptedModel([(r) => {
+    assert.doesNotMatch(r.messages[0]!.content as string, /Board outline/, "a reused block is not sent again");
+    return { requirements: [], open_questions: [] };
+  }]);
+  const rev = await extractRequirements(doc, model, { reuse });
+  assert.equal(rev.sources!.reused, 1);
+  assert.ok(rev.requirements.some((r) => r.blockId === "S3.p2" && r.text === "Board outline at most 40 x 25 mm"));
+});
 const REQS = [
   { refCode: "REQ-PWR-001", kind: "power", priority: "must", status: "extracted", text: "5 V input" },
   { refCode: "REQ-IFC-001", kind: "interface", priority: "must", status: "extracted", text: "LTC output" },

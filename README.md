@@ -127,6 +127,12 @@ sit beside the steps.
   and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
   model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
   of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
+- **Requirements with less AI:** a block identical to one already read in another specification of the project (a
+  new revision) reuses those requirements; a clear sentence with one shall/must/should is read by rules (kind from its
+  words, an acceptance criterion from its figures, vague words and TBD marked ambiguous); every other block goes to the
+  model, and only those blocks are sent. Nothing is skipped by guesswork: only sections about the document itself
+  (revision history, glossary, references, overview). Each specification shows how many requirements came by rules,
+  reused, or by AI.
 - **Parts from data before AI:** each datasheet's part number is found without AI (a "Part number" or "Ordering code"
   label, or a code in the file or package name that the datasheet itself contains) and looked up in the saved parts
   catalog, then at the distributors configured on the web server (Nexar, DigiKey, Mouser). An exact match supplies the
