@@ -9,6 +9,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { StagedFileInput } from "@/components/StagedFileInput";
 import { requireUser } from "@/lib/auth";
 import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { costHistory, estimate } from "@/lib/cost-estimate";
+import { CostHint } from "@/components/CostHint";
 import { planChanges } from "@/lib/plan-inputs";
 import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
 import { confirmStandard, proposeStandard } from "@/app/knowledge/actions";
@@ -79,6 +81,9 @@ export default async function ProjectPage({ params, searchParams }: {
   const docTitle = new Map((docs ?? []).map((d) => [d.id, d.title]));
   const counts = { total: reqs?.length ?? 0, rejected: reqs?.filter((r) => r.status === "rejected").length ?? 0,
     ambiguous: reqs?.filter((r) => r.status === "ambiguous").length ?? 0, confirmed: reqs?.filter((r) => r.status === "confirmed").length ?? 0 };
+  const history = changes?.items.length ? await costHistory(supabase, projectId) : null;
+  const genCost = !history && canEdit ? estimate(await costHistory(supabase, projectId), "planFull", { scale: Math.max(0.15, (counts.total - counts.rejected) / 714) }) : null;
+  const planCost = history ? { update: estimate(history, "planUpdate"), fresh: estimate(history, "planFull", { scale: Math.max(0.15, (counts.total - counts.rejected) / 714) }) } : undefined;
 
   const filtered = (reqs ?? []).filter((r) => (!sp.status || r.status === sp.status) && (!sp.doc || r.document_id === sp.doc)
     && (!sp.q || `${r.ref_code} ${r.text}`.toLowerCase().includes(sp.q.toLowerCase())));
@@ -102,7 +107,7 @@ export default async function ProjectPage({ params, searchParams }: {
       <StageBar supabase={supabase} projectId={projectId} />
       <Banner error={error} notice={notice} />
       {me?.role && me.role !== "client" && <PlanRequestStatus supabase={supabase} projectId={projectId} />}
-      <PlanChangesNotice changes={changes} canEdit={canEdit} building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />
+      <PlanChangesNotice cost={planCost} changes={changes} canEdit={canEdit} building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />
       <nav className="tabs" aria-label="Project sections" data-testid="project-tabs">{TABS.map(([k, l]) => (
         <Link key={k} href={k === "overview" ? `/projects/${projectId}` : `/projects/${projectId}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className="tab">
           {l}{tabCount[k] ? <span className="tab-count">{tabCount[k]}</span> : null}</Link>))}</nav>
@@ -268,6 +273,7 @@ export default async function ProjectPage({ params, searchParams }: {
             <SubmitButton disabled={counts.total - counts.rejected === 0} pendingText="Generating plan… (can take a few minutes)">
               Generate plan from requirements
             </SubmitButton>
+            <CostHint e={planCost?.fresh ?? (genCost ?? undefined)} />
           </form>
         )}
       </section>

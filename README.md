@@ -127,6 +127,10 @@ sit beside the steps.
   and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
   model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
   of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
+- **Cost before you click:** each button that starts AI work shows its likely cost and where the figure comes from:
+  plan update and rebuild, plan from requirements, reading specifications (only the blocks rules cannot read are
+  counted; "no AI cost" when rules read it all), reading datasheets, chat questions and model comparisons. Figures come
+  from this project's recorded calls, else the account's other projects, else typical figures (`apps/web/lib/cost-estimate.ts`).
 - **Reading model:** each project chooses the model that reads its specifications and part datasheets (Opus 5.5 by
   default, Sonnet 5.5 or Haiku 5.5): AI usage → "Choose or compare", or the link on the Specifications step. **Compare
   models** reads one specification again with the chosen models, saves nothing as requirements, and matches each

@@ -9,6 +9,8 @@ import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
 import { decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
 import { ChatForm } from "@/components/ChatForm";
+import { CostHint } from "@/components/CostHint";
+import { costHistory, estimate } from "@/lib/cost-estimate";
 import { describePlanChange, type PlanChange } from "@vx/planning";
 
 export const maxDuration = 120;
@@ -55,6 +57,7 @@ export default async function WorkspacePage({ params, searchParams }: {
   const valStep = !vm.length || !vTested ? "draft" : vFailing || (openFaults ?? []).length ? "blocked" : vVerified === vm.length ? "complete" : "running";
   const role = me?.role ?? "viewer";
   const canDraft = role === "owner" || role === "engineer";
+  const chatCost = role !== "client" ? estimate(await costHistory(supabase, projectId), "chat") : null;
   // Plans already drafted from a chat message, so the button turns into a link.
   const { data: chatPlans } = canDraft ? await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null) : { data: [] };
   const drafted = new Map((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
@@ -125,6 +128,7 @@ export default async function WorkspacePage({ params, searchParams }: {
           {!messages?.length && <li className="muted small">Ask about progress, a report, or what needs your approval.</li>}
         </ol>
         <ChatForm projectId={projectId} action={sendMessage.bind(null, projectId, selected ? selected.id : null)} />
+        <CostHint e={chatCost} what="each question" />
       </section>
 
       <section className="ws-view card panel" aria-label="Results">

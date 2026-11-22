@@ -4,6 +4,8 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { READING_MODELS } from "@/lib/model";
+import { costHistory, extractionEstimate, fmtEstimate } from "@/lib/cost-estimate";
+import type { ParsedDocument } from "@vx/planning";
 import { compareModels, setReadingModel } from "./actions";
 
 export const maxDuration = 300;
@@ -23,6 +25,10 @@ export default async function ComparePage({ params, searchParams }: { params: Pr
   const canEdit = me.role === "owner" || me.role === "engineer";
   const { data: counts } = await supabase.from("requirements").select("document_id").eq("project_id", projectId).eq("origin", "extracted");
   const n = (id: string) => (counts ?? []).filter((c) => c.document_id === id).length;
+  // Likely cost of reading each specification with each model.
+  const history = await costHistory(supabase, projectId);
+  const { data: parsed } = await supabase.from("documents").select("id, parsed").eq("project_id", projectId).eq("extraction_status", "done");
+  const perModel = (docId: string) => READING_MODELS.map(([id, label]) => `${label.split(" (")[0]}: ${fmtEstimate(extractionEstimate(history, (parsed ?? []).filter((d) => d.id === docId).map((d) => d.parsed as ParsedDocument), id))}`).join(" · ");
 
   return (
     <main>
@@ -51,6 +57,7 @@ export default async function ComparePage({ params, searchParams }: { params: Pr
           <form action={compareModels.bind(null, projectId)} className="stack" data-testid="compare-form">
             <label>Specification<select name="document" required aria-label="Specification to compare on">
               {(docs ?? []).map((d) => <option key={d.id} value={d.id}>{d.title} ({d.filename}, {n(d.id)} requirements)</option>)}</select></label>
+            <div className="small muted" data-testid="compare-costs">Likely cost of one reading: {(docs ?? []).slice(0, 8).map((d) => <div key={d.id}>{d.title}: {perModel(d.id)}</div>)}</div>
             <fieldset className="row"><legend className="small">Models</legend>
               {READING_MODELS.map(([id, label]) => (
                 <label key={id} className="inline small"><input type="checkbox" name="model" value={id} defaultChecked={id !== "claude-opus-5-5"} aria-label={`Compare ${label.split(" (")[0]}`} /> {label}</label>

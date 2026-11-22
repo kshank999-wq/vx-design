@@ -5,6 +5,7 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { costHistory, estimate } from "@/lib/cost-estimate";
 import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { planChanges } from "@/lib/plan-inputs";
 import { createPlan } from "../../actions";
@@ -47,6 +48,8 @@ export default async function PlanPage({ params, searchParams }: {
   const changes = role === "owner" || role === "engineer" ? await planChanges(supabase, projectId) : null;
   const isLatest = changes?.version === plan.version;
   const building = isLatest ? await activePlanRequest(supabase, projectId) : null;
+  const history = isLatest && changes?.items.length ? await costHistory(supabase, projectId) : null;
+  const planCost = history ? { update: estimate(history, "planUpdate"), fresh: estimate(history, "planFull", { scale: Math.max(0.15, (reqs ?? []).filter((r) => r.status !== "rejected").length / 714) }) } : undefined;
   const rev = gen.revision;
   const keyOf = new Map((tasks ?? []).map((t) => [t.id, t.key]));
   const reqById = new Map((reqs ?? []).map((r) => [r.id, r as Req]));
@@ -94,7 +97,7 @@ export default async function PlanPage({ params, searchParams }: {
       )}
 
       {isLatest && <PlanRequestStatus supabase={supabase} projectId={projectId} />}
-      {isLatest && <PlanChangesNotice changes={changes} canEdit building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />}
+      {isLatest && <PlanChangesNotice cost={planCost} changes={changes} canEdit building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />}
       {rev && (
         <p className="card small" data-testid="revision">Updated from <strong>plan v{rev.from_version}</strong> with what changed, not planned again:{" "}
           {rev.changed.length ? <>changed {rev.changed.join(", ")}; </> : null}{rev.added.length ? <>added {rev.added.join(", ")}; </> : null}

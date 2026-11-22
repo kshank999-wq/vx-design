@@ -12,6 +12,9 @@ import { SUBSYSTEMS, subsystemLabel, type RegisterItem } from "@vx/planning";
 import { IMAGE_TYPES, ITEM_STATUS_LABEL, loadPlanInputs, PART_STATUS, refCode, REFERENCE_KINDS, VISUAL_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
 import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { CostHint } from "@/components/CostHint";
+import { costHistory, estimate, extractionEstimate } from "@/lib/cost-estimate";
+import type { ParsedDocument } from "@vx/planning";
 import { placePartFile, readPackagesAsParts, readPartFiles } from "./actions";
 import { editRegisterItem, extractAll, removePart, removeReference, requestRegister, savePart, setAuditInPlan, updateReference } from "./actions";
 import { createAudit, runAudit } from "../flux/actions";
@@ -61,6 +64,9 @@ export default async function InputsPage({ params, searchParams }: {
   const planBuilding = await activePlanRequest(supabase, projectId);
   const reqCount = (id: string) => (reqs ?? []).filter((r) => r.document_id === id && r.status !== "rejected").length;
   const pending = (docs ?? []).filter((d) => d.extraction_status === "pending" || d.extraction_status === "failed");
+  // Likely AI costs of the actions on this page (from this project's own history where it has some).
+  const history = await costHistory(supabase, projectId);
+  const { data: pendingParsed } = pending.length ? await supabase.from("documents").select("parsed").in("id", pending.map((d) => d.id)) : { data: [] };
   const active = (reqs ?? []).filter((r) => r.status !== "rejected");
   const dups = crossDocumentDuplicates(reqs ?? []);
   const docTitle = new Map((docs ?? []).map((d) => [d.id, d.title]));
@@ -76,6 +82,8 @@ export default async function InputsPage({ params, searchParams }: {
   const filesOf = (partId: string) => (refs ?? []).filter((r) => r.part_id === partId);
   const partFile = (r: NonNullable<typeof refs>[number]) => !r.part_id && ["datasheet", "model_3d"].includes(r.kind);
   const unread = (refs ?? []).filter((r) => partFile(r) && !r.identified_at);
+  const perSheet = { ...estimate(history, "partRead"), upTo: true };
+  const planCost = { update: estimate(history, "planUpdate"), fresh: estimate(history, "planFull", { scale: Math.max(0.15, active.length / 714) }) };
   const packages = (refs ?? []).filter((r) => !r.part_id && ["other", "datasheet", "prior_design"].includes(r.kind) && /\.zip$/i.test(r.filename));
   const unplaced = (refs ?? []).filter((r) => partFile(r) && r.identified_at);
   const building = (registers ?? []).find((r) => r.status === "queued" || r.status === "running");
@@ -178,7 +186,8 @@ export default async function InputsPage({ params, searchParams }: {
           {pending.length > 0 && (
             <form action={extractAll.bind(null, projectId)} className="row">
               <SubmitButton pendingText="Reading the documents… (a few minutes)">{`Extract requirements from ${pending.length} document(s)`}</SubmitButton>
-              <span className="small muted">The documents are read at the same time; requirement numbers continue across them.</span>
+              <span className="small muted">The documents are read at the same time; requirement numbers continue across them.
+                <CostHint e={extractionEstimate(history, (pendingParsed ?? []).map((d) => d.parsed as ParsedDocument), (project as { reading_model?: string | null })?.reading_model)} /></span>
             </form>
           )}
         </>}
@@ -216,14 +225,14 @@ export default async function InputsPage({ params, searchParams }: {
           <form action={readPackagesAsParts.bind(null, projectId)} className="card notice-changes" data-testid="packages-elsewhere">
             <strong>{packages.length} ZIP package(s) were added as references, not as parts:</strong>
             <span className="small"> {packages.map((r) => r.filename).join(", ")}.</span>
-            <div className="row"><SubmitButton pendingText="Opening and reading… (a minute or two)">Read them as parts</SubmitButton>
+            <div className="row"><SubmitButton pendingText="Opening and reading… (a minute or two)">Read them as parts</SubmitButton><CostHint e={perSheet} what="each datasheet" />
               <span className="small muted">Each is opened; its datasheets and 3D models become part files and are read; the ZIP itself is removed.</span></div>
           </form>
         )}
         {canEdit && <div className="card dropzone" data-testid="part-files"><InputsUpload projectId={projectId} mode="partfiles" /></div>}
         {canEdit && unread.length > 0 && (
           <form action={readPartFiles.bind(null, projectId)} className="row" data-testid="read-part-files">
-            <SubmitButton pendingText="Reading…">Read the files</SubmitButton><span className="small muted">{unread.length} file(s) not read yet.</span></form>
+            <SubmitButton pendingText="Reading…">Read the files</SubmitButton><CostHint e={{ ...perSheet, usd: perSheet.usd * unread.filter((r) => r.kind === "datasheet").length }} /><span className="small muted">{unread.length} file(s) not read yet.</span></form>
         )}
         {unplaced.length > 0 && (
           <div className="card small" data-testid="unplaced-files">
@@ -429,12 +438,12 @@ export default async function InputsPage({ params, searchParams }: {
       <section>
         <h2>The plan</h2>
         <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.filter((m) => m.id.startsWith("PR-")).length} of which the plan must address` : ""}{loaded.inputs.parts?.length ? `; ${loaded.inputs.parts.length} chosen part(s), each to be used by a task` : ""}.</p>
-        <PlanChangesNotice changes={loaded.changes} canEdit={canEdit} building={!!planBuilding} action={createPlan.bind(null, projectId, "inputs", "revise")} fresh={createPlan.bind(null, projectId, "inputs", "fresh")} />
+        <PlanChangesNotice cost={planCost} changes={loaded.changes} canEdit={canEdit} building={!!planBuilding} action={createPlan.bind(null, projectId, "inputs", "revise")} fresh={createPlan.bind(null, projectId, "inputs", "fresh")} />
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
         {canEdit && !planBuilding && !loaded.changes?.items.length && (
           <form action={createPlan.bind(null, projectId, "inputs", plans?.length ? "fresh" : undefined)} className="row">
             <SubmitButton variant={plans?.length ? "secondary" : undefined} disabled={!active.length} pendingText="Starting…">{plans?.length ? "Rebuild the plan from scratch" : "Generate plan from these inputs"}</SubmitButton>
-            {!active.length && <span className="small muted">Extract requirements first.</span>}
+            {!active.length ? <span className="small muted">Extract requirements first.</span> : <CostHint e={planCost.fresh} />}
           </form>
         )}
         {!!plans?.length && <ul className="small">{plans.map((p) => <li key={p.id}><Link href={`/projects/${projectId}/plans/${p.id}`}>Plan v{p.version}</Link> · {p.status}

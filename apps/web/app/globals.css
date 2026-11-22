@@ -455,3 +455,8 @@ details.about > summary { color: var(--accent); }
 .build-steps li.done::before { content: "✓ "; }
 .build-steps li.now { color: var(--fg); font-weight: 650; }
 .build-steps li.now::before { content: "● "; color: var(--tech); }
+
+/* Likely AI cost next to the button that starts it */
+.cost-hint { display: block; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.cost-hint .cost-basis { opacity: .8; }
+.stack.tight { gap: 2px; }

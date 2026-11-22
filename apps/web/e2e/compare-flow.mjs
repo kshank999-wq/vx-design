@@ -46,6 +46,7 @@ try {
   // Compare Sonnet and Haiku (the default choice) against what was read.
   await page.getByTestId("reading-with").getByRole("link", { name: "Change or compare models" }).click();
   await page.waitForURL(/\/compare$/);
+  assert.match(await page.getByTestId("compare-costs").innerText(), /Opus 5\.5: [^·]+ · Claude Sonnet 5\.5: [^·]+ · Claude Haiku 5\.5: /);
   await page.getByTestId("compare-form").getByRole("button", { name: "Compare" }).click();
   await page.waitForURL(/\/compare\/[0-9a-f-]{36}$/);
   const summary = page.getByTestId("compare-summary");

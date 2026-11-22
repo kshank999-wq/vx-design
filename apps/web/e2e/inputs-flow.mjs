@@ -93,6 +93,7 @@ try {
   await st.getByText(/^main-board\.md: \d+ sections$/).waitFor();
   await st.getByText(/^timecode-board\.md: \d+ sections$/).waitFor();
   await page.getByRole("button", { name: "Extract requirements from 2 document(s)" }).waitFor();
+  assert.match(await page.getByTestId("cost-hint").first().innerText(), /^no AI cost \(the rules can read it all\)$/, "a likely cost is shown before reading");
   await page.getByRole("button", { name: "Extract requirements from 2 document(s)" }).click();
   await page.getByText(/^Extracted \d+ requirement\(s\) from 2 document\(s\)\.$/).waitFor();
   assert.equal(await page.getByTestId("specs").locator("tr[data-status='done']").count(), 2);
@@ -270,6 +271,8 @@ try {
   assert.match(ctx2, /^ {2}- files: sitime-tcxo\.pdf \(datasheet\), osc\.step \(3D model\)$/m);
   assert.match(ctx2, /^Changed since the last plan \(version 1, made \d{4}-\d{2}-\d{2}\)\. This plan replaces it/m);
   assert.match(ctx2, /^Tasks in plan version 1:\n- architecture: System and component architecture/m);
+  const hints = await page.getByTestId("plan-changes").getByTestId("cost-hint").allInnerTexts();
+  assert.deepEqual(hints.map((h) => h.replace(/\$[\d.]+/, "$X")), ["about $X (typical)", "about $X (typical)"], "update and rebuild each show a likely cost");
   await shot(page, "03b-changed");
   await page.getByTestId("plan-changes").getByRole("button", { name: "Update plan v1 with these changes" }).click();
   await page.waitForURL(/\/plans\//);
