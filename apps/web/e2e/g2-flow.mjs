@@ -219,10 +219,15 @@ try {
   const allExecs = await db(`executions?project_id=eq.${projectId}&select=id,task_id,tasks(key)`);
   const calls = {};
   for (const e of allExecs) {
-    const logs = await db(`execution_logs?execution_id=eq.${e.id}&message=like.model%20call*&select=id`);
-    calls[e.tasks.key] = (calls[e.tasks.key] ?? 0) + logs.length;
+    const logs = await db(`execution_logs?execution_id=eq.${e.id}&message=like.model%20call*&select=message`);
+    for (const l of logs) {
+      const k = /\(task_digest\)/.test(l.message) ? `${e.tasks.key} summary` : e.tasks.key;
+      calls[k] = (calls[k] ?? 0) + 1;
+    }
   }
-  assert.deepEqual(calls, { architecture: 1, "power-budget": 1, "enclosure-envelope": 1 });
+  // One design call and one plain-language summary per task: none repeated across the worker kill and resume.
+  assert.deepEqual(calls, { architecture: 1, "power-budget": 1, "enclosure-envelope": 1,
+    "architecture summary": 1, "power-budget summary": 1, "enclosure-envelope summary": 1 });
   console.log("✓ exactly one model call and one committed version per task");
 
   // --- Project overview lists the runs; outsiders see nothing -----------------------------

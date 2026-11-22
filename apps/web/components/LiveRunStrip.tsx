@@ -6,6 +6,7 @@ interface Live {
   run: { id: string; name: string | null; status: string; stop_reason: string | null; ai_max: number; ai_spent: number } | null;
   working?: { key: string; title: string; started_at: string | null; step: string | null }[];
   waiting?: number;
+  questions?: number;
 }
 const mmss = (since: string | null, now: number) => {
   if (!since) return "";
@@ -36,11 +37,14 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
   const href = `/projects/${projectId}/runs/${run.id}`;
   const active = ["pending", "running", "paused"].includes(run.status);
   const waiting = live?.waiting ?? 0;
+  const questions = live?.questions ?? 0;
+  const ask = questions > 0 && <Link className="live-strip-need" href={`/projects/${projectId}/workspace#questions`} data-testid="live-questions">{questions} question{questions > 1 ? "s" : ""} for you</Link>;
   if (!active && !waiting) {
     return (
       <div className={`live-strip live-strip-idle`} data-testid="live-strip">
         <span className="live-strip-dot idle" aria-hidden="true" />
         <span>Last run <strong>{run.status}</strong>{run.stop_reason ? `: ${run.stop_reason}` : ""}</span>
+        {ask}
         <Link className="live-strip-link" href={href}>Open the run</Link>
       </div>
     );
@@ -57,6 +61,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
         {active && !working.length && run.status !== "paused" && <span className="muted"> · between tasks</span>}
       </span>
       {waiting > 0 && <Link className="live-strip-need" href={`${href}#approvals`}>{waiting} waiting for your approval</Link>}
+      {ask}
       <span className="small muted">AI ${run.ai_spent.toFixed(2)} of ${run.ai_max.toFixed(0)}</span>
       <Link className="live-strip-link" href={href}>Open the run →</Link>
     </div>

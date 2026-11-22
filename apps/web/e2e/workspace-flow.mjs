@@ -72,6 +72,11 @@ try {
   const task = async () => (await admin.from("tasks").select("id, status").eq("plan_id", planId).single()).data;
   await waitFor("power task to stop for approval", async () => (await task()).status === "awaiting_approval");
   console.log("✓ power task ran and stopped for approval");
+  // The worker wrote a plain-language summary (offline stand-in here) on the task.
+  assert.match((await admin.from("tasks").select("plain_summary").eq("plan_id", planId).single()).data.plain_summary ?? "", /^Offline stand-in, not AI: "Power tree and budget" is finished/);
+  // A question only the owner can answer, as the worker would raise it.
+  assert.ifError((await admin.from("project_questions").insert({ project_id: project.id, task_id: (await task()).id, question: "Which markets will you sell in first?",
+    why: "It decides which radio certifications to plan for.", recommendation: "US only", options: ["US only", "US and EU"] })).error);
 
   // Owner invites the client by email before the client has an account.
   await page.goto(`${BASE}/projects/${project.id}?tab=team`);
@@ -93,7 +98,17 @@ try {
   // The approval is at the top of the activity panel, with VX Design's checks in plain language.
   const stop = checklist.getByTestId("approval-stop");
   assert.match(await stop.getByTestId("verdict").innerText(), /^(✓ Passed: all \d+ checks passed|No automatic checks)/);
-  assert.match(await stop.innerText(), /Engineering details/);
+  assert.match(await stop.getByTestId("plain-summary").innerText(), /"Power tree and budget" is finished/);
+  assert.match(await stop.innerText(), /See the full technical explanation/);
+  // Questions for you: answered with one of the choices.
+  const q = checklist.getByTestId("question");
+  assert.match(await q.innerText(), /Which markets will you sell in first\?[\s\S]*Recommended: US only/);
+  await q.getByRole("button", { name: "US and EU" }).click();
+  await cpage.getByText("Thanks: the next steps will follow your answer.").waitFor();
+  const { data: answered } = await admin.from("project_questions").select("status, answer").eq("project_id", project.id).single();
+  assert.deepEqual([answered.status, answered.answer], ["answered", "US and EU"]);
+  assert.match(await checklist.getByTestId("answered-questions").innerText(), /Your answers \(1\)/);
+  console.log("✓ plain summary on the approval, and the client answered a question");
   assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
   await shot(cpage, "client-workspace");
   console.log("✓ client joined through the invitation and sees the checklist with the approval stop");
@@ -144,6 +159,7 @@ try {
   const { data: versions } = await admin.from("artifact_versions").select("status").eq("produced_by_task_id", (await task()).id);
   assert.deepEqual(versions.map((v) => v.status), ["committed"]);
   assert.match(await cpage.getByTestId("overview").innerText(), /1 of 1 steps done · 0 waiting for approval/);
+  assert.match(await cpage.getByTestId("checklist").getByTestId("plain-summary").textContent(), /is finished[\s\S]*See the full technical explanation/);
   await shot(cpage, "client-approved");
   const { data: audit } = await admin.from("audit_events").select("event_type, actor_id").eq("project_id", project.id).eq("event_type", "task.approved");
   assert.equal(audit.length, 1);

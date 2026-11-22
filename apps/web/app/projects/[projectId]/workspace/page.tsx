@@ -8,7 +8,8 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
-import { approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { answerQuestion, approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { PlainSummary } from "@/components/PlainSummary";
 import { ChatForm } from "@/components/ChatForm";
 import { CostHint } from "@/components/CostHint";
 import { costHistory, estimate } from "@/lib/cost-estimate";
@@ -73,6 +74,11 @@ export default async function WorkspacePage({ params, searchParams }: {
     const exec = rows[0]?.execution_id;
     return rows.filter((v) => v.execution_id === exec);
   };
+  // Questions only the owner can answer, raised by finished work; runs carry on with the recommendation meanwhile.
+  const { data: questions } = await supabase.from("project_questions").select("id, question, why, recommendation, options, status, answer, answered_at, tasks(title)")
+    .eq("project_id", projectId).order("created_at", { ascending: false }).limit(40);
+  const openQs = (questions ?? []).filter((q) => q.status === "open");
+  const answeredQs = (questions ?? []).filter((q) => q.status === "answered").slice(0, 8);
   const role = me?.role ?? "viewer";
   const canDraft = role === "owner" || role === "engineer";
   const chatCost = role !== "client" ? estimate(await costHistory(supabase, projectId), "chat") : null;
@@ -80,6 +86,7 @@ export default async function WorkspacePage({ params, searchParams }: {
   const { data: chatPlans } = canDraft ? await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null) : { data: [] };
   const drafted = new Map((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
   const canDecide = ["owner", "reviewer", "client"].includes(role);
+  const canAnswer = ["owner", "engineer", "reviewer", "client"].includes(role);
   const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
   const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
   const outputName = new Map(ctx.outputs.map((o) => [o.id, o.name]));
@@ -119,7 +126,7 @@ export default async function WorkspacePage({ params, searchParams }: {
             { key: "concept", label: "Concept", state: c.freeze ? "done" : "you", detail: c.freeze ? `frozen: ${c.freeze.name}` : "freeze the mock-up or a concept", href: href("concepts") },
             { key: "plan", label: "Plan", state: ctx.plan ? "done" : latest ? "you" : "todo", detail: ctx.plan ? `v${ctx.plan.version} approved` : latest ? `v${latest.version} ${latest.status.replace("_", " ")}: approve it` : "not made yet", href: latest ? `${P}/plans/${latest.id}` : `${P}?tab=plans` },
             { key: "design", label: "Design run", state: !ctx.tasks.length ? "todo" : doneN === ctx.tasks.length ? "done" : runActive ? "now" : "you", detail: ctx.tasks.length ? `${doneN} of ${ctx.tasks.length} done${runActive ? ", running" : lastRun ? `, ${lastRun.status}` : ", not started"}` : "after the plan", href: lastRun ? `${P}/runs/${lastRun.id}` : `${P}/runs` },
-            { key: "approvals", label: "Your approvals", state: waitingN ? "you" : "done", detail: waitingN ? `${waitingN} waiting` : "none waiting", href: "#approvals" },
+            { key: "approvals", label: "Your approvals", state: waitingN || openQs.length ? "you" : "done", detail: [waitingN ? `${waitingN} waiting` : "", openQs.length ? `${openQs.length} question(s)` : ""].filter(Boolean).join(", ") || "none waiting", href: openQs.length && !waitingN ? "#questions" : "#approvals" },
             { key: "release", label: "Manufacturer package", state: (releases ?? []).some((r) => r.status === "released") ? "done" : (releases ?? []).length ? "you" : "todo", detail: (releases ?? []).length ? "draft release ready to check" : "at the end of the run", href: `${P}/releases` },
           ];
           return (
@@ -218,7 +225,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                 return (
                   <Link key={t.id} href={href(o.id)} className="tile">
                     <strong>{t.title}</strong>
-                    <span className="small">{o.summary ?? o.name}</span>
+                    <span className="small">{t.plain_summary ?? o.summary ?? o.name}</span>
                     <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status === "committed" ? "approved" : "for review"}</span>
                   </Link>
                 );
@@ -238,6 +245,35 @@ export default async function WorkspacePage({ params, searchParams }: {
           const ago = (iso: string) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? "now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
           return (
             <>
+              {openQs.length > 0 && (
+                <div className="ws-questions" id="questions" data-testid="ws-questions">
+                  <p className="ws-approvals-head">{openQs.length} question{openQs.length > 1 ? "s" : ""} for you</p>
+                  <p className="small">The work does not wait: VX Design follows its recommendation until you answer, and every later step uses your answer.</p>
+                  {openQs.map((q) => (
+                    <div key={q.id} className="ws-question" data-testid="question">
+                      <div><strong>{q.question}</strong></div>
+                      {q.why && <div className="small">{q.why}</div>}
+                      <div className="small q-rec">Recommended: {q.recommendation}</div>
+                      {(q.tasks as unknown as { title: string } | null)?.title && <div className="small muted">Raised by: {(q.tasks as unknown as { title: string }).title}</div>}
+                      {canAnswer ? (
+                        <form className="stack" action={answerQuestion.bind(null, projectId, q.id)}>
+                          {(q.options ?? []).length > 0 && (
+                            <div className="row tight wrap">{(q.options as string[]).map((o) => (
+                              <button key={o} type="submit" name="answer" value={o} className="btn btn-secondary btn-small">{o}</button>
+                            ))}</div>
+                          )}
+                          <input name="custom" placeholder="Or write your own answer" aria-label={`Your answer to: ${q.question}`} />
+                          <div className="row tight">
+                            <SubmitButton name="answer" value="__custom" pendingText="Saving…">Save my answer</SubmitButton>
+                            <SubmitButton variant="secondary" name="answer" value="__recommended" pendingText="Saving…">Use the recommendation</SubmitButton>
+                            <SubmitButton variant="secondary" name="answer" value="__dismiss" pendingText="Saving…">Not relevant</SubmitButton>
+                          </div>
+                        </form>
+                      ) : <div className="small muted">The project owner answers this.</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {wait.length > 0 && (
                 <div className="ws-approvals" id="approvals" data-testid="ws-approvals">
                   <p className="ws-approvals-head">{wait.length} result{wait.length > 1 ? "s" : ""} ready for your go-ahead</p>
@@ -255,9 +291,10 @@ export default async function WorkspacePage({ params, searchParams }: {
                     return (
                       <div key={t.id} className="ws-approval" data-testid="approval-stop">
                         <div><strong>{t.title}</strong></div>
+                        <PlainSummary text={t.plain_summary} />
                         <div className={`verdict verdict-${v.verdict}`} data-testid="verdict">{v.verdict === "passed" || v.verdict === "notes" ? "✓ " : v.verdict === "attention" ? "! " : ""}{v.label}</div>
                         {checks.length > 0 && <ul className="plain-checks">{checks.map((c, i) => { const p = plainCheck(c); return <li key={i} className={`pc-${p.level}`}>{p.level === "pass" ? "✓" : p.level === "note" ? "•" : "✕"} {p.text}</li>; })}</ul>}
-                        <details className="small"><summary>Engineering details</summary>
+                        <details className="small"><summary>See the full technical explanation</summary>
                           {a && <p>{a.reason}</p>}
                           <ul>{checks.map((c, i) => <li key={i}>{c.result}: {c.summary}</li>)}</ul>
                           {o && <p><Link href={href(o.id)}>Open the result in the viewer</Link></p>}
@@ -277,6 +314,12 @@ export default async function WorkspacePage({ params, searchParams }: {
                 </div>
               )}
               {now.length > 0 && <div className="ws-now" data-testid="ws-now"><strong>Working on:</strong> {now.map((t) => t.title).join(", ")}</div>}
+              {answeredQs.length > 0 && (
+                <details className="ws-log" data-testid="answered-questions">
+                  <summary>Your answers ({answeredQs.length})</summary>
+                  <ol>{answeredQs.map((q) => <li key={q.id}><span className="small">{q.question}</span> → <strong className="small">{q.answer}</strong></li>)}</ol>
+                </details>
+              )}
               {(activity ?? []).length > 0 && (
                 <details className="ws-log" open data-testid="ws-log">
                   <summary>Recent activity</summary>
@@ -323,6 +366,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                   <div>{o ? <Link href={href(o.id)}>{t.title}</Link> : t.title}</div>
                   <div className="small muted">{LABEL[t.status] ?? t.status}</div>
                   {a && <div className="small"><a href="#approvals"><strong>Approval needed</strong>: see the top of this panel</a></div>}
+                  {!a && t.status === "complete" && t.plain_summary && <PlainSummary text={t.plain_summary} href={o ? href(o.id) : null} />}
                 </div>
               </li>
             );

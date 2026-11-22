@@ -156,6 +156,14 @@ sit beside the steps.
   approval is recorded with the reason it would have stopped, on the authority of whoever turned it on. Failed checks
   still stop that task while the rest carries on; releases are never issued automatically. A run that stopped for
   input continues as the same run (**Continue the run**), with a new budget, approving what passed when overnight is on.
+- **Plain-language summaries and questions for you.** When a step finishes, a small, inexpensive model writes 2–4
+  sentences in everyday language: what was done, what it means for the product, whether the checks passed. The
+  summary is shown first on approval cards, finished checklist items, result tiles, the run page and the result page,
+  with **See the full technical explanation** one click away. The same pass may raise up to three questions only the
+  owner can decide (markets, budget, features), each with a recommendation. Runs never wait on a question: the work
+  follows the recommendation until someone answers under **Questions for you** in the Workspace (a choice, their own
+  words, the recommendation, or "Not relevant"), and every later step is given the answers. The live strip shows how
+  many questions are open. Cost: part of "Plain-language summaries" on the AI usage page.
 - **Approvals for non-engineers.** Each result waiting for approval says in plain language what VX Design checked
   and whether it passed ("Passed: all 4 checks passed"), with the engineering details folded away. **Approve everything
   that passed** approves every waiting result whose checks all passed; anything with a failed check is held.

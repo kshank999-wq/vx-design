@@ -21,7 +21,7 @@ export interface ProjectContext {
   project: { id: string; name: string; description: string | null };
   requirements: { ref_code: string; status: string; kind: string; text: string }[];
   plan: { version: number; summary: string | null } | null;
-  tasks: { id: string; key: string; title: string; discipline: string; status: string; blocker_reason: string | null; stage: string }[];
+  tasks: { id: string; key: string; title: string; discipline: string; status: string; blocker_reason: string | null; stage: string; plain_summary: string | null }[];
   approvals: { task_id: string; reason: string; requested_at: string }[];
   outputs: { id: string; name: string; version: number; status: string; summary: string | null; task_key: string | null; created_at: string }[];
   checks: { task_key: string | null; kind: string; result: string; summary: string }[];
@@ -59,7 +59,7 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
     .eq("status", "approved").maybeSingle();
   const results = await Promise.all([
     supabase.from("requirements").select("ref_code, status, kind, text").eq("project_id", projectId).neq("status", "rejected").order("ref_code").limit(120),
-    plan ? supabase.from("tasks").select("id, key, title, discipline, status, blocker_reason, stage, created_at").eq("plan_id", plan.id).order("created_at")
+    plan ? supabase.from("tasks").select("id, key, title, discipline, status, blocker_reason, stage, plain_summary, created_at").eq("plan_id", plan.id).order("created_at")
          : Promise.resolve({ data: [] as never[] }),
     supabase.from("approvals").select("task_id, reason, requested_at").eq("project_id", projectId).eq("status", "pending")
       .not("task_id", "is", null).order("requested_at"),

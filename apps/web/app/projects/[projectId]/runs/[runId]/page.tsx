@@ -5,6 +5,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { ElapsedClock } from "@/components/ElapsedClock";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
+import { PlainSummary } from "@/components/PlainSummary";
 import { requireUser } from "@/lib/auth";
 import { continueRun, continueThisRun, controlRun, decideTask, raiseBudget, setAutoApprove } from "./actions";
 
@@ -42,7 +43,7 @@ export default async function RunPage({ params, searchParams }: {
   if (!run) notFound();
 
   const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }, { data: workers }] = await Promise.all([
-    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position")
+    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary")
       .eq("plan_id", run.plan_id).order("position"),
     supabase.from("executions").select("id, task_id, attempt, status, worker_id, checkpoint_seq, resumed_from_id, started_at, finished_at, heartbeat_at, error, summary, compute_seconds")
       .eq("run_id", runId).order("created_at"),
@@ -209,6 +210,7 @@ export default async function RunPage({ params, searchParams }: {
             return (
               <div key={t.id} className="card approval" data-task={t.key}>
                 <div className="row spread"><h3><span className="mono muted">{t.key}</span> {t.title}</h3><span className="pill pill-awaiting_approval">awaiting approval</span></div>
+                <PlainSummary text={t.plain_summary} />
                 {appr && <p className="small">{appr.reason}</p>}
                 {(() => {
                   const render = outputsOf(t.id).find((v) => /\/(render-3d|panel-render|base-top-svg)$/.test(artifactName(v)));

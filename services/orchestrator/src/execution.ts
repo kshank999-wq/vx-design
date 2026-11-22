@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import type { LanguageModel, Usage } from "@vx/planning";
 import { LeaseLostError, type Checkpoint, type ExecutionRow, type RunRow, type TaskRow, type Validation, type WorkerDb } from "./db.ts";
+import { ClaudeModel, DIGEST_MODEL, digestTask, type TaskDigest } from "@vx/planning";
 import { usageCost } from "./pricing.ts";
 
 export class YieldRequested extends Error {}
@@ -180,12 +181,17 @@ export class ExecutionHandle {
 
   /** Per-task spend cap for this run (USD), checked after every charge. */
   costCap: number | null = null;
+  /** Text outputs stored in this attempt (for the plain-language digest). */
+  textOutputs: { name: string; text: string }[] = [];
 
   async storeArtifact(args: Parameters<ExecutorContext["storeArtifact"]>[0]): Promise<StoredFile> {
     this.assertActive();
     const artifactId = await this.db.acquireLock(this.exec.id, this.opts.workerId, args.name, args.kind);
     if (!artifactId) throw new YieldRequested(`artifact ${args.name} is locked by another execution`);
     const bytes = typeof args.content === "string" ? new TextEncoder().encode(args.content) : args.content;
+    if (/^text\/(markdown|plain)/.test(args.contentType) && this.textOutputs.length < 6) {
+      this.textOutputs.push({ name: args.name, text: new TextDecoder().decode(bytes.slice(0, 20000)) });
+    }
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const storagePath = `${this.exec.project_id}/artifacts/${args.name}/${sha256.slice(0, 16)}-${args.filename}`;
     await this.db.upload(storagePath, bytes, args.contentType);
@@ -261,8 +267,29 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
       await handle.log(`failed: ${result.error}`, {}, "error");
       return await db.fail(exec.id, opts.workerId, result.error, result.retryable ? "retry" : "fail", result.validations);
     }
+    // The everyday-language digest (and any owner questions): written before completion so the approval shows it.
+    // A digest that fails never fails the work.
+    let digest: TaskDigest | null = null;
+    try {
+      digest = await handle.step("digest", async () => {
+        const [project, answered] = await Promise.all([db.project(task.project_id), db.answeredQuestions(task.project_id)]);
+        const model = deps.offline ? deps.model : new ClaudeModel({ model: DIGEST_MODEL, effort: "low", maxTokens: 4000 });
+        const r = await digestTask({ project: project.name, task: { title: task.title, discipline: task.discipline, description: task.description },
+          summary: result.summary, checks: result.validations.map((v) => ({ kind: v.kind, result: v.result, summary: v.summary })),
+          outputs: handle.textOutputs, answered }, model);
+        await handle.chargeModelUsage([r.usage], "task_digest");
+        return r.digest;
+      });
+    } catch (e) {
+      if (e instanceof TaskCostCapError || e instanceof YieldRequested || e instanceof LeaseLostError) throw e;
+      await handle.log(`plain-language summary skipped: ${(e as Error).message}`, {}, "warn");
+    }
     await db.beginValidation(exec.id, opts.workerId);
     const status = await db.complete(exec.id, opts.workerId, result.validations, result.summary, result.reviewReason);
+    if (digest) {
+      try { await db.saveDigest(exec.id, task.project_id, task.id, digest); }
+      catch (e) { await handle.log(`could not save the plain-language summary: ${(e as Error).message}`, {}, "warn"); }
+    }
     await handle.log(`finished: task is ${status}`, { task_status: status });
     return status;
   } catch (e) {

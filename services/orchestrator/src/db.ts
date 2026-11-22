@@ -227,10 +227,42 @@ export class WorkerDb {
     return data as RunRow;
   }
 
+  /**
+   * The project's name and description, with the owner's answers to VX Design's questions appended, so every task
+   * (each builds its context from this) works to them.
+   */
   async project(projectId: string): Promise<{ name: string; description: string | null }> {
     const { data, error } = await this.client.from("projects").select("name, description").eq("id", projectId).single();
     if (error) throw new Error(`project: ${error.message}`);
-    return data;
+    const answers = await this.answeredQuestions(projectId);
+    if (!answers.length) return data;
+    return { name: data.name, description: `${data.description ?? ""}\n\nThe owner's answers to earlier questions (follow them):\n` +
+      answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n") };
+  }
+
+  async answeredQuestions(projectId: string): Promise<{ question: string; answer: string }[]> {
+    const { data } = await this.client.from("project_questions").select("question, answer").eq("project_id", projectId).eq("status", "answered").order("answered_at").limit(60);
+    return (data ?? []).map((q) => ({ question: q.question, answer: q.answer ?? "" }));
+  }
+
+  /** The everyday-language summary of an execution and the owner questions it raised (new ones only). */
+  async saveDigest(executionId: string, projectId: string, taskId: string, d: { summary: string; questions: { question: string; why: string; recommendation: string; options: string[] }[] }): Promise<void> {
+    const { error } = await this.client.from("executions").update({ plain_summary: d.summary.slice(0, 2000) }).eq("id", executionId);
+    if (error) throw new Error(`digest: ${error.message}`);
+    const { error: et } = await this.client.from("tasks").update({ plain_summary: d.summary.slice(0, 2000) }).eq("id", taskId);
+    if (et) throw new Error(`digest on task: ${et.message}`);
+    if (!d.questions.length) return;
+    const { data: have } = await this.client.from("project_questions").select("question").eq("project_id", projectId);
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const seen = new Set((have ?? []).map((q) => norm(q.question)));
+    const rows = d.questions.filter((q) => q.question.trim().length >= 3 && !seen.has(norm(q.question))).map((q) => ({
+      project_id: projectId, task_id: taskId, execution_id: executionId, question: q.question.slice(0, 600), why: q.why.slice(0, 600),
+      recommendation: q.recommendation.slice(0, 600) || "Follow the team's default.", options: q.options.slice(0, 4).map((o) => o.slice(0, 120)),
+    }));
+    if (rows.length) {
+      const { error: e2 } = await this.client.from("project_questions").insert(rows);
+      if (e2) throw new Error(`questions: ${e2.message}`);
+    }
   }
 
   async taskRequirements(taskId: string): Promise<{ ref_code: string; kind: string; priority: string; text: string; acceptance_criteria: string | null }[]> {

@@ -11,7 +11,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   const { data: runs } = await supabase.from("runs").select("id, name, status, stop_reason, plan_id, max_ai_spend_usd, created_at")
     .eq("project_id", projectId).order("created_at", { ascending: false }).limit(1);
   const run = runs?.[0];
-  if (!run) return NextResponse.json({ run: null });
+  const { count: questions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
+  if (!run) return NextResponse.json({ run: null, questions: questions ?? 0 });
   const [{ data: execs }, { data: waiting }, { data: costs }] = await Promise.all([
     supabase.from("executions").select("id, task_id, started_at, tasks(key, title)").eq("run_id", run.id).eq("status", "running"),
     supabase.from("tasks").select("id").eq("plan_id", run.plan_id).eq("status", "awaiting_approval"),
@@ -27,5 +28,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     working: (execs ?? []).map((e) => { const t = e.tasks as unknown as { key: string; title: string } | null;
       return { key: t?.key ?? "", title: t?.title ?? "", started_at: e.started_at, step: last.get(e.id) ?? null }; }),
     waiting: (waiting ?? []).length,
+    questions: questions ?? 0,
   }, { headers: { "Cache-Control": "no-store" } });
 }

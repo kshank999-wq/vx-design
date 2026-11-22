@@ -36,3 +36,4 @@ export * from "./progress.ts";
 export * from "./simulation.ts";
 export * from "./design-review.ts";
 export * from "./build-vs-buy.ts";
+export * from "./digest.ts";
