@@ -109,7 +109,7 @@ export async function generateEnclosure(
   const history: { round: number; stage: string; problems: number }[] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderEnclosurePrompt(input) }];
   for (let round = 1; ; round++) {
-    const r = await model.generate({ purpose: round === 1 ? "enclosure_design" : "enclosure_design_repair", system: SYSTEM, messages, schema: EnclosureDesign });
+    const r = await model.generate({ purpose: round === 1 ? "enclosure_design" : "enclosure_design_repair", system: SYSTEM, messages, schema: EnclosureDesign, cache: "follow-up" });
     usage.push(r.usage);
     const c = await check(r.output, round);
     history.push({ round, stage: c.stage, problems: c.problems.length });

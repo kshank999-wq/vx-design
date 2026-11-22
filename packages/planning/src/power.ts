@@ -85,7 +85,7 @@ export async function generatePowerTree(input: PowerInput, model: LanguageModel,
   const history: PowerResult["history"] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: render(input) }];
   for (let round = 1; ; round++) {
-    const r = await model.generate({ purpose: round === 1 ? "power_tree" : "power_tree_repair", system: SYSTEM, messages, schema: PowerTree });
+    const r = await model.generate({ purpose: round === 1 ? "power_tree" : "power_tree_repair", system: SYSTEM, messages, schema: PowerTree, cache: "follow-up" });
     usage.push(r.usage);
     const report = calculate(r.output);
     history.push({ round, errors: report.counts.errors, warnings: report.counts.warnings });

@@ -29,3 +29,17 @@ test("every call is recorded, a billed failure too, and a failing sink never fai
   const r = await broken.generate({ purpose: "x", system: "", messages: [], schema: z.object({ ok: z.boolean() }) });
   assert.equal(r.usage.model, "claude-opus-5-5");
 });
+
+test("cache breakpoints only where a follow-up is expected: the opening message, then each repair round's latest", async () => {
+  const { cacheBreakpoints } = await import("../src/index.ts");
+  const msgs = [{ role: "user" as const, content: "big context" }, { role: "assistant" as const, content: [{ type: "thinking" as const, thinking: "", signature: "s" }, { type: "text" as const, text: "{}" }] },
+                { role: "user" as const, content: "fix these problems" }];
+  assert.deepEqual(cacheBreakpoints(msgs), msgs, "no hint: nothing cached");
+  const one = cacheBreakpoints(msgs.slice(0, 1), "follow-up");
+  assert.deepEqual(one[0]!.content, [{ type: "text", text: "big context", cache_control: { type: "ephemeral" } }]);
+  const three = cacheBreakpoints(msgs, "follow-up");
+  assert.deepEqual(three[2]!.content, [{ type: "text", text: "fix these problems", cache_control: { type: "ephemeral" } }]);
+  assert.equal(three[1], msgs[1], "earlier assistant turns are left exactly as returned");
+  const own = [{ role: "user" as const, content: [{ type: "text" as const, text: "ctx", cache_control: { type: "ephemeral" as const } }, { type: "text" as const, text: "q" }] }];
+  assert.deepEqual(cacheBreakpoints(own, "follow-up"), own, "a caller's own breakpoint is kept as it is");
+});

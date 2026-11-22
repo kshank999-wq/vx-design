@@ -26,6 +26,13 @@ export interface GenerateRequest<T> {
   maxTokens?: number;
   /** Reasoning effort for this call; defaults to the model's setting. */
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /**
+   * "follow-up": another call with the same opening message is likely within minutes (a repair loop that usually
+   * runs more than once), so the opening message is cached (written at 1.25x, read back at 0.05x) and each repair
+   * round caches what it sends for the next. Leave unset for calls that usually stand alone (plans and specification
+   * reading, whose mistakes are now mostly fixed in code): the cache write would rarely be read back.
+   */
+  cache?: "follow-up";
 }
 
 export interface GenerateResult<T> {
@@ -37,6 +44,32 @@ export interface GenerateResult<T> {
 
 export interface LanguageModel {
   generate<T>(req: GenerateRequest<T>): Promise<GenerateResult<T>>;
+}
+
+/** A message with a cache breakpoint on its last block that can carry one (thinking blocks cannot). */
+function withBreakpoint(m: Anthropic.Beta.BetaMessageParam): Anthropic.Beta.BetaMessageParam {
+  if (m.role !== "user" && m.role !== "assistant") return m;
+  const content = m.content as string | Anthropic.Beta.BetaContentBlockParam[];
+  const blocks: Anthropic.Beta.BetaContentBlockParam[] = typeof content === "string" ? [{ type: "text", text: content }] : [...content];
+  if (blocks.some((b) => "cache_control" in b && b.cache_control)) return m;     // the caller placed its own
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i]!;
+    if (b.type === "thinking" || b.type === "redacted_thinking") continue;
+    blocks[i] = { ...b, cache_control: { type: "ephemeral" } } as Anthropic.Beta.BetaContentBlockParam;
+    break;
+  }
+  return { ...m, content: blocks } as Anthropic.Beta.BetaMessageParam;
+}
+
+/**
+ * Where to cache in this call, when a follow-up is expected: the opening message, and the latest message of a repair
+ * round, so the next round reads everything before it from the cache. Breakpoints a caller placed itself (the chat's
+ * project context) are kept as they are.
+ */
+export function cacheBreakpoints(messages: Anthropic.Beta.BetaMessageParam[], cache?: "follow-up"): Anthropic.Beta.BetaMessageParam[] {
+  // A call that usually stands alone writes no cache: the 25% write premium would rarely be read back.
+  if (cache !== "follow-up") return messages;
+  return messages.map((m, i) => ((i === 0 && cache === "follow-up") || (i === messages.length - 1 && messages.length > 1) ? withBreakpoint(m) : m));
 }
 
 export class ModelOutputError extends Error {
@@ -82,7 +115,7 @@ export class ClaudeModel implements LanguageModel {
       output_config: { effort: req.effort ?? this.effort, format: betaZodOutputFormat(req.schema) },
       // The system prompt is identical across calls of the same purpose: cache it.
       system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
-      messages: req.messages,
+      messages: cacheBreakpoints(req.messages, req.cache),
     });
     if (req.onText) stream.on("text", (delta) => req.onText!(delta));
     let message;

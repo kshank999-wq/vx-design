@@ -116,7 +116,7 @@ export async function generateCircuit(
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderCircuitPrompt(input) }];
   for (let round = 1; ; round++) {
     const result = await model.generate({
-      purpose: round === 1 ? "circuit_design" : "circuit_design_repair", system: SYSTEM, messages, schema: CircuitDesign,
+      purpose: round === 1 ? "circuit_design" : "circuit_design_repair", system: SYSTEM, messages, schema: CircuitDesign, cache: "follow-up",
     });
     usage.push(result.usage);
     const c = await check(result.output);

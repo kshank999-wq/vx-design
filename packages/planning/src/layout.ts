@@ -139,7 +139,7 @@ export async function generateLayout(
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderLayoutPrompt(input) }];
   for (let round = 1; ; round++) {
     const result = await model.generate({
-      purpose: round === 1 ? "board_layout" : "board_layout_repair", system: SYSTEM, messages, schema: BoardLayout,
+      purpose: round === 1 ? "board_layout" : "board_layout_repair", system: SYSTEM, messages, schema: BoardLayout, cache: "follow-up",
     });
     usage.push(result.usage);
     const c = await check(result.output, round);
