@@ -282,7 +282,9 @@ export default async function PlanPage({ params, searchParams }: {
             <div className="card"><h3>Assumptions</h3><ul>{(plan.assumptions as string[]).map((a, i) => <li key={i}>{a}</li>)}</ul></div>
           )}
           {(gen.adjustments ?? []).length > 0 && (
-            <div className="card"><h3>Policy adjustments</h3><ul>{gen.adjustments!.map((a, i) => <li key={i}>{a}</li>)}</ul></div>
+            <div className="card" data-testid="adjustments"><h3>Changed by rule ({gen.adjustments!.length})</h3>
+              <p className="small muted">Fixed in code instead of a paid repair round with the model, or set by policy. Check anything placed by rule and move it if another task fits better.</p>
+              <ul>{gen.adjustments!.map((a, i) => <li key={i}>{a}</li>)}</ul></div>
           )}
         </section>
       )}

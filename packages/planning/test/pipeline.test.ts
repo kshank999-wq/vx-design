@@ -79,17 +79,13 @@ const task = (key: string, upstream: string[], refs: string[], extra: Partial<Pl
   ...extra,
 });
 
-test("plan: validation problems are fed back and the repaired plan is ordered", async () => {
+test("plan: problems code cannot fix are fed back and the repaired plan is ordered", async () => {
   const model = new ScriptedModel([
-    () => ({
-      summary: "v1",
-      tasks: [task("arch", ["layout"], ["REQ-PWR-001"]), task("layout", ["arch"], ["REQ-IFC-001"])],
-      deferred_requirements: [],
-      assumptions: [],
-    }),
+    // An empty plan: nothing for code to place requirements in, so the model is asked again.
+    () => ({ summary: "v1", tasks: [], deferred_requirements: [], assumptions: [] }),
     (r) => {
       const feedback = r.messages.at(-1)!.content as string;
-      assert.match(feedback, /dependency cycle/);
+      assert.match(feedback, /the plan has no tasks/);
       assert.match(feedback, /REQ-MEC-001 is not covered/);
       assert.doesNotMatch(feedback, /REQ-GEN-001/); // rejected requirements are not required
       return {
@@ -114,12 +110,12 @@ test("plan: validation problems are fed back and the repaired plan is ordered", 
 });
 
 test("plan: gives up after the repair budget with the remaining problems", async () => {
-  const invalid = () => ({ summary: "", tasks: [task("a", ["missing"], [])], deferred_requirements: [], assumptions: [] });
+  const invalid = () => ({ summary: "", tasks: [], deferred_requirements: [], assumptions: [] });
   const model = new ScriptedModel([invalid, invalid, invalid]);
   await assert.rejects(generatePlan(REQS, model), (e: unknown) => {
     assert.ok(e instanceof PlanValidationError);
     assert.equal(e.attempts, 3);
-    assert.ok(e.problems.some((p) => p.code === "unknown_upstream"));
+    assert.ok(e.problems.some((p) => p.code === "empty"));
     return true;
   });
   assert.equal(model.calls.length, 3);

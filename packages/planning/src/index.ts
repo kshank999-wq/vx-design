@@ -9,6 +9,7 @@ export * from "./extract.ts";
 export * from "./plan.ts";
 export * from "./plan-inputs.ts";
 export * from "./plan-revise.ts";
+export * from "./plan-autofix.ts";
 export * from "./prior-work.ts";
 export * from "./plan-payload.ts";
 export * from "./llm/offline.ts";

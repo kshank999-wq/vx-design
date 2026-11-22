@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { Discipline, PlannedTask, RiskLevel, ValidationKind, topologicalOrder } from "@vx/contracts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
+import { autoFixPlan } from "./plan-autofix.ts";
 
 export const PLAN_PROMPT_VERSION = "plan-v3";
 const MAX_REPAIR_ROUNDS = 2;
@@ -136,17 +137,24 @@ export async function generatePlan(
   for (let attempt = 1; ; attempt++) {
     const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: PLAN_SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
     usage.push(result.usage);
-    const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds, opts.mustAddress ?? []);
+    let output = result.output, fixes: string[] = [];
+    let problems = validatePlan(output, active.map((r) => r.refCode), inputIds, opts.mustAddress ?? []);
+    // Mechanical failures are fixed in code; the model is asked again only for what code cannot decide.
+    if (problems.length) {
+      const f = autoFixPlan(output, { requirements: active, inputIds, mustAddress: opts.mustAddress ?? [] });
+      const left = validatePlan(f.plan, active.map((r) => r.refCode), inputIds, opts.mustAddress ?? []);
+      if (left.length < problems.length) { output = f.plan; fixes = f.fixes; problems = left; }
+    }
     if (!problems.length) {
-      const { tasks, adjustments } = normalizePlan(result.output);
+      const { tasks, adjustments } = normalizePlan(output);
       return {
         promptVersion: PLAN_PROMPT_VERSION,
-        summary: result.output.summary,
+        summary: output.summary,
         tasks,
-        deferred: result.output.deferred_requirements,
-        assumptions: result.output.assumptions,
+        deferred: output.deferred_requirements,
+        assumptions: output.assumptions,
         attempts: attempt,
-        adjustments,
+        adjustments: [...fixes, ...adjustments],
         usage,
       };
     }

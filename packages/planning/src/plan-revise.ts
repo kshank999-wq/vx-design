@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import type { LanguageModel, Usage } from "./llm/model.ts";
+import { autoFixPlan } from "./plan-autofix.ts";
 import { normalizePlan, PLAN_SYSTEM, PlanOutput, PlanValidationError, validatePlan, type CapabilityInput, type PlanProblem, type PlanResult, type RequirementInput } from "./plan.ts";
 
 export const PLAN_REVISE_PROMPT_VERSION = "plan-revise-v1";
@@ -103,7 +104,13 @@ export async function revisePlan(
       t.basis = { mode: "new", sources: [], reason: "Kept from the previous plan; nothing earlier to build on.", concerns: [], alternatives: [] };
       merged.adjustments.push(`"${t.key}": kept as new work (no basis in the previous plan)`);
     }
-    const problems: PlanProblem[] = validatePlan(merged.plan, refs, opts.inputIds ?? [], must);
+    let problems: PlanProblem[] = validatePlan(merged.plan, refs, opts.inputIds ?? [], must);
+    // Mechanical failures are fixed in code; the model is asked again only for what code cannot decide.
+    if (problems.length) {
+      const f = autoFixPlan(merged.plan, { requirements: active, inputIds: opts.inputIds ?? [], mustAddress: must });
+      const left = validatePlan(f.plan, refs, opts.inputIds ?? [], must);
+      if (left.length < problems.length) { merged.plan = f.plan; merged.adjustments.push(...f.fixes); problems = left; }
+    }
     if (!problems.length) {
       const { tasks: ordered, adjustments } = normalizePlan(merged.plan);
       return {
