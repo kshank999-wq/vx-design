@@ -83,7 +83,7 @@ export async function authorizeRun(projectId: string, planId: string, form: Form
     p_allowed_risk_levels: risks,
     p_max_retries_per_task: retries,
     p_task_ids: null,
-    p_stop_conditions: { stop_on_failure: form.get("stop_on_failure") === "on" },
+    p_stop_conditions: { stop_on_failure: form.get("stop_on_failure") === "on", auto_approve: form.get("auto_approve") === "on" },
     p_name: String(form.get("name") ?? "").trim() || null,
   });
   if (error) fail(path, error);

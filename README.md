@@ -151,6 +151,11 @@ sit beside the steps.
   run, your approvals, manufacturer package: done, working, or your turn) and its activity panel with the results
   waiting for approval, what is working now and the recent activity log. With stage gates off, the stage bar follows
   the work.
+- **Overnight runs and continuing a run.** "Run straight through (overnight)" (when authorizing, on the run page, or
+  when continuing) approves every result whose VX Design checks pass instead of stopping for it; each automatic
+  approval is recorded with the reason it would have stopped, on the authority of whoever turned it on. Failed checks
+  still stop that task while the rest carries on; releases are never issued automatically. A run that stopped for
+  input continues as the same run (**Continue the run**), with a new budget, approving what passed when overnight is on.
 - **Approvals for non-engineers.** Each result waiting for approval says in plain language what VX Design checked
   and whether it passed ("Passed: all 4 checks passed"), with the engineering details folded away. **Approve everything
   that passed** approves every waiting result whose checks all passed; anything with a failed check is held.

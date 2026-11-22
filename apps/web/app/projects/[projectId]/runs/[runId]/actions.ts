@@ -61,3 +61,24 @@ export async function raiseBudget(projectId: string, runId: string, form: FormDa
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(`Budget raised to $${ai} AI and $${compute} compute${data === "running" ? "; the run continues." : "."}`)}`);
 }
+
+/** Continues this run (not a new one): reopened with the budget and overnight setting given; waiting results are approved when overnight is on. */
+export async function continueThisRun(projectId: string, runId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const auto = form.get("auto_approve") === "on";
+  const { data, error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: Number(form.get("ai")) || 0, p_auto_approve: auto });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(`The run continues${auto ? " straight through: results whose checks pass are approved automatically" : ""}.` +
+    (Number(data) ? ` ${data} waiting result(s) approved.` : ""))}`);
+}
+
+export async function setAutoApprove(projectId: string, runId: string, on: boolean) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("set_run_auto_approve", { p_run: runId, p_on: on });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(on ? "Running straight through: results whose checks pass are approved automatically." : "Stopping for approvals again.")}`);
+}

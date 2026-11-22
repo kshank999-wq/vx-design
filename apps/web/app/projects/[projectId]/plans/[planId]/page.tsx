@@ -164,6 +164,8 @@ export default async function PlanPage({ params, searchParams }: {
                     disabled={r === "critical" && role !== "owner"} /> {r}</label>
                 ))}
               </fieldset>
+              <label className="inline" data-testid="auto-approve-option"><input type="checkbox" name="auto_approve" /> <span><strong>Run straight through (overnight)</strong>: approve every result whose
+                VX Design checks pass, without stopping. Only failed checks stop a task; the rest carries on. Every automatic approval is recorded.</span></label>
               <label className="inline"><input type="checkbox" name="stop_on_failure" /> Stop the run at the first failed or blocked task</label>
               <div><SubmitButton pendingText="Authorizing…">Authorize run</SubmitButton></div>
             </form>

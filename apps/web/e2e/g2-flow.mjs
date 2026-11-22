@@ -183,33 +183,32 @@ try {
   await page.getByText("Approved: outputs committed").waitFor();
   console.log("✓ architecture approved and committed from the run page");
 
-  // --- Continue: power budget and envelope run; schematic has no executor yet -------------
-  await page.getByRole("button", { name: "Continue in a new run" }).click();
-  await page.waitForURL((u) => u.pathname.includes("/runs/") && !u.href.startsWith(run1Url));
-  const run2Url = page.url().split("?")[0];
-  const run2 = run2Url.split("/").pop();
-  await waitFor("run 2 report", async () => (await runStatus(run2))?.report, 90_000);
-  await page.reload();
-  await page.getByTestId("run-report").waitFor();
-  for (const key of ["power-budget", "enclosure-envelope"]) {
-    await page.locator(`.approval[data-task=${key}]`).getByRole("button", { name: "Approve and commit" }).click();
-    await page.getByText("Approved: outputs committed").waitFor();
-  }
-  await page.getByRole("button", { name: "Continue in a new run" }).click();
-  await page.waitForURL((u) => u.pathname.includes("/runs/") && !u.href.startsWith(run2Url));
-  const run3Url = page.url().split("?")[0];
-  const run3 = run3Url.split("/").pop();
-  await waitFor("run 3 report", async () => (await runStatus(run3))?.report, 90_000);
-  await page.reload();
-  await page.getByTestId("run-report").waitFor();
+  // --- Continue the same run: power budget and envelope run; schematic has no executor yet --------
+  const continueRun = async (auto) => {
+    const cont = page.getByTestId("continue-run");
+    if (!auto) await cont.getByLabel("run straight through").uncheck();
+    await cont.getByRole("button", { name: /continue/i }).click();
+    await page.getByText(/^The run continues/).waitFor();
+    assert.equal(page.url().split("?")[0], run1Url, "the same run continues; no new run");
+    await waitFor("the run to stop again", async () => { const r = await runStatus(run1); return r?.status === "stopped" && r.report; }, 90_000);
+    await page.goto(run1Url);
+    await page.getByTestId("run-report").waitFor();
+  };
+  await continueRun(false);
+  await page.locator(".approval[data-task=power-budget]").getByRole("button", { name: "Approve and commit" }).click();
+  await page.getByText("Approved: outputs committed").waitFor();
+  // Overnight: the envelope still waiting is approved by continuing straight through, and nothing stops for approval after.
+  await continueRun(true);
+  const autoApproved = await db(`approvals?task_id=eq.${(await db(`tasks?plan_id=eq.${planId}&key=eq.enclosure-envelope&select=id`))[0].id}&select=status,response_note`);
+  assert.ok(autoApproved.some((x) => x.status === "approved" && /every VX Design check passed/.test(x.response_note)), JSON.stringify(autoApproved));
   await page.getByText(/schematic needs a worker that can run schematic tasks \(the KiCad engineering worker\)/).waitFor();
-  await shot(page, "run3-report-waiting-for-kicad");
+  await shot(page, "run-report-waiting-for-kicad");
   const tasks = await taskStatus(planId);
   assert.deepEqual(tasks, {
     architecture: "complete", "power-budget": "complete", "enclosure-envelope": "complete",
     schematic: "ready", "pcb-layout": "ready", verification: "ready",
   });
-  console.log("✓ runs 2 and 3: briefs approved and committed; schematic waits for a KiCad worker (report says so)");
+  console.log("✓ the same run continued twice (approval by hand, then straight through): briefs committed; schematic waits for a KiCad worker");
 
   // --- No duplicate committed work, no repeated model calls -------------------------------
   const versions = await db(`artifact_versions?project_id=eq.${projectId}&select=id,status,produced_by_task_id,artifact_id`);
@@ -228,7 +227,7 @@ try {
 
   // --- Project overview lists the runs; outsiders see nothing -----------------------------
   await page.goto(`${projectUrl}?tab=plans`);
-  await page.getByText(/Overnight 1 \(continued\)/).first().waitFor();
+  await page.getByText(/Overnight 1/).first().waitFor();
   await shot(page, "project-runs");
   const other = await newPage(browser);
   await signIn(other, { email: `g2-outsider-${Date.now()}@example.test`, password: "correct-horse-battery" }, true);

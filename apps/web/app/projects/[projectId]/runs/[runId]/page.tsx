@@ -6,7 +6,7 @@ import { ElapsedClock } from "@/components/ElapsedClock";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { continueRun, controlRun, decideTask, raiseBudget } from "./actions";
+import { continueRun, continueThisRun, controlRun, decideTask, raiseBudget, setAutoApprove } from "./actions";
 
 interface Report {
   headline: string;
@@ -85,7 +85,7 @@ export default async function RunPage({ params, searchParams }: {
   // Something in scope could run now (e.g. after an approval): offer a follow-up run.
   const runnable = (tasks ?? []).filter((t) => t.status === "ready" && inScope(t)
     && (depRows ?? []).filter((d) => d.task_id === t.id).every((d) => taskStatus.get(d.depends_on_task_id) === "complete"));
-  const canContinue = canControl && !active && !(activeRuns ?? []).length && runnable.length > 0;
+  const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0) && !["canceled", "failed"].includes(run.status);
   // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
   const online = new Set((workers ?? []).flatMap((w) => w.disciplines as string[]));
   const uncovered = run.status === "running" && (workers ?? []).length > 0
@@ -147,6 +147,15 @@ export default async function RunPage({ params, searchParams }: {
                 </form>
               )}
             </div>
+            {canControl && (
+              <div className="row tight small" data-testid="auto-approve">
+                {(run.stop_conditions as { auto_approve?: boolean })?.auto_approve
+                  ? <><span><strong>Running straight through:</strong> results whose checks pass are approved automatically.</span>
+                      <form action={setAutoApprove.bind(null, projectId, runId, false)}><SubmitButton variant="secondary" pendingText="…">Stop for my approvals instead</SubmitButton></form></>
+                  : <><span>Stops for your approvals.</span>
+                      <form action={setAutoApprove.bind(null, projectId, runId, true)}><SubmitButton variant="secondary" pendingText="…">Run straight through (overnight)</SubmitButton></form></>}
+              </div>
+            )}
             {share >= 0.8 && <p className="small" data-testid="budget-warning"><strong>The AI budget is nearly used:</strong> the run stops when it is reached. Raise it to keep going.</p>}
           </section>
         );
@@ -236,10 +245,11 @@ export default async function RunPage({ params, searchParams }: {
 
       {canContinue && (
         <div className="card row spread">
-          <span className="small">{runnable.map((t) => t.key).join(", ")} can run now.</span>
-          <form className="row tight" action={continueRun.bind(null, projectId, runId)}>
+          <span className="small">{runnable.length ? <>Next up: {runnable.map((t) => t.title).slice(0, 4).join(", ")}{runnable.length > 4 ? ` and ${runnable.length - 4} more` : ""}.</> : <>{waiting.length} result(s) wait for your go-ahead; then the run continues.</>}</span>
+          <form className="row tight" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
             <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
-            <SubmitButton pendingText="Authorizing…">Continue in a new run</SubmitButton></form>
+            <label className="inline small"><input type="checkbox" name="auto_approve" defaultChecked /> run straight through</label>
+            <SubmitButton pendingText="Continuing…">{waiting.length ? "Approve what passed and continue" : "Continue the run"}</SubmitButton></form>
         </div>
       )}
 
