@@ -115,7 +115,19 @@ from comes together, and where the plan is generated:
      script.
    - **Concepts:** image references can be given to a concept round. The image model gets them as reference images,
      and their notes go into the brief.
-3. **Parts already chosen.** Parts someone has already picked (`public.project_parts`), grouped by subsystem:
+3. **Parts already chosen.** Upload the manufacturer datasheets (PDF, or Word/text) and 3D or CAD files (STEP, STL,
+   IGES); nothing has to be typed (`@vx/planning` part-identify.ts).
+   - **Datasheets:** each is read for the orderable part number, which is kept only if it appears in the datasheet (a
+     listed variant that does is used instead). Also read: the manufacturer, what the part is, its subsystem and up to
+     12 key specifications. The part is created, or filled in if already listed, with the file attached. Up to 8 are
+     read per press.
+   - **Models:** each is attached to the part whose number (or variant) is in its STEP header or product names, or in
+     its file name. The longest match wins.
+   - **Unplaced files:** a file that cannot be read or matched is listed with the reason, and a person picks the part
+     or types the number.
+   - **By hand:** a part can still be typed in, from a collapsed form.
+
+   Parts someone has already picked (`public.project_parts`), grouped by subsystem:
    - **Each one has:** part number, manufacturer, what it is for, subsystem, how far it got (candidate, selected,
      designed in, laid out, verified, rejected) and a note. A part number is listed once, ignoring case and punctuation.
    - **Files:** datasheets, 3D models (STEP) and drawings are attached to the part. The kind is worked out from the

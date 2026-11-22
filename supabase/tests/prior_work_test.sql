@@ -85,6 +85,18 @@ insert into ids select 'plan', public.create_plan_version('ffffffff-0000-0000-00
     'basis', '{"mode": "replace", "sources": ["PR-3"], "reason": "drifts", "concerns": ["2 ppm"], "alternatives": ["SiT5356 TCXO"]}'::jsonb))));
 select pg_temp.check((select basis ->> 'mode' = 'replace' and basis -> 'alternatives' ->> 0 = 'SiT5356 TCXO' from public.tasks where plan_id = pg_temp.id('plan')), 'replace basis');
 
+-- Parts from files: a read datasheet creates the part (or fills in an existing one) and attaches the file.
+insert into ids select 'ds', public.add_project_reference('ffffffff-0000-0000-0000-000000000001', 'datasheet', 'TCXO datasheet', null,
+  'sit.pdf', 'ffffffff-0000-0000-0000-000000000001/references/pw-sit.pdf', repeat('8', 64), 1000, 'application/pdf');
+insert into ids select 'p2', public.record_part_identification(pg_temp.id('ds'), 'SiT5356AI-FQ', 'SiTime', '10 MHz TCXO', 'timecode', '[{"name": "Stability", "value": "±0.1 ppm"}]', null);
+select pg_temp.check((select status = 'selected' and specs -> 0 ->> 'value' = '±0.1 ppm' from public.project_parts where id = pg_temp.id('p2')), 'part from datasheet');
+select pg_temp.check((select part_id = pg_temp.id('p2') and identified_at is not null from public.project_references where id = pg_temp.id('ds')), 'datasheet attached');
+select pg_temp.check((select public.record_part_identification(pg_temp.id('ds'), 'sit5356ai fq', 'Other', 'x', 'other', '[]', null) = pg_temp.id('p2')), 'same part found by number');
+select pg_temp.check((select manufacturer = 'SiTime' from public.project_parts where id = pg_temp.id('p2')), 'what was there is kept');
+select pg_temp.expect_error($$select public.record_part_identification(pg_temp.id('ds'), '?', null, null, null, '[]', null)$$, 'no part number');
+select public.note_part_file(pg_temp.id('ds'), 'checked');
+select pg_temp.check((select identify_note = 'checked' from public.project_references where id = pg_temp.id('ds')), 'noted');
+
 -- Removing a part detaches its files.
 select public.remove_project_part(pg_temp.id('p1'));
 select pg_temp.check((select part_id is null from public.project_references where id = pg_temp.id('ref')), 'files detached');

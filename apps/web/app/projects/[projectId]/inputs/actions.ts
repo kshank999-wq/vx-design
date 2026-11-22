@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { extractRequirements } from "@vx/planning";
+import { datasheetText, extractRequirements, identifyPart, matchModelToPart, stepNames } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
@@ -173,4 +173,85 @@ export async function editRegisterItem(projectId: string, registerId: string, it
   });
   if (error) fail(await here(projectId), error);
   go(await here(projectId), `${itemId} saved.`);
+}
+
+const PART_FILE_KINDS_READ = ["datasheet", "model_3d"];
+const READ_AT_ONCE = 8;
+
+/**
+ * Reads the part files not yet read: each datasheet becomes a part (part number, manufacturer, what it is, subsystem,
+ * key specs) with the file attached; each 3D model is attached to the part whose number is inside it or in its name.
+ * What cannot be read is noted for a person. Datasheets are read a few at a time.
+ */
+export async function identifyPartFiles(projectId: string): Promise<UploadOutcome> {
+  const { supabase } = await requireUser();
+  let choice;
+  try { choice = getModel(); } catch (e) { return { ok: false, message: (e as Error).message }; }
+  const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path").eq("project_id", projectId)
+    .is("part_id", null).is("identified_at", null).in("kind", PART_FILE_KINDS_READ).order("ref_no");
+  const sheets = (files ?? []).filter((f) => f.kind === "datasheet").slice(0, READ_AT_ONCE);
+  const models = (files ?? []).filter((f) => f.kind === "model_3d");
+  const found: string[] = [], problems: string[] = [];
+  await Promise.all(sheets.map(async (f) => {
+    try {
+      const { data } = await supabase.storage.from("project-files").download(f.storage_path);
+      const text = data ? await datasheetText(new Uint8Array(await data.arrayBuffer()), f.filename) : null;
+      if (!text) throw new Error("no text in the file (a scanned PDF?)");
+      const r = await identifyPart(text, f.filename, choice.model);
+      if (!r.identity) throw new Error(r.problem ?? "not identified");
+      const id = r.identity;
+      const { error } = await supabase.rpc("record_part_identification", { p_reference: f.id, p_mpn: id.mpn, p_manufacturer: id.manufacturer, p_role: id.title,
+        p_subsystem: id.subsystem, p_specs: id.specs, p_summary: id.variants.length ? `Other ordering codes in the datasheet: ${id.variants.join(", ")}` : null });
+      if (error) throw new Error(error.message);
+      found.push(`${id.mpn}${id.manufacturer ? ` (${id.manufacturer})` : ""}`);
+    } catch (e) {
+      problems.push(`${f.filename}: ${(e as Error).message}`);
+      await supabase.rpc("note_part_file", { p_reference: f.id, p_note: (e as Error).message });
+    }
+  }));
+  // Models after datasheets, so they can match the parts just found.
+  const { data: parts } = await supabase.from("project_parts").select("id, mpn, summary").eq("project_id", projectId);
+  const known = (parts ?? []).map((p) => ({ ...p, variants: /Other ordering codes in the datasheet: (.*)$/.exec(p.summary ?? "")?.[1]?.split(", ") ?? [] }));
+  let attached = 0;
+  for (const f of models) {
+    let inside: string[] = [];
+    if (/\.(step|stp)$/i.test(f.filename)) {
+      const { data } = await supabase.storage.from("project-files").download(f.storage_path);
+      if (data) inside = stepNames(new Uint8Array(await data.arrayBuffer()));
+    }
+    const p = matchModelToPart(f.filename, inside, known);
+    if (p) {
+      const { error } = await supabase.rpc("attach_reference_to_part", { p_reference: f.id, p_part: p.id });
+      if (!error) { attached++; await supabase.rpc("note_part_file", { p_reference: f.id, p_note: `matched to ${p.mpn}` }); continue; }
+    }
+    await supabase.rpc("note_part_file", { p_reference: f.id, p_note: "no part number of a listed part found in this model or its file name" });
+  }
+  revalidatePath(base(projectId));
+  const more = (files ?? []).filter((f) => f.kind === "datasheet").length - sheets.length;
+  const msg = [found.length ? `Found ${found.length} part(s): ${found.join(", ")}.` : "", attached ? `Attached ${attached} model file(s).` : "",
+    problems.length ? `Not read: ${problems.join(" | ")}` : "", more > 0 ? `${more} more datasheet(s) to read: press "Read the files" again.` : ""].filter(Boolean).join(" ");
+  return { ok: problems.length === 0, message: msg || "Nothing new to read." };
+}
+
+/** A file that was not matched: attach it to a part a person picks, or (a datasheet) create the part from a typed number. */
+export async function placePartFile(projectId: string, referenceId: string, form: FormData) {
+  const { supabase } = await requireUser();
+  const partId = str(form, "part_id"), mpn = str(form, "mpn");
+  if (partId) {
+    const { error } = await supabase.rpc("attach_reference_to_part", { p_reference: referenceId, p_part: partId });
+    if (error) fail(await here(projectId), error);
+    go(await here(projectId), "File attached.");
+  }
+  if (!mpn) fail(await here(projectId), "Choose a part, or type the part number.");
+  const { error } = await supabase.rpc("record_part_identification", { p_reference: referenceId, p_mpn: mpn, p_manufacturer: str(form, "manufacturer") || null,
+    p_role: str(form, "role") || mpn, p_subsystem: str(form, "subsystem") || "other", p_specs: [], p_summary: null });
+  if (error) fail(await here(projectId), error);
+  go(await here(projectId), `${mpn} added with this file.`);
+}
+
+/** The "Read the files" button: reads what is left and reports on the page. */
+export async function readPartFiles(projectId: string) {
+  const r = await identifyPartFiles(projectId);
+  if (!r.ok && !/Found|Attached/.test(r.message)) fail(await here(projectId), r.message);
+  go(await here(projectId), r.message);
 }

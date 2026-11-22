@@ -14,6 +14,7 @@ import { OFFLINE_FIXTURE_CONCEPT } from "../concept.ts";
 import { offlineFluxHistory } from "../flux-history.ts";
 import { offlinePriorWork } from "../prior-work.ts";
 import { offlineAssembly } from "../assembly.ts";
+import { offlinePartIdentity } from "../part-identify.ts";
 
 const KIND_KEYWORDS: [string, RegExp][] = [
   ["power", /\b(rail|current|voltage|power|battery|regulator|mA|V)\b/i],
@@ -36,6 +37,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("flux_history") ? offlineFluxHistory(prompt)
       : req.purpose.startsWith("prior_work") ? offlinePriorWork(prompt)
       : req.purpose.startsWith("assembly_instructions") ? offlineAssembly(prompt)
+      : req.purpose.startsWith("part_identify") ? offlinePartIdentity(prompt)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {

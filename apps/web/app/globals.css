@@ -370,3 +370,4 @@ main.setup { max-width: 1340px; }
 .filters { margin-bottom: 8px; }
 .pager { justify-content: center; margin-top: 12px; }
 .overview-tiles { margin: 14px 0; }
+.dropzone { border: 2px dashed var(--line); background: var(--sub); } .unplaced { padding: 6px 0; border-top: 1px solid var(--line2); }

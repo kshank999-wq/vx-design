@@ -9,7 +9,7 @@ export const VISUAL_KINDS = REFERENCE_KINDS.filter(([k]) => ["mockup", "sketch",
 export const PART_FILE_KINDS = REFERENCE_KINDS.filter(([k]) => ["datasheet", "model_3d", "drawing", "other"].includes(k));
 /** A part file's kind from its name: STEP is a 3D model, PDF a datasheet, an image or DXF a drawing. */
 export function partFileKind(name: string): string {
-  if (/\.(step|stp|stl)$/i.test(name)) return "model_3d";
+  if (/\.(step|stp|stl|igs|iges|wrl|x_t|x_b|3mf|obj)$/i.test(name)) return "model_3d";
   if (/\.pdf$/i.test(name)) return "datasheet";
   if (/\.(png|jpe?g|webp|gif|dxf)$/i.test(name)) return "drawing";
   return "other";

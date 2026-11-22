@@ -31,6 +31,18 @@ const SPEC_MAIN = `# Slate main board\n\n## Display\n\nThe slate shall show time
 const SPEC_TC = `# Timecode board\n\n## Timing\n\nThe slate shall show timecode on a 7 inch touchscreen readable at 3 m.\n\nThe timecode board shall keep time within 1 frame over 24 hours without the main computer.\n`;
 // A 2 × 2 PNG.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64");
+/** A one-page PDF with real text (what a datasheet reader extracts). */
+function textPdf(lines) {
+  const ops = lines.map((l, j) => `BT /F1 12 Tf 72 ${720 - j * 24} Td (${l}) Tj ET`).join("\n");
+  const objects = [null, "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${ops.length} >>\nstream\n${ops}\nendstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  let out = "%PDF-1.4\n"; const off = [];
+  for (let i = 1; i < objects.length; i++) { off[i] = out.length; out += `${i} 0 obj\n${objects[i]}\nendobj\n`; }
+  const x = out.length;
+  out += `xref\n0 ${objects.length}\n0000000000 65535 f \n${off.slice(1).map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  return out + `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+}
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n");
 
 const AUDIT = {
@@ -114,34 +126,38 @@ try {
   await page.getByTestId("upload-reference-status").getByText(/^x\.svg: This file was not accepted/).waitFor();
   await shot(page, "02-references");
 
-  // 2b. A part already chosen, with its files; the same part number cannot be listed twice.
+  // 2b. Parts already chosen, from their files: the datasheet gives the part, the STEP model is matched to it by the number inside.
   await page.goto(`${P}/inputs?step=3`);
-  const add = page.getByTestId("add-part");
-  await add.getByLabel("Part number").fill("RVT101HVHNWC00-B");
-  await add.getByLabel("Manufacturer").fill("Riverdi");
-  await add.getByLabel("What it is for").fill("10.1-inch front touchscreen");
-  await add.getByLabel("Subsystem").selectOption("display");
-  await add.getByLabel("Status").selectOption("selected");
-  await add.getByRole("button", { name: "Add part" }).click();
-  await page.getByText(/RVT101HVHNWC00-B added\./).waitFor();
-  const row = page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']");
-  await row.locator("summary").click();
-  const STEP = Buffer.from("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n");
-  await row.getByLabel("Files for RVT101HVHNWC00-B").setInputFiles([
-    { name: "rvt101-datasheet.pdf", mimeType: "application/pdf", buffer: Buffer.concat([PDF, Buffer.from("% datasheet\n")]) }, { name: "rvt101.step", mimeType: "application/step", buffer: STEP }]);
-  await row.getByRole("button", { name: "Attach files" }).click();
-  await row.getByText("rvt101.step: attached").waitFor();
-  await row.getByText("rvt101-datasheet.pdf: attached").waitFor();
+  const pf = page.getByTestId("part-files");
+  const STEP = Buffer.from("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('display_model','2024-01-01',(''),(''),'','','');\nENDSEC;\nDATA;\n#1=PRODUCT('RVT101HVHNWC00-B','RVT101HVHNWC00-B 3D','',(#2));\nENDSEC;\nEND-ISO-10303-21;\n");
+  await pf.getByLabel("Part files").setInputFiles([
+    { name: "riverdi-datasheet.pdf", mimeType: "application/pdf", buffer: Buffer.from(textPdf(["Riverdi display module", "Part number: RVT101HVHNWC00-B", "Manufacturer: Riverdi",
+      "Description: 10.1 inch IPS TFT display with capacitive touch", "Resolution: 1280 x 800", "Supply voltage: 3.3 V"])) },
+    { name: "display_model.step", mimeType: "application/step", buffer: STEP },
+    { name: "bracket.step", mimeType: "application/step", buffer: Buffer.from(STEP.toString().replace(/RVT101HVHNWC00-B/g, "BRKT").replace("display_model", "bracket")) },
+  ]);
+  await pf.getByRole("button", { name: "Upload and read the files" }).click();
+  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): RVT101HVHNWC00-B \(Riverdi\)\. Attached 1 model file\(s\)\.$/).waitFor();
   await page.reload();
-  const files = await page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']").innerText();
-  assert.match(files, /Datasheet\s+rvt101-datasheet\.pdf/);
-  assert.match(files, /3D model \(STEP or STL\)\s+rvt101\.step/);
-
+  const row = page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']");
+  const files = await row.innerText();
+  assert.match(files, /Riverdi[\s\S]*10\.1 inch IPS TFT display with capacitive touch[\s\S]*2 key specs[\s\S]*Selected/);
+  assert.match(files, /Datasheet\s+riverdi-datasheet\.pdf/);
+  assert.match(files, /3D model \(STEP or STL\)\s+display_model\.step/);
+  // The bracket model matches no part: a person places it.
+  const un = page.getByTestId("unplaced-files").locator("[data-file='bracket.step']");
+  assert.match(await un.innerText(), /no part number of a listed part found/);
+  await un.getByLabel("Part for bracket.step").selectOption({ label: "RVT101HVHNWC00-B" });
+  await un.getByRole("button", { name: "Place" }).click();
+  await page.getByText("File attached.").first().waitFor();
+  assert.equal(await page.getByTestId("unplaced-files").count(), 0);
+  // Typing a part by hand is still possible; the same part number cannot be listed twice.
   await page.getByTestId("add-part").locator("summary").click();
   await page.getByTestId("add-part").getByLabel("Part number").fill("rvt101hvhnwc00b");
   await page.getByTestId("add-part").getByLabel("What it is for").fill("duplicate");
   await page.getByTestId("add-part").getByRole("button", { name: "Add part" }).click();
   await page.getByText(/already listed/).waitFor();
+  await shot(page, "02b-parts");
 
   // 2c. The earlier-work register (a worker builds it; here it is stored as a worker would) is reviewed and corrected.
   await page.goto(`${P}/inputs?step=4`);

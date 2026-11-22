@@ -25,3 +25,4 @@ export * from "./plan-change.ts";
 export * from "./wizard.ts";
 export * from "./inspection.ts";
 export * from "./assembly.ts";
+export * from "./part-identify.ts";

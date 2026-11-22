@@ -11,6 +11,7 @@ import { crossDocumentDuplicates } from "@/lib/documents";
 import { SUBSYSTEMS, subsystemLabel, type RegisterItem } from "@vx/planning";
 import { IMAGE_TYPES, ITEM_STATUS_LABEL, loadPlanInputs, PART_STATUS, refCode, REFERENCE_KINDS, VISUAL_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
+import { placePartFile, readPartFiles } from "./actions";
 import { editRegisterItem, extractAll, removePart, removeReference, requestRegister, savePart, setAuditInPlan, updateReference } from "./actions";
 import { createAudit, runAudit } from "../flux/actions";
 
@@ -68,8 +69,12 @@ export default async function InputsPage({ params, searchParams }: {
   const dl = new Map<string, string>((files ?? []).filter((s) => s.path && s.signedUrl).map((s) => [s.path!, s.signedUrl!]));
   const loaded = await loadPlanInputs(supabase, projectId);
   const visual = (refs ?? []).filter((r) => !r.part_id && !NOT_VISUAL.includes(r.kind));
-  const priorFiles = (refs ?? []).filter((r) => !r.part_id && NOT_VISUAL.includes(r.kind));
+  // Unattached datasheets and models are part files (placed on the Parts screen); prior work is files from other tools.
+  const priorFiles = (refs ?? []).filter((r) => !r.part_id && r.kind === "prior_design");
   const filesOf = (partId: string) => (refs ?? []).filter((r) => r.part_id === partId);
+  const partFile = (r: NonNullable<typeof refs>[number]) => !r.part_id && ["datasheet", "model_3d"].includes(r.kind);
+  const unread = (refs ?? []).filter((r) => partFile(r) && !r.identified_at);
+  const unplaced = (refs ?? []).filter((r) => partFile(r) && r.identified_at);
   const building = (registers ?? []).find((r) => r.status === "queued" || r.status === "running");
   const lastFailed = (registers ?? [])[0]?.status === "failed" ? (registers ?? [])[0] : null;
   const ready = (registers ?? []).find((r) => r.status === "ready");
@@ -196,9 +201,33 @@ export default async function InputsPage({ params, searchParams }: {
       {step === 3 && <>
       <section>
         <h2 className="setup-title">Parts already chosen</h2>
-        <p className="small muted">Parts you or another engineer have already picked: the display, the compute module, the timecode clock, connectors. Say how
-          far each got (selected, in the schematic, laid out, tested) and attach its datasheet, 3D model (STEP) and drawings. The plan must continue,
-          adapt or replace each one, and give its reasons, concerns and alternatives when it replaces one.</p>
+        <p className="small muted">Upload the manufacturer datasheets (PDF) and the 3D or CAD files (STEP, STL, IGES) of the parts already picked. Each
+          datasheet is read for the part number, manufacturer, what the part is and its key specifications, and becomes a part; each model is
+          matched to its part by the part number inside it or in its file name. Check the result and set how far each part got. The plan must
+          continue, adapt or replace each one.</p>
+        {canEdit && <div className="card dropzone" data-testid="part-files"><InputsUpload projectId={projectId} mode="partfiles" /></div>}
+        {canEdit && unread.length > 0 && (
+          <form action={readPartFiles.bind(null, projectId)} className="row" data-testid="read-part-files">
+            <SubmitButton pendingText="Reading…">Read the files</SubmitButton><span className="small muted">{unread.length} file(s) not read yet.</span></form>
+        )}
+        {unplaced.length > 0 && (
+          <div className="card small" data-testid="unplaced-files">
+            <strong>Files to place ({unplaced.length})</strong>
+            <ul className="plain">{unplaced.map((f) => (
+              <li key={f.id} className="unplaced" data-file={f.filename}>
+                <span className="pill">{kindLabel(f.kind)}</span> {dl.get(f.storage_path) ? <a href={dl.get(f.storage_path)}>{f.filename}</a> : f.filename}
+                {f.identify_note && <span className="warn-text"> · {f.identify_note}</span>}
+                {canEdit && (
+                  <form action={placePartFile.bind(null, projectId, f.id)} className="row tight">
+                    {!!parts?.length && <select name="part_id" defaultValue="" aria-label={`Part for ${f.filename}`}><option value="">{f.kind === "datasheet" ? "New part…" : "Which part?"}</option>
+                      {(parts ?? []).map((p) => <option key={p.id} value={p.id}>{p.mpn}</option>)}</select>}
+                    {f.kind === "datasheet" && <input name="mpn" placeholder="or type its part number" aria-label={`Part number for ${f.filename}`} />}
+                    <SubmitButton variant="secondary" pendingText="…">Place</SubmitButton>
+                  </form>
+                )}
+              </li>))}</ul>
+          </div>
+        )}
         {SUBSYSTEMS.filter((sub) => (parts ?? []).some((p) => p.subsystem === sub)).map((sub) => (
           <div key={sub} data-testid={`parts-${sub}`}>
             <h3 className="small">{cap(subsystemLabel(sub))}</h3>
@@ -207,7 +236,10 @@ export default async function InputsPage({ params, searchParams }: {
               <tbody>{(parts ?? []).filter((p) => p.subsystem === sub).map((p) => (
                 <tr key={p.id} data-part={p.mpn}>
                   <td><strong className="mono">{p.mpn}</strong>{p.manufacturer && <div className="muted">{p.manufacturer}</div>}</td>
-                  <td>{p.role}{p.note && <div className="muted">{p.note}</div>}</td>
+                  <td>{p.role}{p.note && <div className="muted">{p.note}</div>}
+                    {((p.specs ?? []) as { name: string; value: string }[]).length > 0 && (
+                      <details className="specs"><summary className="muted">{((p.specs ?? []) as unknown[]).length} key specs</summary>
+                        <dl className="facts">{((p.specs ?? []) as { name: string; value: string }[]).flatMap((x, k) => [<dt key={`n${k}`}>{x.name}</dt>, <dd key={`v${k}`}>{x.value}</dd>])}</dl></details>)}</td>
                   <td><span className={`pill pill-${p.status === "rejected" ? "rejected" : p.status === "candidate" ? "draft" : "complete"}`}>{partStatusLabel(p.status)}</span></td>
                   <td>
                     <ul className="plain">{filesOf(p.id).map((f) => <li key={f.id}><span className="pill">{kindLabel(f.kind)}</span>{" "}
@@ -229,10 +261,10 @@ export default async function InputsPage({ params, searchParams }: {
             </table>
           </div>
         ))}
-        {!parts?.length && <p className="muted" data-testid="parts-none">No parts recorded yet.</p>}
+        {!parts?.length && <p className="muted" data-testid="parts-none">No parts yet: upload their datasheets above.</p>}
         {canEdit && (
-          <details className="card" open={!parts?.length} data-testid="add-part">
-            <summary>Add a part</summary>
+          <details className="card" data-testid="add-part">
+            <summary>Add a part by hand (no datasheet)</summary>
             <form action={savePart.bind(null, projectId, null)} className="stack">
               {partFields()}
               <div className="row"><SubmitButton pendingText="Adding…">Add part</SubmitButton>
