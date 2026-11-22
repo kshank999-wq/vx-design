@@ -28,7 +28,7 @@ export async function decideTask(projectId: string, runId: string, taskId: strin
 }
 
 /** Start a new run of the same plan with the same limits (e.g. after approving gated tasks). */
-export async function continueRun(projectId: string, runId: string) {
+export async function continueRun(projectId: string, runId: string, form?: FormData) {
   const path = `/projects/${projectId}/runs/${runId}`;
   const { supabase } = await requireUser();
   const { data: run, error: e1 } = await supabase.from("runs").select("*").eq("id", runId).single();
@@ -37,7 +37,8 @@ export async function continueRun(projectId: string, runId: string) {
   const { data, error } = await supabase.rpc("authorize_run", {
     p_plan_id: run.plan_id,
     p_mode: run.mode,
-    p_max_ai_spend_usd: run.max_ai_spend_usd,
+    // The new run's AI budget can be raised here (never below the previous run's).
+    p_max_ai_spend_usd: Math.max(Number(run.max_ai_spend_usd), Number(form?.get("ai") ?? 0) || 0),
     p_max_compute_spend_usd: run.max_compute_spend_usd,
     p_allowed_risk_levels: run.allowed_risk_levels,
     p_max_retries_per_task: run.max_retries_per_task,

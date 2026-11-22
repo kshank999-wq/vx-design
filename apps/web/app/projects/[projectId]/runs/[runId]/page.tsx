@@ -237,7 +237,9 @@ export default async function RunPage({ params, searchParams }: {
       {canContinue && (
         <div className="card row spread">
           <span className="small">{runnable.map((t) => t.key).join(", ")} can run now.</span>
-          <form action={continueRun.bind(null, projectId, runId)}><SubmitButton pendingText="Authorizing…">Continue in a new run</SubmitButton></form>
+          <form className="row tight" action={continueRun.bind(null, projectId, runId)}>
+            <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
+            <SubmitButton pendingText="Authorizing…">Continue in a new run</SubmitButton></form>
         </div>
       )}
 
