@@ -10,6 +10,7 @@ import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
 import { approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
 import { PlainSummary } from "@/components/PlainSummary";
+import { ReadAloud } from "@/components/VoiceTools";
 import { ChatForm } from "@/components/ChatForm";
 import { CostHint } from "@/components/CostHint";
 import { costHistory, estimate } from "@/lib/cost-estimate";
@@ -172,6 +173,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                       {c.url && <> · <a href={c.url} target="_blank" rel="noreferrer">official</a></>}</li>
                   ))}</ul>
                 )}
+                {m.author_kind === "assistant" && <div className="msg-tools"><ReadAloud text={m.body} /></div>}
                 {m.author_kind === "assistant" && d.model && <div className="muted small">{d.model}</div>}
               </li>
             );

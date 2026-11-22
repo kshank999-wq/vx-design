@@ -581,3 +581,8 @@ table.statement td.num, table.statement th.num { text-align: right; font-variant
 .stack.tight { gap: 6px; }
 @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, #d92d20 20%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .voice-btn.voice-on { animation: none; } }
+.todo-go { display: inline-block; margin-top: 4px; font-weight: 600; font-size: 13.5px; }
+tr:target { outline: 3px solid #f79009; outline-offset: -3px; background: color-mix(in srgb, #f79009 10%, transparent); }
+.q-allset { border: 2px solid #12b76a; }
+.msg-tools { margin-top: 4px; }
+.msg-tools .voice-btn { padding: 2px 8px; font-size: 12px; }

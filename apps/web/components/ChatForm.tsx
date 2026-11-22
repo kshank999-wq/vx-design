@@ -1,4 +1,5 @@
 "use client";
+import { DictateButton } from "@/components/VoiceTools";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -57,9 +58,10 @@ export function ChatForm({ projectId, action }: { projectId: string; action: (fo
         </ol>
       )}
       <form action={action} onSubmit={onSubmit} className="stack">
-        <textarea ref={box} name="message" rows={3} required maxLength={4000} placeholder="Ask about the project…" aria-label="Message" />
+        <textarea ref={box} id="chat-message" name="message" rows={3} required maxLength={4000} placeholder="Ask about the project…" aria-label="Message" />
         {error && <p role="alert" className="banner banner-error">{error}</p>}
-        <div><button className="btn btn-primary" type="submit" disabled={!!pending}>{pending ? "Answering…" : "Send"}</button></div>
+        <div className="row tight"><button className="btn btn-primary" type="submit" disabled={!!pending}>{pending ? "Answering…" : "Send"}</button>
+          <DictateButton target="chat-message" /></div>
       </form>
     </>
   );

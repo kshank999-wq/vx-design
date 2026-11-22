@@ -17,9 +17,10 @@ export default async function QuestionsPage({ params, searchParams }: {
   const { projectId } = await params;
   const { error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
-  const [{ data: project }, { data: me }, { data: rows }] = await Promise.all([
+  const [{ data: project }, { data: me }, { data: runs }, { data: rows }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
+    supabase.from("runs").select("id, status, name").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
     supabase.from("project_questions").select("id, question, why, recommendation, options, status, answer, answered_at, created_at, tasks(title)")
       .eq("project_id", projectId).order("created_at"),
   ]);
@@ -82,7 +83,15 @@ export default async function QuestionsPage({ params, searchParams }: {
             </section>
           ))}
         </>
-      ) : <div className="card"><p><strong>No open questions.</strong> New ones appear here as the design work raises them.</p></div>}
+      ) : (
+        <div className="card q-allset" data-testid="all-answered">
+          <p><strong>✓ All questions are answered.</strong> New ones appear here as the design work raises them.</p>
+          {runs?.[0] && ["stopped", "completed"].includes(runs[0].status) && (
+            <p>Your design run is <strong>stopped</strong>. Answering does not restart it: open the run and press continue. <Link className="btn" href={`/projects/${projectId}/runs/${runs[0].id}#continue-run`}>Go to the run →</Link></p>
+          )}
+          {runs?.[0] && ["running", "pending"].includes(runs[0].status) && <p>The design run is working and will use your answers. <Link href={`/projects/${projectId}/runs/${runs[0].id}`}>Watch the run</Link></p>}
+        </div>
+      )}
       {done.length > 0 && (
         <section className="q-group" data-testid="answered-questions">
           <h2>Your answers ({done.length})</h2>

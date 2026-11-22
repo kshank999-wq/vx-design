@@ -190,23 +190,27 @@ export default async function RunPage({ params, searchParams }: {
             {!failed.length && !outOfScope.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <li>Nothing needs fixing. Continue the run when you are ready.</li>}
             {failed.length > 0 && (
               <li><strong>{failed.length} step{failed.length > 1 ? "s" : ""} could not finish.</strong> Everything after {failed.length > 1 ? "them" : "it"} is waiting.
-                <ul className="small">{failed.map((t) => <li key={t.id}>{t.title}: {plainFailure(t.blocker_reason)}</li>)}</ul>
-                {canControl && <span className="small">Continuing tries {failed.length > 1 ? "them" : "it"} again.</span>}</li>
+                <ul className="small">{failed.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>: {plainFailure(t.blocker_reason)}</li>)}</ul>
+                {canControl && <a className="todo-go" href="#continue-run">Fix: the button below tries {failed.length > 1 ? "them" : "it"} again →</a>}</li>
             )}
             {critical.length > 0 && (
               <li><strong>{critical.length} critical-risk step{critical.length > 1 ? "s are" : " is"} outside this run.</strong> Runs leave out critical-risk work unless the owner includes it:
-                <span className="small"> {critical.map((t) => t.title).join(", ")}.</span>
-                {role === "owner" ? <span className="small"> Tick “include critical-risk steps” below.</span> : <span className="small"> Only the project owner can include {critical.length > 1 ? "them" : "it"}.</span>}</li>
+                <ul className="small">{critical.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link></li>)}</ul>
+                {role === "owner" ? <a className="todo-go" href="#continue-run">Fix: “include critical-risk steps” is ticked below →</a>
+                  : <span className="small">Only the project owner can include {critical.length > 1 ? "them" : "it"}.</span>}
+                {" "}<Link className="small" href={`/projects/${projectId}/plans/${run.plan_id}`}>See them in the plan</Link></li>
             )}
             {outOfScope.length > critical.length && (
-              <li className="small">{outOfScope.length - critical.length} other step(s) are outside this run&apos;s scope and will not run in it.</li>
+              <li className="small">{outOfScope.length - critical.length} other step(s) are outside this run&apos;s scope and will not run in it. <Link href="?tab=tasks">See the tasks</Link></li>
             )}
-            {waiting.length > 0 && <li><strong>{waiting.length} result{waiting.length > 1 ? "s wait" : " waits"} for your go-ahead</strong> (below). “Run straight through” approves those whose checks passed.</li>}
-            {(openQuestions ?? 0) > 0 && <li><strong>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you.</strong> The work does not wait for them, but your answers guide every later step. <Link href={`/projects/${projectId}/questions`}>Answer the questions</Link></li>}
-            {heldBlocked.length > 0 && <li className="small">{heldBlocked.length} step(s) wait for something outside the design work: {heldBlocked.map((t) => `${t.title}${t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}`).join("; ")}.</li>}
+            {waiting.length > 0 && <li><strong>{waiting.length} result{waiting.length > 1 ? "s wait" : " waits"} for your go-ahead</strong> “Run straight through” approves those whose checks passed. <a className="todo-go" href="#approvals">Go to the approvals →</a></li>}
+            {(openQuestions ?? 0) > 0 && <li><strong>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you.</strong> The work does not wait for them, but your answers guide every later step. <Link className="todo-go" href={`/projects/${projectId}/questions`}>Answer the questions →</Link></li>}
+            {heldBlocked.length > 0 && <li className="small">{heldBlocked.length} step(s) wait for something outside the design work:
+              <ul>{heldBlocked.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}
+                {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <> · <Link href={`/projects/${projectId}/validation`}>Open Validation</Link></>}</li>)}</ul></li>}
           </ol>
           {canContinue ? (
-            <form className="stack" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
+            <form className="stack" id="continue-run" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
               <div className="row tight wrap">
                 <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
                 <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_compute_spend_usd), 20)} style={{ width: "5em" }} /></label>
@@ -335,7 +339,7 @@ export default async function RunPage({ params, searchParams }: {
             {(tasks ?? []).map((t) => {
               const exec = liveExecs.find((e) => e.task_id === t.id);
               return (
-                <tr key={t.id} data-task={t.key} className={inScope(t) ? "" : "out-of-scope"}>
+                <tr key={t.id} id={`task-${t.key}`} data-task={t.key} className={inScope(t) ? "" : "out-of-scope"}>
                   <td><span className="mono">{t.key}</span> {t.title}<div className="muted small">{t.discipline.replace("_", " ")} · {t.risk_level} risk{!inScope(t) && " · outside this run's scope"}</div></td>
                   <td><span className={`pill pill-${t.status}`}>{t.status.replace("_", " ")}</span></td>
                   <td>{t.attempts}</td>
