@@ -90,6 +90,11 @@ sit beside the steps.
   left, Back and Continue, and a summary of what the plan builds on (`?step=`). Forms return to the step they were sent
   from.
 - **Long lists:** the earlier-work register's subsystem groups start closed when there are more than 30 items.
+- **Plan page:** tasks are grouped by stage (S0–S8). A stage index at the top shows the task count and how many are
+  done. Each stage is a collapsible section with its task count, hours, approval gates, high-risk tasks and, once
+  approved, a progress bar.
+- **Workspace activity panel:** the plan's tasks are grouped by stage, with done/total. Stages with open work start
+  expanded.
 
 **Look:** the clean light design is the template: a blue-grey background with a faint blueprint grid, white cards,
 navy panel headers in the workspace, and the S0–S8 stage strip on the project page and the workspace. Dark mode follows

@@ -357,7 +357,7 @@ main.setup { max-width: 1340px; }
 .syslog { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .syslog span { color: var(--tech); }
 @media (max-width: 1100px) { .setup-grid { grid-template-columns: 1fr; } .setup-rail { display: flex; overflow-x: auto; gap: 4px; } .setup-rail .eyebrow, .setup-hint { display: none; } .setup-step small { display: none; } }
-.tile strong { font-size: 24px; line-height: 1.1; color: var(--accent); }
+.overview-tiles .tile strong, .setup .tile strong { font-size: 24px; line-height: 1.1; color: var(--accent); }
 .molding { border-top: 1px solid var(--line2); padding-top: 8px; } .findings { padding-left: 18px; }
 
 /* Tabs (project page) */
@@ -371,3 +371,26 @@ main.setup { max-width: 1340px; }
 .pager { justify-content: center; margin-top: 12px; }
 .overview-tiles { margin: 14px 0; }
 .dropzone { border: 2px dashed var(--line); background: var(--sub); } .unplaced { padding: 6px 0; border-top: 1px solid var(--line2); }
+
+/* Plan page: tasks grouped by stage */
+.stage-index { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.stage-chip { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px 6px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; text-decoration: none; color: var(--fg); font-size: 13px; font-weight: 650; }
+.stage-chip:hover { border-color: var(--accent); }
+.stage-chip small { display: block; font-size: 11px; font-weight: 500; color: var(--soft); }
+.stage-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin: 0 0 12px; }
+.stage-group > summary { display: flex; gap: 10px; align-items: center; padding: 12px 16px; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.stage-group > summary::-webkit-details-marker { display: none; }
+.stage-group > summary::after { content: "▾"; margin-left: auto; color: var(--soft); }
+.stage-group:not([open]) > summary::after { content: "▸"; }
+.stage-group[open] > summary { border-bottom: 1px solid var(--line2); }
+.stage-group .tasks { margin: 0; padding: 10px 12px; }
+.stage-group .task.card { margin: 8px 0; box-shadow: none; background: var(--sub); }
+.stage-progress { width: 120px; height: 6px; border-radius: 99px; background: var(--line2); overflow: hidden; }
+.stage-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--tech)); }
+.task .facts { grid-template-columns: 100px 1fr; }
+@media (min-width: 900px) { .task .facts { grid-template-columns: 100px 1fr 100px 1fr; } }
+.check-stage { list-style: none; border-top: 1px solid var(--line); padding: 6px 0; }
+.check-stage > details > summary { cursor: pointer; font-size: 13px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.check-stage .stage-code { width: 24px; height: 24px; font-size: 10px; }
+.check-stage .checklist { margin-top: 4px; }
+.check-stage .check:first-child { border-top: 0; }

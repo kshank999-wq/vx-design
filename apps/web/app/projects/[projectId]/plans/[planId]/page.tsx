@@ -53,6 +53,15 @@ export default async function PlanPage({ params, searchParams }: {
   const reuses = (tasks ?? []).filter((t) => modeOf(t) === "reuse" || modeOf(t) === "adapt").length;
   const replaces = (tasks ?? []).filter((t) => modeOf(t) === "replace").length;
 
+  // Tasks grouped by product stage, in plan order within each stage (S0 first).
+  const groups = STAGES.map((stage) => {
+    const ts = (tasks ?? []).map((t, i) => ({ t, i })).filter(({ t }) => t.stage === stage);
+    return { stage, tasks: ts, hours: Math.round(ts.reduce((n, { t }) => n + (Number(t.estimated_hours) || 0), 0) * 10) / 10,
+             gates: ts.filter(({ t }) => (t.approval_policy as { required?: boolean } | null)?.required).length,
+             risky: ts.filter(({ t }) => t.risk_level === "high" || t.risk_level === "critical").length,
+             done: ts.filter(({ t }) => t.status === "complete").length };
+  }).filter((g) => g.tasks.length);
+
   return (
     <main>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{(plan.projects as { name: string }).name}</Link> /</p>
@@ -151,9 +160,23 @@ export default async function PlanPage({ params, searchParams }: {
       )}
 
       <section>
-        <h2>Tasks</h2>
-        <ol className="tasks">
-          {(tasks ?? []).map((t, i) => {
+        <h2>Tasks by stage</h2>
+        <nav className="stage-index" aria-label="Stages in this plan" data-testid="stage-index">
+          {groups.map((g) => (
+            <a key={g.stage} href={`#stage-${g.stage}`} className="stage-chip"><span className="stage-code">{g.stage}</span>
+              <span>{STAGE_NAME[g.stage as Stage]}<small>{g.tasks.length} task(s){g.done ? ` · ${g.done} done` : ""}</small></span></a>
+          ))}
+        </nav>
+        {groups.map((g) => (
+          <details key={g.stage} id={`stage-${g.stage}`} className="stage-group" open data-stage={g.stage}>
+            <summary>
+              <span className="stage-code">{g.stage}</span>
+              <strong>{STAGE_NAME[g.stage as Stage]}</strong>
+              <span className="muted small">{g.tasks.length} task(s) · {g.hours} h{g.gates ? ` · ${g.gates} approval gate(s)` : ""}{g.risky ? ` · ${g.risky} high-risk` : ""}</span>
+              {plan.status === "approved" && <span className="stage-progress" title={`${g.done} of ${g.tasks.length} complete`}><span style={{ width: `${Math.round((100 * g.done) / g.tasks.length)}%` }} /></span>}
+            </summary>
+            <ol className="tasks">
+              {g.tasks.map(({ t, i }) => {
             const deps = (t.task_dependencies as { depends_on_task_id: string }[]).map((d) => keyOf.get(d.depends_on_task_id)).filter(Boolean);
             const treqs = (t.task_requirements as { requirement_id: string }[]).map((x) => reqById.get(x.requirement_id)).filter(Boolean) as Req[];
             const policy = (t.approval_policy ?? {}) as { required?: boolean; reason?: string | null };
@@ -225,8 +248,10 @@ export default async function PlanPage({ params, searchParams }: {
                 )}
               </li>
             );
-          })}
-        </ol>
+              })}
+            </ol>
+          </details>
+        ))}
       </section>
 
       {(deferred.length > 0 || (plan.assumptions as string[]).length > 0 || (gen.adjustments ?? []).length > 0) && (

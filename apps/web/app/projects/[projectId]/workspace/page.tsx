@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StageBar } from "@/components/StageBar";
-import { STAGE_NAME, type StageRow } from "@/lib/stages";
+import { STAGES, STAGE_NAME, type StageRow } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
@@ -198,7 +198,17 @@ export default async function WorkspacePage({ params, searchParams }: {
               <div className="small muted">{c.freeze ? `Frozen: ${c.freeze.name}` : conceptsBusy ? "Generating concepts" : conceptsReady ? "Approval needed: choose a concept and freeze the design" : "Not started"}</div>
             </div>
           </li>
-          {ctx.tasks.map((t) => {
+          {STAGES.map((stage) => {
+            const ts = ctx.tasks.filter((t) => t.stage === stage);
+            if (!ts.length) return null;
+            const done = ts.filter((t) => t.status === "complete").length;
+            const active = ts.some((t) => t.status !== "complete");
+            return (
+              <li key={stage} className="check-stage" data-stage={stage}>
+                <details open={active}>
+                  <summary><span className="stage-code">{stage}</span> {STAGE_NAME[stage]} <span className="muted small">{done}/{ts.length}</span></summary>
+                  <ol className="checklist">
+                  {ts.map((t) => {
             const a = approvalFor.get(t.id);
             const o = mainOutput(t.key);
             return (
@@ -222,6 +232,11 @@ export default async function WorkspacePage({ params, searchParams }: {
                     </div>
                   )}
                 </div>
+              </li>
+            );
+          })}
+                  </ol>
+                </details>
               </li>
             );
           })}
