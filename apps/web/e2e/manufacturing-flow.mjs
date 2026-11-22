@@ -61,12 +61,14 @@ try {
   await page.getByRole("link", { name: "Manufacturing routes" }).click();
   await page.waitForURL(/\/manufacturing$/);
   await page.getByTestId("no-parts").waitFor();
+  await page.getByRole("tab", { name: "Add a part" }).click();
   const up = page.getByTestId("upload-model");
   await up.getByLabel("Model part name").fill("Front bezel");
   await up.getByLabel("Part model files").setInputFiles([{ name: "bezel.stl", mimeType: "model/stl", buffer: boxStl() }]);
   await up.getByRole("button", { name: "Add part models" }).click();
   await page.getByTestId("upload-model-status").getByText("bezel.stl: added").waitFor();
   await page.reload();
+  await page.getByRole("tab", { name: /^Parts to make/ }).click();
   const card = page.locator("[data-model='Front bezel']");
   await card.locator("summary").click();
   assert.equal(await card.getByLabel("Used outdoors or in sun Front bezel").isChecked(), true, "needs pre-filled from the requirements");
@@ -95,6 +97,7 @@ try {
   await shot(page, "01-routes");
 
   // 3. The 3D-printing export.
+  await page.getByRole("tab", { name: "Export for 3D printing" }).click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export for 3D printing" }).click()]);
   assert.match(download.suggestedFilename(), /^mfg-\d+-3d-print-\d{4}-\d{2}-\d{2}\.zip$/);
   const files = unzipSync(new Uint8Array(readFileSync(await download.path())));
@@ -106,6 +109,7 @@ try {
   assert.match(sheet, /This print is a fair stand-in for fit, feel and light functional tests/);
   assert.match(strFromU8(files["parts.csv"]), /^Front bezel,bezel\.stl,fdm,ASA,3,matte black,40x30x20,24,15-23$/m);
 
+  await page.getByRole("tab", { name: /^Parts to make/ }).click();
   // 3b. Injection molding: the design check flags the solid block (no draft, thick), the spec is saved, the package downloads.
   const mold = page.locator("[data-route='Front bezel']").getByTestId("molding");
   if (!(await mold.getAttribute("open") !== null)) await mold.locator("summary").first().click();

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { addReference, addSpecification, identifyPartFiles, type UploadOutcome } from "@/app/projects/[projectId]/inputs/actions";
 import { partFileKind } from "@/lib/reference-kinds";
+import { FilePicker } from "./FilePicker";
 
 /**
  * Several files at once for the project inputs. Each file goes from the browser to the project's staging folder (large
@@ -11,22 +12,35 @@ import { partFileKind } from "@/lib/reference-kinds";
  * everything else as numbered references. Part files (mode "part") are attached to the part, their kind worked out from
  * the file (STEP: 3D model, PDF: datasheet); prior-work files (mode "prior") are stored as prior designs.
  */
+const ACCEPT: Record<string, string> = {
+  specification: ".docx,.pdf,.md,.txt", reference: ".png,.jpg,.jpeg,.webp,.gif,.pdf", model: ".stl,.step,.stp",
+  partfiles: ".pdf,.step,.stp,.stl,.igs,.iges,.wrl,.x_t,.x_b,.docx,.txt,.md",
+  part: ".pdf,.step,.stp,.stl,.igs,.iges,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.zip,.txt,.md,.csv",
+  prior: ".pdf,.step,.stp,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.zip,.txt,.md,.csv",
+};
+
 export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
   projectId: string; mode: "specification" | "reference" | "part" | "prior" | "model" | "partfiles"; kinds?: [string, string][]; partId?: string; partLabel?: string;
 }) {
   const router = useRouter();
   const [lines, setLines] = useState<{ text: string; ok: boolean | null }[]>([]);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<File[]>([]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
-    const files = data.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
-    if (!files.length) return;
+    // A folder can hold anything: keep the types this box takes (specifications are explained one by one below).
+    const exts = (ACCEPT[mode] ?? "").split(",").map((x) => x.trim().toLowerCase());
+    const takes = (f: File) => mode === "specification" || exts.some((x) => f.name.toLowerCase().endsWith(x));
+    const files = picked.filter(takes);
+    const skipped = picked.length - files.length;
+    if (!files.length) { setLines([{ text: picked.length ? `None of the ${picked.length} file(s) is a type this box takes (${ACCEPT[mode]}).` : "Choose files or a folder first.", ok: false }]); setPicked([]); return; }
     const kind = String(data.get("kind") ?? "mockup"), note = String(data.get("note") ?? ""), title = String(data.get("title") ?? "");
     setBusy(true);
-    setLines(files.map((f) => ({ text: `${f.name}: waiting…`, ok: null })));
+    setLines([...files.map((f) => ({ text: `${f.name}: waiting…`, ok: null as boolean | null })),
+      ...(skipped ? [{ text: `${skipped} file(s) of other types left out`, ok: null }] : [])]);
     const supabase = createClient();
     const set = (i: number, text: string, ok: boolean | null) => setLines((l) => l.map((x, j) => (j === i ? { text, ok } : x)));
     for (const [i, f] of files.entries()) {
@@ -62,6 +76,7 @@ export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
       setLines((l) => [...l.slice(0, -1), { text: r.message, ok: r.ok }]);
     }
     setBusy(false);
+    setPicked([]);
     form.reset();
     router.refresh();
   }
@@ -84,12 +99,9 @@ export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
           <label className="span2">Where it came from and what state it is in (who made it, which revision, what was finished)<textarea name="note" rows={2} aria-label="Prior-work note" /></label>
         </div>
       )}
+      <FilePicker label={mode === "specification" ? "Specification files" : mode === "part" ? `Files for ${partLabel}` : mode === "prior" ? "Prior-work files" : mode === "model" ? "Part model files" : mode === "partfiles" ? "Part files" : "Reference files"} files={picked} onChange={setPicked} disabled={busy}
+        accept={ACCEPT[mode]} />
       <div className="row">
-        <input name="files" type="file" multiple required
-               aria-label={mode === "specification" ? "Specification files" : mode === "part" ? `Files for ${partLabel}` : mode === "prior" ? "Prior-work files" : mode === "model" ? "Part model files" : mode === "partfiles" ? "Part files" : "Reference files"}
-               accept={mode === "specification" ? ".docx,.pdf,.md,.txt" : mode === "reference" ? ".png,.jpg,.jpeg,.webp,.gif,.pdf" : mode === "model" ? ".stl,.step,.stp"
-                 : mode === "partfiles" ? ".pdf,.step,.stp,.stl,.igs,.iges,.wrl,.zip,.docx,.txt,.md"
-                 : ".pdf,.step,.stp,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.zip,.txt,.md,.csv"} />
         <button className={`btn ${mode === "part" ? "btn-secondary" : "btn-primary"}`} type="submit" disabled={busy} aria-busy={busy}>
           {busy ? "Uploading…" : mode === "specification" ? "Upload specifications" : mode === "part" ? "Attach files" : mode === "prior" ? "Add prior-work files" : mode === "model" ? "Add part models" : mode === "partfiles" ? "Upload and read the files" : "Add references"}</button>
       </div>

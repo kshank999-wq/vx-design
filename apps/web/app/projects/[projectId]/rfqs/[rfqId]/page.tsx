@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { RfqManifest, SHARING_SCOPE_LABEL } from "@vx/contracts";
@@ -74,8 +75,10 @@ export default async function RfqPage({ params, searchParams }: {
       <Banner error={error} notice={notice} />
       {rfq.packet_error && <p className="banner banner-error">The packet could not be built: {rfq.packet_error}</p>}
 
+      <SectionTabs id="rfq" initial={rfq.status === "draft" ? "suppliers" : ["ready", "packaging", "approved"].includes(rfq.status) ? "packet" : "quotes"} sections={[
+        { key: "manifest", label: "1. Manifest", content: (<>
       {/* 1. Manifest */}
-      <details className="card" open={rfq.status === "draft"}>
+      <details className="card" open>
         <summary><strong>1. Manifest</strong> {(missing as string[] | null)?.length
           ? <span className="small warn-text" data-testid="missing">Missing: {(missing as string[]).join(", ")}</span>
           : <span className="small">complete</span>}</summary>
@@ -121,8 +124,10 @@ export default async function RfqPage({ params, searchParams }: {
         </form>
       </details>
 
+        </>) },
+        { key: "files", label: "2. Files", content: (<>
       {/* 2. Files */}
-      <details className="card" open={rfq.status === "draft"}>
+      <details className="card" open>
         <summary><strong>2. Files to disclose</strong> <span className="small">{chosen.size} chosen</span></summary>
         <p className="small muted">Only approved (committed) files can be attached. Nothing else from the project is shared.</p>
         <form action={setAttachments.bind(null, projectId, rfqId)} className="stack">
@@ -140,6 +145,8 @@ export default async function RfqPage({ params, searchParams }: {
         </form>
       </details>
 
+        </>) },
+        { key: "suppliers", label: "3. Suppliers", content: (<>
       {/* 3. Suppliers (the internal contact sheet) */}
       <section className="card">
         <h2 style={{ marginTop: 0 }}>3. Suppliers</h2>
@@ -190,6 +197,8 @@ export default async function RfqPage({ params, searchParams }: {
         )}
       </section>
 
+        </>) },
+        { key: "packet", label: "4. Packet", content: (<>
       {/* 4. Packet and approval */}
       <section className="card stack" data-testid="packet">
         <h2 style={{ marginTop: 0 }}>4. Packet and approval</h2>
@@ -225,6 +234,8 @@ export default async function RfqPage({ params, searchParams }: {
         )}
       </section>
 
+        </>) },
+        ...(rfq.status === "sent" ? [{ key: "emails", label: "5. Emails", content: (<>
       {/* 5. Emails (VX Design does not send email) */}
       {rfq.status === "sent" && (
         <section className="card" data-testid="emails">
@@ -249,6 +260,8 @@ export default async function RfqPage({ params, searchParams }: {
         </section>
       )}
 
+        </>) }] : []),
+        ...(["sent", "closed"].includes(rfq.status) ? [{ key: "quotes", label: "6. Quotes", content: (<>
       {/* 6. Quotes */}
       {["sent", "closed"].includes(rfq.status) && (
         <section className="card" data-testid="quotes">
@@ -287,6 +300,9 @@ export default async function RfqPage({ params, searchParams }: {
           {rfq.status === "closed" && <p className="small">Closed {new Date(rfq.closed_at!).toLocaleString()}{rfq.close_note ? `: ${rfq.close_note}` : ""}</p>}
         </section>
       )}
+
+        </>) }] : []),
+      ]} />
 
       {canEdit && ["draft", "ready", "approved"].includes(rfq.status) && (
         <form action={cancelRfq.bind(null, projectId, rfqId)}><button className="btn btn-link" type="submit">Cancel this RFQ</button></form>

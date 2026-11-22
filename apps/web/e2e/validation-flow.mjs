@@ -45,7 +45,10 @@ async function signUp(browser, who) {
   assert.ifError((await api.auth.signInWithPassword(who)).error);
   return { page, api };
 }
-const matrixStatus = async (page, ref) => (await page.getByTestId("matrix").locator(`tr[data-ref='${ref}']`).innerText());
+const matrixStatus = async (page, ref) => {
+  await page.getByRole("tab", { name: "Requirement verification" }).click();
+  return await page.getByTestId("matrix").locator(`tr[data-ref='${ref}']`).innerText();
+};
 
 const browser = await chromium.launch();
 try {
@@ -73,6 +76,7 @@ try {
   const page = o.page;
   await page.goto(`${BASE}/projects/${project.id}`);
   await page.getByTestId("section-map").getByRole("link", { name: "Validation" }).click();
+  await page.getByRole("tab", { name: "Units" }).click();
   for (const sn of ["SN-001", "SN-002"]) {
     await page.locator("summary", { hasText: "Register a unit" }).click();
     await page.getByLabel("Serial").fill(sn);
@@ -86,6 +90,7 @@ try {
   console.log("✓ two units registered, traced to the fab package they were built from");
 
   // 2. Draft procedures from the requirements; limits are read from the text, with their source.
+  await page.getByRole("tab", { name: "Test plan" }).click();
   await page.getByRole("button", { name: "Draft from requirements" }).click();
   await page.getByText(/3 draft procedure\(s\) written from the requirements/).waitFor();
   const procs = page.getByTestId("procedures");
@@ -106,6 +111,7 @@ try {
   const tp1 = page.url().split("?")[0];
   // The reviewer approves the LTC procedure (a yes/no check: no number in the requirement).
   await r.page.goto(`${BASE}/projects/${project.id}/validation`);
+  await r.page.getByRole("tab", { name: "Test plan" }).click();
   await r.page.getByTestId("procedures").locator("tr", { hasText: "REQ-IF-001" }).getByRole("link").click();
   assert.match(await r.page.getByTestId("measurement-defs").innerText(), /REQ-IF-001 met\s+boolean[\s\S]*yes/);
   await r.page.getByRole("button", { name: "Approve procedure" }).click();
@@ -139,12 +145,13 @@ try {
   await page.getByTestId("run-verdict").filter({ hasText: /^fail$/ }).waitFor();
   assert.match(await page.locator("main").innerText(), /Fault opened: F-001 \(open\)/);
   const failRun = page.url().split("?")[0];
-  await page.goto(`${BASE}/projects/${project.id}/validation`);
+  await page.goto(`${BASE}/projects/${project.id}/validation?tab=matrix`);
   assert.match(await matrixStatus(page, "REQ-PWR-001"), /TP-\d+\s+1 \/ 1 \/ 0\s+failing/);
   assert.match(await matrixStatus(page, "REQ-PWR-002"), /no procedure|not tested/);
   console.log("✓ failing run on SN-002: fault F-001 opened, requirement shown as failing");
 
   // 5. Rework, retest (a correction that supersedes the failing run), fault verified.
+  await page.getByRole("tab", { name: "Faults" }).click();
   const faults = page.getByTestId("faults");
   await faults.locator("summary", { hasText: "Update" }).click();
   await faults.getByLabel("Root cause of F-1").fill("R5 fitted as 10k instead of 1k");
@@ -161,7 +168,7 @@ try {
   assert.match(await page.locator("main").innerText(), /Corrects an earlier run: Retest after replacing R5/);
   await page.goto(failRun);
   assert.match(await page.locator("main").innerText(), /Superseded by run 3/);
-  await page.goto(`${BASE}/projects/${project.id}/validation`);
+  await page.goto(`${BASE}/projects/${project.id}/validation?tab=faults`);
   await faults.locator("summary", { hasText: "Update" }).click();
   await faults.getByLabel("Status of F-1").selectOption("verified");
   const verifying = faults.getByLabel("Verifying run for F-1");
@@ -170,6 +177,7 @@ try {
   await page.getByText("Fault updated.").waitFor();
   assert.match(await faults.innerText(), /verified\s+F-001[\s\S]*Cause: R5 fitted as 10k instead of 1k[\s\S]*Correction \(rework\): Replaced R5 with 1k/);
   assert.match(await matrixStatus(page, "REQ-PWR-001"), /2 \/ 0 \/ 0\s+verified by test/);
+  await page.getByRole("tab", { name: "Units" }).click();
   assert.match(await page.getByTestId("units").innerText(), /SN-002[\s\S]*reworked/);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, "01-validation.png"), fullPage: true });
   console.log("✓ fault corrected by rework and verified by a superseding retest; requirement verified on both units");

@@ -8,7 +8,8 @@
 // Needs the app running (VX_LLM=offline) and the local Supabase stack (./scripts/test-e2e-inputs.sh).
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -120,10 +121,18 @@ try {
   const cards = page.getByTestId("references");
   assert.equal(await cards.locator("[data-ref='REF-1'] img").count(), 1, "the mock-up shows as an image");
   assert.equal(await cards.locator("[data-ref='REF-2']").count(), 0, "prior-work files are not shown with the mock-ups");
-  // A refused file: SVG can carry script.
+  // A refused file: SVG can carry script. The box only takes images and PDFs, so it is left out before uploading.
   await up.getByLabel("Reference files").setInputFiles([{ name: "x.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>") }]);
   await up.getByRole("button", { name: "Add references" }).click();
-  await page.getByTestId("upload-reference-status").getByText(/^x\.svg: This file was not accepted/).waitFor();
+  await page.getByTestId("upload-reference-status").getByText(/^None of the 1 file\(s\) is a type this box takes/).waitFor();
+  // A folder: every file in it (and its sub-folders) is offered; system clutter is left out.
+  const dir = mkdtempSync(join(tmpdir(), "vx-folder-"));
+  mkdirSync(join(dir, "renders"));
+  writeFileSync(join(dir, "renders", "side.png"), Buffer.concat([PNG, Buffer.from([0])]));
+  writeFileSync(join(dir, ".DS_Store"), "junk");
+  await up.getByLabel("Pick a folder").setInputFiles(dir);
+  assert.match(await up.getByTestId("files-chosen").innerText(), /^1 file\(s\)/);
+  await up.getByRole("button", { name: "Clear" }).click();
   await shot(page, "02-references");
 
   // 2b. Parts already chosen, from their files: the datasheet gives the part, the STEP model is matched to it by the number inside.

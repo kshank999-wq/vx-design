@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { KIND_LABEL, type AuditReport, type FileKind } from "@vx/flux";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -43,14 +44,7 @@ export default async function FluxAuditPage({ params, searchParams }: {
   const revs = [...new Set((files ?? []).map((f) => f.revision_label))];
   const cur = report?.current;
 
-  return (
-    <main>
-      <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> / <Link href={`/projects/${projectId}/flux`}>Flux imports</Link> /</p>
-      <div className="row spread"><h1>#{audit.audit_no} {audit.title}</h1>{running && <AutoRefresh intervalMs={2500} />}</div>
-      <p><span className={`pill big pill-${audit.status === "ready" ? "complete" : audit.status === "failed" ? "failed" : "awaiting_approval"}`} data-testid="audit-status">{audit.status}</span></p>
-      <Banner error={error} notice={notice} />
-      {audit.error && <p className="banner banner-error">The audit failed: {audit.error}</p>}
-
+  const files_section = (
       <section>
         <h2>Uploaded files</h2>
         <table data-testid="flux-files" className="small">
@@ -73,9 +67,19 @@ export default async function FluxAuditPage({ params, searchParams }: {
         )}
         {running && <p className="small muted">A worker is reading the files…</p>}
       </section>
+  );
 
-      {report && (
-        <>
+  return (
+    <main>
+      <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> / <Link href={`/projects/${projectId}/flux`}>Flux imports</Link> /</p>
+      <div className="row spread"><h1>#{audit.audit_no} {audit.title}</h1>{running && <AutoRefresh intervalMs={2500} />}</div>
+      <p><span className={`pill big pill-${audit.status === "ready" ? "complete" : audit.status === "failed" ? "failed" : "awaiting_approval"}`} data-testid="audit-status">{audit.status}</span></p>
+      <Banner error={error} notice={notice} />
+      {audit.error && <p className="banner banner-error">The audit failed: {audit.error}</p>}
+
+      {!report && files_section}
+      {report && <SectionTabs id="flux" sections={[
+        { key: "summary", label: "Summary and findings", badge: report.findings.length, content: (<>
           <p className="banner banner-warn" data-testid="statement">{report.statement}</p>
           <div className="tiles" data-testid="summary">
             <div className="tile"><strong>{report.summary.blockers}</strong><span className="small">blocker(s)</span></div>
@@ -99,6 +103,8 @@ export default async function FluxAuditPage({ params, searchParams }: {
             ))}
           </ol>
 
+        </>) },
+        { key: "migration", label: "Migration plan", content: (<>
           <h2>Migration plan</h2>
           <table data-testid="migration" className="small">
             <thead><tr><th>#</th><th>Task</th><th>Discipline</th><th>Effort</th><th>Done when</th><th>Resolves</th></tr></thead>
@@ -107,6 +113,8 @@ export default async function FluxAuditPage({ params, searchParams }: {
             ))}</tbody>
           </table>
 
+        </>) },
+        ...(cur ? [{ key: "current", label: "Current design", content: (<>
           {cur && (
             <>
               <h2>Current state ({cur.revision})</h2>
@@ -146,6 +154,8 @@ export default async function FluxAuditPage({ params, searchParams }: {
             </>
           )}
 
+        </>) }] : []),
+        ...(report.comparisons.length ? [{ key: "revisions", label: "Revisions", badge: report.comparisons.length, content: (<>
           {!!report.comparisons.length && (
             <>
               <h2>Revisions</h2>
@@ -166,6 +176,8 @@ export default async function FluxAuditPage({ params, searchParams }: {
             </>
           )}
 
+        </>) }] : []),
+        ...(report.history.decisions.length || report.history.claims.length ? [{ key: "history", label: "Earlier decisions", content: (<>
           {(report.history.decisions.length > 0 || report.history.claims.length > 0) && (
             <>
               <h2>Earlier decisions and claimed validations</h2>
@@ -185,15 +197,19 @@ export default async function FluxAuditPage({ params, searchParams }: {
             </>
           )}
 
-          <details className="card small">
+        </>) }] : []),
+        { key: "files", label: "Files", content: (<>
+          {files_section}
+          <details className="card small" open>
             <summary>Inventory: {report.inventory.filter((f) => f.kind !== "archive").length} files in {report.revisions.length} revision(s)</summary>
             <table><thead><tr><th>File</th><th>Revision</th><th>Kind</th><th>Size</th></tr></thead>
               <tbody>{report.inventory.filter((f) => f.kind !== "archive").map((f) => (
                 <tr key={`${f.revision}:${f.path}`}><td>{f.path}</td><td>{f.revision}</td><td>{KIND_LABEL[f.kind as FileKind]}</td><td>{mb(f.size)}</td></tr>
               ))}</tbody></table>
           </details>
-        </>
-      )}
+        </>) },
+      ]} />}
+
     </main>
   );
 }

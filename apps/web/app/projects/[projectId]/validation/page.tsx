@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -43,6 +44,8 @@ export default async function ValidationPage({ params, searchParams }: {
         Pass and fail are computed from the approved limits, never typed in; recorded results cannot be edited. Test evidence is not certification.</p>
       <Banner error={error} notice={notice} />
 
+      <SectionTabs id="validation" sections={[
+        { key: "matrix", label: "Requirement verification", content: (<>
       <section>
         <h2>Requirement verification</h2>
         <p className="small" data-testid="matrix-summary">{m.length} requirement(s): {counts.verified ?? 0} verified by test, {counts.failing ?? 0} failing,
@@ -56,7 +59,8 @@ export default async function ValidationPage({ params, searchParams }: {
           ))}{!m.length && <tr><td colSpan={4} className="muted">No requirements yet.</td></tr>}</tbody>
         </table>
       </section>
-
+        </>) },
+        { key: "units", label: "Units", content: (<>
       <section>
         <h2>Units</h2>
         <table className="small" data-testid="units">
@@ -86,7 +90,8 @@ export default async function ValidationPage({ params, searchParams }: {
           </details>
         )}
       </section>
-
+        </>) },
+        { key: "plan", label: "Test plan", content: (<>
       <section>
         <div className="row spread"><h2>Test plan</h2>
           {canEdit && <div className="row tight">
@@ -107,7 +112,8 @@ export default async function ValidationPage({ params, searchParams }: {
           ))}{!procs?.length && <tr><td colSpan={6} className="muted">No procedures yet.</td></tr>}</tbody>
         </table>
       </section>
-
+        </>) },
+        { key: "faults", label: "Faults", content: (<>
       <section>
         <h2>Faults</h2>
         <ul className="list small" data-testid="faults">{(faults ?? []).map((f) => (
@@ -139,7 +145,8 @@ export default async function ValidationPage({ params, searchParams }: {
           </li>
         ))}{!faults?.length && <li className="muted">No faults recorded.</li>}</ul>
       </section>
-
+        </>) },
+        { key: "runs", label: "Test runs", content: (<>
       <section>
         <h2>Recent test runs</h2>
         <table className="small" data-testid="runs">
@@ -152,6 +159,8 @@ export default async function ValidationPage({ params, searchParams }: {
           })}{!allRuns.length && <tr><td colSpan={5} className="muted">No tests recorded yet.</td></tr>}</tbody>
         </table>
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

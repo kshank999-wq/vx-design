@@ -93,6 +93,19 @@ sit beside the steps.
 - **Plan page:** tasks are grouped by stage (S0–S8). A stage index at the top shows the task count and how many are
   done. Each stage is a collapsible section with its task count, hours, approval gates, high-risk tasks and, once
   approved, a progress bar.
+- **Project menu:** on every project page (staff), under the header. It holds Overview, Inputs and Workspace, then
+  Define, Design, Make and Prove as drop-downs, with the current page and its group highlighted.
+- **Busy pages in tabs** (`SectionTabs`): one section at a time. The open tab comes from `?tab=`, else the last tab opened
+  on that page in this browser session (so saving a form returns to it), else where the work is.
+  - **Run:** report, tasks, activity. Approvals waiting stay above the tabs.
+  - **RFQ:** manifest, files, suppliers, packet, emails, quotes. It opens at the current step.
+  - **Flux report:** summary and findings, migration plan, current design, revisions, earlier decisions, files.
+  - **Validation:** verification, units, test plan, faults, test runs.
+  - **Manufacturing routes:** parts to make, add a part, export for 3D printing.
+- **Folder uploads:** every upload box takes files, a whole folder (the "Choose a folder" button) or anything dragged onto
+  it, sub-folders included. System clutter (.DS_Store, Thumbs.db, __MACOSX) is left out, and each box keeps only the
+  file types it takes, saying how many it left out. Flux imports take whole export folders. When two files share a
+  name, the sub-folder becomes part of the name.
 - **Workspace activity panel:** the plan's tasks are grouped by stage, with done/total. Stages with open work start
   expanded.
 

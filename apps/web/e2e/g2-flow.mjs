@@ -150,7 +150,9 @@ try {
   await page.getByTestId("run-report").waitFor();
   assert.equal(await page.getByTestId("run-status").innerText(), "Stopped");
   await page.getByText("Review and approve architecture (unblocks power-budget, enclosure-envelope).").waitFor();
+  await page.getByRole("tab", { name: "Activity" }).click();
   await page.getByText(/attempt 1 \(resumed from checkpoint\)/).waitFor();
+  await page.getByRole("tab", { name: "Report" }).click();
   await page.getByText("Recovered interruptions").waitFor();
   const approval = page.locator(".approval[data-task=architecture]");
   await approval.getByRole("link", { name: /architecture\/brief v1/ }).waitFor();

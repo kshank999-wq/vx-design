@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
@@ -191,6 +192,39 @@ export default async function RunPage({ params, searchParams }: {
         </section>
       )}
 
+      {canContinue && (
+        <div className="card row spread">
+          <span className="small">{runnable.map((t) => t.key).join(", ")} can run now.</span>
+          <form action={continueRun.bind(null, projectId, runId)}><SubmitButton pendingText="Authorizing…">Continue in a new run</SubmitButton></form>
+        </div>
+      )}
+
+      <SectionTabs id="run" sections={[
+        ...(report ? [{ key: "report", label: "Report", content: (
+        <section className="report" data-testid="run-report">
+          <h2>Completion report</h2>
+          <div className="card">
+            <p><strong>{report.headline}</strong></p>
+            {report.stop_reason && <p className="small muted">{report.stop_reason}</p>}
+            {report.next_steps.length > 0 && <><h3>Recommended next</h3><ul>{report.next_steps.map((s, i) => <li key={i}>{s}</li>)}</ul></>}
+            {report.outputs.length > 0 && <><h3>Outputs</h3><ul>{report.outputs.map((o) => (
+              <li key={o.version_id}>
+                <Link href={`/projects/${projectId}/artifacts/${o.version_id}`}>{o.artifact} v{o.version}</Link> ({o.task_key})
+                <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status.replace("_", " ")}</span>
+                {urlOf.get(o.storage_path) && <> · <a href={urlOf.get(o.storage_path) ?? undefined}>download</a></>}
+              </li>
+            ))}</ul></>}
+            {report.checks.length > 0 && <><h3>Checks</h3><ul className="small">{report.checks.map((c, i) => (
+              <li key={i}><span className={`pill pill-check-${c.result}`}>{c.result}</span> {c.task_key}: {c.summary} <span className="muted">({EVIDENCE[c.evidence_category] ?? c.evidence_category})</span></li>
+            ))}</ul></>}
+            {report.recoveries.length > 0 && <><h3>Recovered interruptions</h3><ul className="small">{report.recoveries.map((r) => (
+              <li key={r.execution_id}>{r.task_key}: {r.note}</li>
+            ))}</ul></>}
+            <p className="small muted">Spend: AI ${report.costs.ai_usd.toFixed(4)} of ${report.costs.max_ai_usd} · compute ${report.costs.compute_usd.toFixed(4)} of ${report.costs.max_compute_usd} · report written {new Date(report.generated_at).toLocaleString()}</p>
+          </div>
+        </section>
+              ) }] : []),
+        { key: "tasks", label: "Tasks", badge: (tasks ?? []).length, content: (<>
       <section>
         <h2>Tasks</h2>
         <table className="run-tasks">
@@ -222,38 +256,8 @@ export default async function RunPage({ params, searchParams }: {
         </table>
       </section>
 
-      {canContinue && (
-        <div className="card row spread">
-          <span className="small">{runnable.map((t) => t.key).join(", ")} can run now.</span>
-          <form action={continueRun.bind(null, projectId, runId)}><SubmitButton pendingText="Authorizing…">Continue in a new run</SubmitButton></form>
-        </div>
-      )}
-
-      {report && (
-        <section className="report" data-testid="run-report">
-          <h2>Completion report</h2>
-          <div className="card">
-            <p><strong>{report.headline}</strong></p>
-            {report.stop_reason && <p className="small muted">{report.stop_reason}</p>}
-            {report.next_steps.length > 0 && <><h3>Recommended next</h3><ul>{report.next_steps.map((s, i) => <li key={i}>{s}</li>)}</ul></>}
-            {report.outputs.length > 0 && <><h3>Outputs</h3><ul>{report.outputs.map((o) => (
-              <li key={o.version_id}>
-                <Link href={`/projects/${projectId}/artifacts/${o.version_id}`}>{o.artifact} v{o.version}</Link> ({o.task_key})
-                <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status.replace("_", " ")}</span>
-                {urlOf.get(o.storage_path) && <> · <a href={urlOf.get(o.storage_path) ?? undefined}>download</a></>}
-              </li>
-            ))}</ul></>}
-            {report.checks.length > 0 && <><h3>Checks</h3><ul className="small">{report.checks.map((c, i) => (
-              <li key={i}><span className={`pill pill-check-${c.result}`}>{c.result}</span> {c.task_key}: {c.summary} <span className="muted">({EVIDENCE[c.evidence_category] ?? c.evidence_category})</span></li>
-            ))}</ul></>}
-            {report.recoveries.length > 0 && <><h3>Recovered interruptions</h3><ul className="small">{report.recoveries.map((r) => (
-              <li key={r.execution_id}>{r.task_key}: {r.note}</li>
-            ))}</ul></>}
-            <p className="small muted">Spend: AI ${report.costs.ai_usd.toFixed(4)} of ${report.costs.max_ai_usd} · compute ${report.costs.compute_usd.toFixed(4)} of ${report.costs.max_compute_usd} · report written {new Date(report.generated_at).toLocaleString()}</p>
-          </div>
-        </section>
-      )}
-
+        </>) },
+        { key: "activity", label: "Activity", content: (<>
       <section>
         <h2>Activity</h2>
         {!(execs ?? []).length && <p className="muted">No work has started yet.</p>}
@@ -274,6 +278,8 @@ export default async function RunPage({ params, searchParams }: {
           </details>
         ))}
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

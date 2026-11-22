@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import {
   fitsBuildVolumes, massEstimate, needsFromRequirements, optionByKey, printSettings, PROD_PROCESSES, PRODUCTION_MATERIALS, PROTO_PROCESSES,
@@ -97,6 +98,8 @@ export default async function ManufacturingPage({ params, searchParams }: {
         production material; they are starting points, not a datasheet.</p>
       <Banner error={error} notice={notice} />
 
+      <SectionTabs id="mfg" sections={[
+        { key: "parts", label: "Parts to make", badge: routes.length + unrouted.length, content: (<>
       <section>
         <h2>Parts to make</h2>
         {routes.map((r) => {
@@ -208,6 +211,8 @@ export default async function ManufacturingPage({ params, searchParams }: {
         {!routes.length && !unrouted.length && <p className="muted" data-testid="no-parts">No parts yet. Run an enclosure task, upload a part model below, or add a part without a model.</p>}
       </section>
 
+        </>) },
+        ...(canEdit ? [{ key: "add", label: "Add a part", content: (<>
       {canEdit && (
         <section>
           <h2>Add a part</h2>
@@ -224,6 +229,8 @@ export default async function ManufacturingPage({ params, searchParams }: {
         </section>
       )}
 
+        </>) }] : []),
+        { key: "export", label: "Export for 3D printing", content: (<>
       <section className="card">
         <h2>Export for 3D printing</h2>
         <p className="small muted">A ZIP with one folder per part (STL to print, STEP for a service that prefers it), a print sheet with the material,
@@ -240,6 +247,8 @@ export default async function ManufacturingPage({ params, searchParams }: {
           </form>
         ) : <p className="small muted">Set up a route for at least one part first.</p>}
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

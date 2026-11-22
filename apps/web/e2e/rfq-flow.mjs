@@ -134,6 +134,7 @@ try {
   // 3. Manifest, disclosure choices, supplier.
   await opage.goto(rfqUrl);
   assert.match(await opage.getByTestId("missing").innerText(), /project code, buyer company, classification/);
+  await opage.getByRole("tab", { name: "1. Manifest" }).click();
   await opage.getByLabel("Project code (what suppliers see instead of the project name)").fill("SLATE");
   await opage.getByLabel("Buyer company").fill("VX Design");
   await opage.getByLabel("Buyer contact").fill("Pat Owner");
@@ -149,15 +150,18 @@ try {
   await opage.getByRole("button", { name: "Save manifest" }).click();
   await opage.getByText("Manifest saved.").waitFor();
   assert.match(await opage.getByTestId("missing").innerText(), /^Missing: at least one design file$/);
+  await opage.getByRole("tab", { name: "2. Files" }).click();
   await opage.getByLabel(/timecode\/fab-package v1/).check();
   await opage.getByRole("button", { name: "Save files" }).click();
   await opage.getByText("Files to disclose saved.").waitFor();
+  await opage.getByRole("tab", { name: "3. Suppliers" }).click();
   await opage.getByLabel("Supplier contact").selectOption({ label: `${SUPPLIER}: Quotes desk <${supplier.email}>` });
   await opage.getByRole("button", { name: "Add supplier" }).click();
   await opage.getByText("Supplier added.").waitFor();
   console.log("✓ manifest complete; one requirement and one approved file chosen; supplier added");
 
   // 4. The packet: built by the worker, holding exactly what was chosen.
+  await opage.getByRole("tab", { name: "4. Packet" }).click();
   await opage.getByRole("button", { name: "Build packet" }).click();
   await opage.getByTestId("rfq-status").filter({ hasText: "Packet ready" }).waitFor({ timeout: 60_000 });
   const packetSha = await opage.getByTestId("packet-sha").innerText();
@@ -183,6 +187,7 @@ try {
   await opage.getByLabel("Access window (days)").fill("14");
   await opage.getByRole("button", { name: "Release to suppliers" }).click();
   await opage.getByText(/Released/).waitFor();
+  await opage.getByRole("tab", { name: "5. Emails" }).click();
   await opage.getByTestId("emails").locator("summary").first().click({ position: { x: 4, y: 6 } });
   const draft = await opage.getByTestId("email-draft").first().innerText();
   assert.match(draft, /Subject: SLATE-RFQ-001: request for quotation/);
@@ -228,6 +233,7 @@ try {
 
   // 8. The owner compares and chooses.
   await opage.goto(rfqUrl);
+  await opage.getByRole("tab", { name: "6. Quotes" }).click();
   const row = opage.getByTestId("quotes").locator(`tr[data-name='${SUPPLIER}']`);
   assert.match(await row.innerText(), /rev 2[\s\S]*USD 40\.00[\s\S]*USD 9\.50[\s\S]*USD 120\.00[\s\S]*12 days/);
   assert.match(await opage.getByTestId("recipients").innerText(), /Quoted/);
