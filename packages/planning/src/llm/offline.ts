@@ -38,6 +38,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("prior_work") ? offlinePriorWork(prompt)
       : req.purpose.startsWith("assembly_instructions") ? offlineAssembly(prompt)
       : req.purpose.startsWith("part_identify") ? offlinePartIdentity(prompt)
+      : req.purpose.includes("revise_plan") ? offlineRevision(prompt)
       : this.plan(prompt);
     const output = req.schema.parse(raw);
     return {
@@ -130,4 +131,22 @@ export class OfflineModel implements LanguageModel {
     tasks[0]!.requirement_refs.push(...leftovers);
     return { summary: "Offline heuristic plan (not AI-generated).", tasks, deferred_requirements: [], assumptions: [] };
   }
+}
+
+/**
+ * Offline stand-in for a plan revision (not AI): the first task (the architecture) takes the new requirements and
+ * cites every input the plan must address that no task cites yet. Nothing else changes.
+ */
+export function offlineRevision(prompt: string) {
+  const tasks = [...prompt.matchAll(/^TASK (.*)$/gm)].map((m) => JSON.parse(m[1]!) as { key: string; requirement_refs: string[]; basis?: { mode: string; sources: string[]; reason: string; concerns: string[]; alternatives: string[] } | null });
+  const fresh = (prompt.split(/^Requirements that are new or changed since then[^\n]*\n/m)[1] ?? "").split("\n\n")[0]!;
+  const refs = [...fresh.matchAll(/^- (REQ-[A-Z0-9-]+) \[/gm)].map((m) => m[1]!);
+  const must = (/^Inputs that some task must cite in its basis: (.*)$/m.exec(prompt)?.[1] ?? "").split(", ").filter(Boolean);
+  const cited = new Set(tasks.flatMap((t) => t.basis?.sources ?? []));
+  const first = structuredClone(tasks[0]!);
+  first.requirement_refs = [...new Set([...first.requirement_refs, ...refs])];
+  const add = must.filter((m) => !cited.has(m));
+  if (add.length) first.basis = { mode: "adapt", sources: [...(first.basis?.sources ?? []), ...add], reason: first.basis?.reason ?? "Design around the new inputs (offline revision).", concerns: first.basis?.concerns ?? [], alternatives: first.basis?.alternatives ?? [] };
+  return { summary: `Offline revision (not AI-generated): ${refs.length} new requirement(s) and ${add.length} new input(s) given to ${first.key}.`,
+           changed_tasks: refs.length || add.length ? [first] : [], removed_tasks: [], deferred_requirements: [], assumptions: [] };
 }

@@ -25,7 +25,7 @@ export interface CapabilityInput {
   status: string;
 }
 
-const PlanOutput = z.object({
+export const PlanOutput = z.object({
   summary: z.string(),
   tasks: z.array(z.object({
     key: z.string().describe("Lowercase slug, unique in the plan, e.g. 'pwr-tree'"),
@@ -57,7 +57,7 @@ const PlanOutput = z.object({
 });
 export type PlanOutput = z.infer<typeof PlanOutput>;
 
-const SYSTEM = `You plan hardware product development for a small engineering team that uses KiCad, ngspice, CadQuery and part-distributor data, driven by an automated task runner.
+export const PLAN_SYSTEM = `You plan hardware product development for a small engineering team that uses KiCad, ngspice, CadQuery and part-distributor data, driven by an automated task runner.
 
 Turn the requirements into a dependency graph of bounded tasks. Each task should produce a reviewable artifact (a decision record, calculation, schematic, board, model, report) in roughly a day or less of work.
 
@@ -93,7 +93,10 @@ export interface PlanResult {
   /** Fixes applied by policy rather than by the model (e.g. approval forced on critical tasks). */
   adjustments: string[];
   usage: Usage[];
+  /** Set when the plan revises an earlier one rather than being made from scratch. */
+  revision?: PlanRevisionSummary;
 }
+export interface PlanRevisionSummary { from_version: number; changed: string[]; added: string[]; removed: { key: string; reason: string }[]; new_requirements: number }
 
 export class PlanValidationError extends Error {
   readonly problems: PlanProblem[];
@@ -131,7 +134,7 @@ export async function generatePlan(
   }];
 
   for (let attempt = 1; ; attempt++) {
-    const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
+    const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: PLAN_SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
     usage.push(result.usage);
     const problems = validatePlan(result.output, active.map((r) => r.refCode), inputIds, opts.mustAddress ?? []);
     if (!problems.length) {

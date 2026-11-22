@@ -1,12 +1,12 @@
 "use server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { extractRequirements, generatePlan, planPayload, PlanValidationError, type PlanRequestPayload } from "@vx/planning";
+import { extractRequirements, generatePlan, planPayload, PlanValidationError, revisePlan, type PlanRequestPayload } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
 import { markExtractionFailed, persistExtraction, prepareExtraction, storeDocument } from "@/lib/documents";
-import { loadPlanInputs } from "@/lib/plan-inputs";
+import { loadPlanInputs, loadPreviousPlan } from "@/lib/plan-inputs";
 
 export async function uploadDocument(projectId: string, form: FormData) {
   const base = `/projects/${projectId}`, path = `${base}?tab=documents`;
@@ -50,13 +50,17 @@ export async function setRequirementStatus(projectId: string, requirementId: str
 /** Above this many active requirements the plan is made by a worker: the web server's request limit is 5 minutes. */
 const WEB_PLAN_LIMIT = Number(process.env.VX_WEB_PLAN_MAX_REQUIREMENTS ?? 80);
 
-/** A plan from every project input: requirements (with acceptance criteria), intake, freeze, standards, references, prior work. */
-export async function createPlan(projectId: string, from?: string) {
+/**
+ * A plan from every project input: requirements (with acceptance criteria), intake, freeze, standards, references, prior
+ * work, chosen parts. When a plan exists, the latest one is revised with what changed since it was made (much less work
+ * than planning again); `mode: "fresh"` plans from scratch.
+ */
+export async function createPlan(projectId: string, from?: string, mode?: "revise" | "fresh" | FormData) {
   const path = from === "inputs" ? `/projects/${projectId}/inputs?step=5` : `/projects/${projectId}?tab=plans`;
   const { supabase } = await requireUser();
   const [{ data: project }, { data: reqs }, { data: caps }, loaded] = await Promise.all([
     supabase.from("projects").select("name, description, supervision_mode").eq("id", projectId).single(),
-    supabase.from("requirements").select("ref_code, kind, priority, status, text, notes, acceptance_criteria").eq("project_id", projectId).order("ref_code"),
+    supabase.from("requirements").select("ref_code, kind, priority, status, text, notes, acceptance_criteria, created_at, updated_at").eq("project_id", projectId).order("ref_code"),
     supabase.from("tool_capabilities").select("tool_name, operation, status"),
     loadPlanInputs(supabase, projectId),
   ]);
@@ -68,20 +72,31 @@ export async function createPlan(projectId: string, from?: string) {
     capabilities: (caps ?? []).map((c) => ({ toolName: c.tool_name, operation: c.operation, status: c.status })),
     supervision_mode: project?.supervision_mode ?? "guided",
   };
+  const previous = mode === "fresh" ? null : await loadPreviousPlan(supabase, projectId);
+  if (previous) {
+    request.revise_from = { version: previous.version, summary: previous.summary, tasks: previous.tasks, deferred: previous.deferred, assumptions: previous.assumptions };
+    request.changes = loaded.changes?.items ?? [];
+    request.changed_refs = active.filter((r) => r.created_at <= previous.created_at && r.updated_at > previous.created_at).map((r) => r.ref_code);
+  }
 
   // Large projects: a worker plans (it has no time limit); this page and the inputs page show progress.
   if (active.length > WEB_PLAN_LIMIT) {
     const { error } = await supabase.rpc("request_plan", { p_project: projectId, p_payload: request });
     if (error) fail(path, error);
     revalidatePath(path.split("?")[0]!);
-    redirect(`${path}&notice=${encodeURIComponent(`Planning ${active.length} requirements: a worker is generating the plan. This page updates by itself and links to the plan when it is ready (usually 5 to 15 minutes).`)}`);
+    redirect(`${path}&notice=${encodeURIComponent(previous
+      ? `Updating plan v${previous.version} with what changed: a worker is revising it. This page updates by itself and links to the new version when it is ready (usually a few minutes).`
+      : `Planning ${active.length} requirements: a worker is generating the plan. This page updates by itself and links to the plan when it is ready (usually 5 to 15 minutes).`)}`);
   }
 
   let choice;
   try { choice = getModel(); } catch (e) { fail(path, e); }
   let planId: string;
   try {
-    const plan = await generatePlan(request.requirements, choice.model, { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids, mustAddress: request.must_address });
+    const opts = { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids, mustAddress: request.must_address };
+    const plan = request.revise_from
+      ? await revisePlan(request.revise_from, request.requirements, choice.model, { ...opts, changes: request.changes ?? [], changedRefs: request.changed_refs ?? [] })
+      : await generatePlan(request.requirements, choice.model, opts);
     const payload = planPayload(plan, { model: choice.label, offline: choice.offline, supervisionMode: request.supervision_mode, inputs: request.inputs });
     const { data, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: payload });
     if (error) throw new Error(error.message);

@@ -32,6 +32,98 @@ async function staged(supabase: Awaited<ReturnType<typeof requireUser>>["supabas
   return formFile(supabase, f, "file");
 }
 
+type Supa = Awaited<ReturnType<typeof requireUser>>["supabase"];
+/** Stores one file as a project reference (checked, content-addressed); returns its id or a problem. */
+async function storeReference(supabase: Supa, projectId: string, name: string, mime: string, bytes: Uint8Array, kind: string, title: string, note: string | null):
+    Promise<{ id: string } | { problem: string }> {
+  const refused = uploadProblem(name, bytes, POLICIES.reference);
+  if (refused) return { problem: `${name}: ${refused}` };
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  const path = `${projectId}/references/${sha.slice(0, 16)}-${name.replace(/[^\w.-]+/g, "_").slice(-120)}`;
+  const { error: upErr } = await supabase.storage.from("project-files").upload(path, bytes, { contentType: mime, upsert: false });
+  if (upErr && !/exists|duplicate/i.test(upErr.message)) return { problem: `${name}: ${upErr.message}` };
+  const { data, error } = await supabase.rpc("add_project_reference", {
+    p_project: projectId, p_kind: kind, p_title: title.trim() || name.replace(/\.[^.]+$/, ""), p_note: note,
+    p_filename: name, p_path: path, p_sha256: sha, p_size: bytes.length, p_mime: mime,
+  });
+  if (error) { if (!upErr) await supabase.storage.from("project-files").remove([path]); return { problem: `${name}: ${error.message}` }; }
+  return { id: data as string };
+}
+
+const PACKAGE_FILE = /\.(pdf|docx|txt|md|step|stp|stl|igs|iges|wrl|x_t|x_b)$/i;
+const JUNK = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|desktop\.ini$|\._)/i;
+const MIME: Record<string, string> = { pdf: "application/pdf", step: "application/step", stp: "application/step", stl: "model/stl", txt: "text/plain", md: "text/markdown",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+
+/**
+ * A manufacturer's package (ZIP): its datasheets and 3D models become part files, each noted with the package it came
+ * from (so a model with no part number in it can still be matched to the part its own package describes).
+ */
+async function expandPackage(supabase: Supa, projectId: string, zipName: string, bytes: Uint8Array): Promise<{ added: number; skipped: number; problems: string[] }> {
+  const { unzipSync } = await import("fflate");
+  let entries: Record<string, Uint8Array>;
+  try {
+    let total = 0;
+    entries = unzipSync(bytes, { filter: (f) => { total += f.originalSize; return total < 400_000_000 && !f.name.endsWith("/") && !JUNK.test(f.name) && PACKAGE_FILE.test(f.name); } });
+  } catch (e) { return { added: 0, skipped: 0, problems: [`${zipName}: not a readable ZIP (${(e as Error).message})`] }; }
+  const pkg = zipName.replace(/\.zip$/i, "");
+  const names = Object.keys(entries).slice(0, 200);
+  const base = (n: string) => n.split("/").pop()!;
+  const seen = new Set<string>();
+  let added = 0; const problems: string[] = [];
+  for (const n of names) {
+    let name = base(n);
+    if (seen.has(name.toLowerCase())) name = `${pkg}-${name}`;
+    seen.add(name.toLowerCase());
+    const ext = name.split(".").pop()!.toLowerCase();
+    const kind = /\.(pdf|docx|txt|md)$/i.test(name) ? "datasheet" : "model_3d";
+    const r = await storeReference(supabase, projectId, name, MIME[ext] ?? "application/octet-stream", entries[n]!, kind, name.replace(/\.[^.]+$/, ""), `From the package ${pkg}`);
+    if ("problem" in r) problems.push(r.problem); else added++;
+  }
+  return { added, skipped: Object.keys(entries).length - names.length, problems };
+}
+
+/** A part package (ZIP) dropped on Parts chosen: opened, its datasheets and models stored as part files. */
+export async function addPartPackage(projectId: string, ref: string, name: string, type: string): Promise<UploadOutcome> {
+  const { supabase } = await requireUser();
+  try {
+    const file = await staged(supabase, ref, name, type);
+    if (!file) return { ok: false, message: `${name}: the file did not arrive; choose it again.` };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const refused = uploadProblem(name, bytes, POLICIES.reference);
+    if (refused) return { ok: false, message: `${name}: ${refused}` };
+    const r = await expandPackage(supabase, projectId, name, bytes);
+    revalidatePath(base(projectId));
+    if (!r.added) return { ok: false, message: `${name}: no datasheets or 3D models inside${r.problems.length ? ` (${r.problems.join("; ")})` : ""}` };
+    return { ok: !r.problems.length, message: `${name}: ${r.added} file(s) unpacked${r.problems.length ? `; not stored: ${r.problems.join("; ")}` : ""}` };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+/**
+ * ZIP packages that were added as references (on another step) before Parts chosen took them: each is opened into part
+ * files, the ZIP reference is removed, and the files are read.
+ */
+export async function readPackagesAsParts(projectId: string) {
+  const { supabase } = await requireUser();
+  const { data: zips } = await supabase.from("project_references").select("id, filename, storage_path").eq("project_id", projectId)
+    .is("part_id", null).in("kind", ["other", "datasheet", "prior_design"]).ilike("filename", "%.zip");
+  const lines: string[] = [];
+  for (const z of zips ?? []) {
+    const { data } = await supabase.storage.from("project-files").download(z.storage_path);
+    if (!data) { lines.push(`${z.filename}: could not be read`); continue; }
+    const r = await expandPackage(supabase, projectId, z.filename, new Uint8Array(await data.arrayBuffer()));
+    if (r.added) {
+      const { data: path } = await supabase.rpc("remove_project_reference", { p_id: z.id });
+      if (path) await supabase.storage.from("project-files").remove([path as string]);
+    }
+    lines.push(`${z.filename}: ${r.added ? `${r.added} file(s)` : "nothing to read inside"}${r.problems.length ? ` (${r.problems.length} not stored)` : ""}`);
+  }
+  const read = await identifyPartFiles(projectId);
+  go(`${base(projectId)}?step=3`, `Unpacked ${lines.join("; ")}. ${read.message}`);
+}
+
 /** A specification staged by the browser: checked, parsed and stored like an ordinary upload. */
 export async function addSpecification(projectId: string, ref: string, name: string, type: string): Promise<UploadOutcome> {
   const { supabase, userId } = await requireUser();
@@ -187,8 +279,9 @@ export async function identifyPartFiles(projectId: string): Promise<UploadOutcom
   const { supabase } = await requireUser();
   let choice;
   try { choice = getModel(); } catch (e) { return { ok: false, message: (e as Error).message }; }
-  const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path").eq("project_id", projectId)
+  const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path, note").eq("project_id", projectId)
     .is("part_id", null).is("identified_at", null).in("kind", PART_FILE_KINDS_READ).order("ref_no");
+  const pkgOf = (note: string | null) => /^From the package (.+)$/.exec(note ?? "")?.[1] ?? null;
   const sheets = (files ?? []).filter((f) => f.kind === "datasheet").slice(0, READ_AT_ONCE);
   const models = (files ?? []).filter((f) => f.kind === "model_3d");
   const found: string[] = [], problems: string[] = [];
@@ -219,16 +312,26 @@ export async function identifyPartFiles(projectId: string): Promise<UploadOutcom
       const { data } = await supabase.storage.from("project-files").download(f.storage_path);
       if (data) inside = stepNames(new Uint8Array(await data.arrayBuffer()));
     }
-    const p = matchModelToPart(f.filename, inside, known);
+    // The package a model came in usually carries the part number in its name.
+    const p = matchModelToPart(f.filename, [...inside, pkgOf(f.note) ?? ""], known);
     if (p) {
       const { error } = await supabase.rpc("attach_reference_to_part", { p_reference: f.id, p_part: p.id });
       if (!error) { attached++; await supabase.rpc("note_part_file", { p_reference: f.id, p_note: `matched to ${p.mpn}` }); continue; }
     }
     await supabase.rpc("note_part_file", { p_reference: f.id, p_note: "no part number of a listed part found in this model or its file name" });
   }
+  // Files still unplaced that came in a package describing exactly one part (drawings, other models) go with that part.
+  const { data: placed } = await supabase.from("project_references").select("part_id, note").eq("project_id", projectId).not("part_id", "is", null).like("note", "From the package %");
+  const { data: loose } = await supabase.from("project_references").select("id, note").eq("project_id", projectId).is("part_id", null).like("note", "From the package %");
+  for (const f of loose ?? []) {
+    const owners = [...new Set((placed ?? []).filter((x) => x.note === f.note).map((x) => x.part_id as string))];
+    if (owners.length !== 1) continue;
+    const { error } = await supabase.rpc("attach_reference_to_part", { p_reference: f.id, p_part: owners[0] });
+    if (!error) { attached++; await supabase.rpc("note_part_file", { p_reference: f.id, p_note: `attached with its package (${pkgOf(f.note)})` }); }
+  }
   revalidatePath(base(projectId));
   const more = (files ?? []).filter((f) => f.kind === "datasheet").length - sheets.length;
-  const msg = [found.length ? `Found ${found.length} part(s): ${found.join(", ")}.` : "", attached ? `Attached ${attached} model file(s).` : "",
+  const msg = [found.length ? `Found ${found.length} part(s): ${found.join(", ")}.` : "", attached ? `Attached ${attached} file(s) to their parts.` : "",
     problems.length ? `Not read: ${problems.join(" | ")}` : "", more > 0 ? `${more} more datasheet(s) to read: press "Read the files" again.` : ""].filter(Boolean).join(" ");
   return { ok: problems.length === 0, message: msg || "Nothing new to read." };
 }

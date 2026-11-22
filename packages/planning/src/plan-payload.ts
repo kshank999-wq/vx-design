@@ -1,3 +1,4 @@
+import type { PreviousPlan } from "./plan-revise.ts";
 import type { PlanResult } from "./plan.ts";
 
 /** What the planner was given, as stored with a plan request and read back by the worker. */
@@ -10,6 +11,10 @@ export interface PlanRequestPayload {
   supervision_mode: string;
   /** Earlier work (PR-n) every plan must address; absent in requests made before the register existed. */
   must_address?: { id: string; label: string }[];
+  /** Revise this plan with the changes instead of planning from scratch (absent: a full plan). */
+  revise_from?: PreviousPlan | null;
+  changes?: string[];
+  changed_refs?: string[];
 }
 
 /** A generated plan as public.create_plan_version takes it (the same shape whether the web app or a worker made it). */
@@ -18,7 +23,7 @@ export function planPayload(plan: PlanResult, opts: { model: string; offline: bo
     summary: plan.summary,
     supervision_mode: opts.supervisionMode,
     generator: { model: opts.model, offline: opts.offline, prompt_version: plan.promptVersion, attempts: plan.attempts, adjustments: plan.adjustments,
-                 usage: plan.usage, ...(opts.requestId ? { request_id: opts.requestId } : {}) },
+                 usage: plan.usage, ...(plan.revision ? { revision: plan.revision } : {}), ...(opts.requestId ? { request_id: opts.requestId } : {}) },
     assumptions: plan.assumptions,
     deferred: plan.deferred,
     inputs: opts.inputs,

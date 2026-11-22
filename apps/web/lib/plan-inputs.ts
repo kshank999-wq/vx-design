@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { routeLine, type Route } from "./manufacturing";
-import { applyEdits, COMMITTED, planContext, priorWorkFromFluxAudit, type ChosenPart, type FluxAuditLike, type PlanChanges, type PlanInputs, type PlanInputSource, type PriorWork, type RegisterItem } from "@vx/planning";
+import { applyEdits, COMMITTED, planContext, priorWorkFromFluxAudit, type ChosenPart, type FluxAuditLike, type PlanChanges, type PlanInputs, type PlanInputSource, type PreviousPlan, type PriorWork, type RegisterItem } from "@vx/planning";
 
 export { ITEM_STATUS_LABEL, PART_FILE_KINDS, PART_STATUS, partFileKind, REFERENCE_KINDS, VISUAL_KINDS } from "./reference-kinds";
 export const refCode = (n: number) => `REF-${n}`;
@@ -169,4 +169,36 @@ export async function loadPlanInputs(supabase: SupabaseClient, projectId: string
   // Every chosen part must be used (or its replacement argued) by some task.
   mustAddress.push(...(inputs.parts ?? []).map((p) => ({ id: p.id, label: `${p.mpn}${p.summary ? ` ${p.summary}` : ""} (${p.status.replace("_", " ")})`.slice(0, 160) })));
   return { inputs, context: text, sources, record, priorWork, register, mustAddress, inputIds: [...sources.map((s) => s.id), ...live.map((i) => i.id)], changes };
+}
+
+/** The latest plan as the planner revises it: its tasks with dependencies and requirement refs, deferrals, assumptions. */
+export async function loadPreviousPlan(supabase: Supa, projectId: string): Promise<(PreviousPlan & { id: string; created_at: string }) | null> {
+  const { data: plan } = await supabase.from("plans").select("id, version, summary, deferred, assumptions, created_at").eq("project_id", projectId)
+    .order("version", { ascending: false }).limit(1).maybeSingle();
+  if (!plan) return null;
+  const [{ data: tasks }, { data: reqs }] = await Promise.all([
+    supabase.from("tasks").select("id, key, title, discipline, description, required_tools, acceptance_tests, approval_policy, risk_level, estimated_hours, basis, " +
+      "task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)").eq("plan_id", plan.id).order("position"),
+    supabase.from("requirements").select("id, ref_code").eq("project_id", projectId),
+  ]);
+  const rows = (tasks ?? []) as unknown as {
+    id: string; key: string; title: string; discipline: string; description: string | null; required_tools: string[]; risk_level: string; estimated_hours: number | null;
+    acceptance_tests: { description: string; method: string; validationKind?: string | null }[]; approval_policy: { required?: boolean; reason?: string | null } | null;
+    basis: PreviousPlan["tasks"][number]["basis"]; task_dependencies: { depends_on_task_id: string }[]; task_requirements: { requirement_id: string }[];
+  }[];
+  const keyOf = new Map(rows.map((t) => [t.id, t.key]));
+  const refOf = new Map((reqs ?? []).map((r) => [r.id, r.ref_code as string]));
+  return {
+    id: plan.id, created_at: plan.created_at, version: plan.version, summary: plan.summary ?? "",
+    deferred: (plan.deferred ?? []) as PreviousPlan["deferred"], assumptions: (plan.assumptions ?? []) as string[],
+    tasks: rows.map((t) => ({
+      key: t.key, title: t.title, discipline: t.discipline as PreviousPlan["tasks"][number]["discipline"], description: t.description ?? "",
+      upstream_keys: t.task_dependencies.map((d) => keyOf.get(d.depends_on_task_id)).filter((k): k is string => !!k),
+      requirement_refs: t.task_requirements.map((r) => refOf.get(r.requirement_id)).filter((k): k is string => !!k),
+      acceptance_tests: (t.acceptance_tests ?? []).map((a) => ({ description: a.description, method: a.method as "validation", validation_kind: (a.validationKind ?? null) as never })),
+      risk_level: t.risk_level as PreviousPlan["tasks"][number]["risk_level"], required_tools: t.required_tools ?? [],
+      approval_required: !!t.approval_policy?.required, approval_reason: t.approval_policy?.reason ?? null,
+      estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null, basis: t.basis ?? null,
+    })),
+  };
 }

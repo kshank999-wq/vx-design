@@ -119,3 +119,32 @@ test("chosen parts and what changed since the last plan go to the planner; the o
     { projectContext: text, inputIds: ["PT-1"], mustAddress: [{ id: "PT-1", label: "SIT5356AI" }] });
   assert.deepEqual(plan.tasks.find((t) => t.key === "architecture")?.basis?.sources, ["PT-1"]);
 });
+
+test("a revision works the changes into the existing plan: only affected tasks change, and the merged plan passes the same checks", async () => {
+  const { revisePlan, applyRevision } = await import("../src/index.ts");
+  const reqs = [
+    { refCode: "REQ-FUN-001", kind: "functional", priority: "must", status: "confirmed", text: "Show timecode." },
+    { refCode: "REQ-PWR-001", kind: "power", priority: "must", status: "confirmed", text: "Run 8 hours." },
+  ];
+  const first = await generatePlan(reqs, new OfflineModel());
+  const prev = { version: 1, summary: first.summary, deferred: first.deferred, assumptions: first.assumptions,
+    tasks: first.tasks.map((t) => ({ key: t.key, title: t.title, discipline: t.discipline, description: t.description ?? "", upstream_keys: t.upstreamKeys,
+      requirement_refs: t.requirementRefs, acceptance_tests: t.acceptanceTests.map((a) => ({ description: a.description, method: a.method, validation_kind: a.validationKind ?? null })),
+      risk_level: t.riskLevel, required_tools: t.requiredTools, approval_required: t.approvalRequired, approval_reason: t.approvalReason ?? null,
+      estimated_hours: t.estimatedHours ?? null, basis: t.basis ?? null })) };
+  const more = [...reqs, { refCode: "REQ-FUN-002", kind: "functional", priority: "must", status: "confirmed", text: "Read SD cards." }];
+  const r = await revisePlan(prev, more, new OfflineModel(), { changes: ["1 part added: PT-1 DM1AA"], inputIds: ["PT-1"], mustAddress: [{ id: "PT-1", label: "DM1AA" }] });
+  assert.equal(r.promptVersion, "plan-revise-v1");
+  assert.deepEqual(r.revision, { from_version: 1, changed: ["architecture"], added: [], removed: [], new_requirements: 1 });
+  const arch = r.tasks.find((t) => t.key === "architecture")!;
+  assert.ok(arch.requirementRefs.includes("REQ-FUN-002"));
+  assert.deepEqual(arch.basis?.sources, ["PT-1"]);
+  assert.equal(r.tasks.length, first.tasks.length, "nothing else added or dropped");
+  assert.deepEqual({ ...r.tasks.find((t) => t.key === "schematic"), basis: null }, first.tasks.find((t) => t.key === "schematic"), "unaffected tasks are kept as they were");
+  assert.equal(r.tasks.find((t) => t.key === "schematic")?.basis?.mode, "new");
+  // Removing a task drops links to it; requirements no longer active are dropped from tasks.
+  const m = applyRevision(prev, { summary: "s", changed_tasks: [], removed_tasks: [{ key: "enclosure-envelope", reason: "merged" }], deferred_requirements: [], assumptions: [] }, ["REQ-FUN-001"]);
+  assert.equal(m.plan.tasks.some((t) => t.key === "enclosure-envelope"), false);
+  assert.equal(m.plan.tasks.some((t) => t.upstream_keys.includes("enclosure-envelope")), false);
+  assert.ok(m.adjustments.some((a) => /dropped requirement\(s\) no longer active: REQ-PWR-001/.test(a)));
+});

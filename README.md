@@ -114,12 +114,18 @@ sit beside the steps.
   it, sub-folders included. System clutter (.DS_Store, Thumbs.db, __MACOSX) is left out, and each box keeps only the
   file types it takes, saying how many it left out. Flux imports take whole export folders. When two files share a
   name, the sub-folder becomes part of the name.
-- **Regenerating the plan:** the planner reads every input, including the parts chosen from their datasheets (PT-n,
-  with their specifications and model files; every one must be used by a task or its replacement argued). When anything
-  is added or changed after a plan is made (a part or its files, a specification, requirements, references, prior work,
-  the register, manufacturing routes, setup, the design freeze, standards), the project, Project inputs and plan pages
-  list what is new with a "Regenerate the plan" button. The new plan is given that list and the old plan's tasks, keeps
-  what still holds under the same keys, and revises the rest.
+- **Updating the plan:** the planner reads every input, including the parts chosen from their datasheets (PT-n, with
+  their specifications and model files; every one must be used by a task or its replacement argued). When anything is
+  added or changed after a plan is made, the project, Project inputs and plan pages list what is new. "Update plan vN
+  with these changes" sends the current plan's tasks and only the new or changed inputs; the planner returns just the
+  tasks to add, change or remove, which are merged and checked like a full plan (every requirement covered or deferred,
+  every part addressed). The new version says what it changed. "Rebuild from scratch" plans everything again.
+- **Plan being built:** a large card at the top of the project, Project inputs and plan pages shows what is happening
+  (updating vN or building from scratch), a live clock and the steps, and warns when no worker has picked the request
+  up after three minutes. The update buttons are hidden meanwhile.
+- **Part packages (ZIP):** a manufacturer's ZIP can be dropped on Parts chosen as it is: it is opened, and its datasheets
+  and 3D models become part files, noted with the package they came from. A model with no part number inside goes with
+  the part its own package describes. ZIPs added on another step are listed on Parts chosen with "Read them as parts".
 - **Workspace activity panel:** the plan's tasks are grouped by stage, with done/total. Stages with open work start
   expanded.
 

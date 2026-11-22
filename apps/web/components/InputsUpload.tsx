@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { addReference, addSpecification, identifyPartFiles, type UploadOutcome } from "@/app/projects/[projectId]/inputs/actions";
+import { addPartPackage, addReference, addSpecification, identifyPartFiles, type UploadOutcome } from "@/app/projects/[projectId]/inputs/actions";
 import { partFileKind } from "@/lib/reference-kinds";
 import { FilePicker } from "./FilePicker";
 
@@ -14,7 +14,7 @@ import { FilePicker } from "./FilePicker";
  */
 const ACCEPT: Record<string, string> = {
   specification: ".docx,.pdf,.md,.txt", reference: ".png,.jpg,.jpeg,.webp,.gif,.pdf", model: ".stl,.step,.stp",
-  partfiles: ".pdf,.step,.stp,.stl,.igs,.iges,.wrl,.x_t,.x_b,.docx,.txt,.md",
+  partfiles: ".pdf,.step,.stp,.stl,.igs,.iges,.wrl,.x_t,.x_b,.docx,.txt,.md,.zip",
   part: ".pdf,.step,.stp,.stl,.igs,.iges,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.zip,.txt,.md,.csv",
   prior: ".pdf,.step,.stp,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.zip,.txt,.md,.csv",
 };
@@ -44,6 +44,10 @@ export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
     const supabase = createClient();
     const set = (i: number, text: string, ok: boolean | null) => setLines((l) => l.map((x, j) => (j === i ? { text, ok } : x)));
     for (const [i, f] of files.entries()) {
+      if (mode === "reference" && /\.zip$/i.test(f.name)) {
+        set(i, `${f.name}: a ZIP of part files (datasheets, STEP models) goes under 3. Parts chosen, where it is opened and read.`, false);
+        continue;
+      }
       if (mode === "specification" && !/\.(docx|pdf|md|markdown|txt)$/i.test(f.name)) {
         set(i, /\.(zip|json|edif|d356|ipc2581c|step|stp|csv|cad)$/i.test(f.name)
           ? `${f.name}: this looks like a Flux or CAD export, not a specification. Add it under 4. Prior work (Flux import).`
@@ -59,6 +63,7 @@ export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
       let r: UploadOutcome;
       try {
         r = mode === "specification" ? await addSpecification(projectId, ref, f.name, f.type)
+          : mode === "partfiles" && /\.zip$/i.test(f.name) ? await addPartPackage(projectId, ref, f.name, f.type)
           : mode === "partfiles" ? await addReference(projectId, ref, f.name, f.type, /\.(pdf|docx|txt|md)$/i.test(f.name) ? "datasheet" : partFileKind(f.name), f.name.replace(/\.[^.]+$/, ""), "")
           : mode === "part" ? await addReference(projectId, ref, f.name, f.type, partFileKind(f.name), `${partLabel ?? "Part"}: ${f.name.replace(/\.[^.]+$/, "")}`, note, partId)
           : mode === "prior" ? await addReference(projectId, ref, f.name, f.type, "prior_design", files.length === 1 ? title : "", note)

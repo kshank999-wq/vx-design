@@ -51,6 +51,30 @@ test("a queued plan is made by a worker, with its inputs and task basis; a plan 
   const { data: covered } = await user.from("task_requirements").select("requirement_id, tasks!inner(plan_id)").eq("tasks.plan_id", row!.plan_id);
   assert.equal(new Set(covered!.map((c) => c.requirement_id)).size, 12, "every requirement is covered");
 
+  // An update of that plan: the worker revises it with the change (a new requirement and a part) instead of planning again.
+  const { data: tasks1 } = await user.from("tasks").select("key").eq("plan_id", row!.plan_id);
+  assert.ifError((await admin.from("requirements").insert({ project_id: project!.id, ref_code: "REQ-FUN-004", kind: "functional", status: "confirmed", priority: "must", text: "Read SD cards", origin: "manual" })).error);
+  const prevPlan = { version: 1, summary: "first", deferred: [], assumptions: [], tasks: [{ key: "architecture", title: "Architecture", discipline: "architecture" as const, description: "",
+    upstream_keys: [], requirement_refs: reqs.map((r) => r.refCode), acceptance_tests: [{ description: "reviewed", method: "human_review" as const, validation_kind: null }],
+    risk_level: "medium" as const, required_tools: [], approval_required: false, approval_reason: null, estimated_hours: 4, basis: null }] };
+  const revise = { ...payload, requirements: [...reqs, { refCode: "REQ-FUN-004", kind: "functional", priority: "must", status: "confirmed", text: "Read SD cards" }],
+    input_ids: ["REF-1", "PT-1"], must_address: [{ id: "PT-1", label: "DM1AA SD card socket" }], revise_from: prevPlan, changes: ["1 part added: PT-1 DM1AA"], changed_refs: [] };
+  const { data: revId, error: revErr } = await user.rpc("request_plan", { p_project: project!.id, p_payload: revise });
+  assert.ifError(revErr);
+  for (let i = 0; i < 10; i++) {
+    await processPlanRequest(db, model, "test-plans");
+    ({ data: row } = await admin.from("plan_requests").select("status, plan_id, error").eq("id", revId).single());
+    if (row!.status === "done" || row!.status === "failed") break;
+  }
+  assert.equal(row!.status, "done", row!.error ?? "");
+  const { data: plan2 } = await user.from("plans").select("generator").eq("id", row!.plan_id).single();
+  assert.deepEqual((plan2!.generator as { revision: unknown }).revision, { from_version: 1, changed: ["architecture"], added: [], removed: [], new_requirements: 1 });
+  assert.equal((plan2!.generator as { prompt_version: string }).prompt_version, "plan-revise-v1");
+  const { data: arch } = await user.from("tasks").select("basis").eq("plan_id", row!.plan_id).eq("key", "architecture").single();
+  assert.deepEqual((arch!.basis as { sources: string[] }).sources, ["PT-1"]);
+  assert.ok(tasks1!.length > 0);
+  await admin.from("requirements").delete().eq("project_id", project!.id).eq("ref_code", "REQ-FUN-004");
+
   // A request whose plan cannot be stored (a requirement deleted since) fails with the database's reason.
   const bad = { ...payload, requirements: [...reqs, { refCode: "REQ-FUN-099", kind: "functional", priority: "must", status: "confirmed", text: "gone" }] };
   const { data: badId } = await user.rpc("request_plan", { p_project: project!.id, p_payload: bad });
@@ -62,6 +86,6 @@ test("a queued plan is made by a worker, with its inputs and task basis; a plan 
   assert.equal(row!.status, "failed");
   assert.match(row!.error!, /unknown requirement REQ-FUN-099/);
   // Members read their project's requests; workers alone claim and complete them.
-  assert.equal((await user.from("plan_requests").select("id").eq("project_id", project!.id)).data!.length, 2);
+  assert.equal((await user.from("plan_requests").select("id").eq("project_id", project!.id)).data!.length, 3);
   assert.match((await user.rpc("claim_plan_request", { p_worker_id: "me" })).error?.message ?? "", /permission denied/);
 });

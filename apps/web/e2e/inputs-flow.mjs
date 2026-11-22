@@ -16,7 +16,9 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
-const { createClient } = createRequire(join(here, "../../../services/orchestrator/package.json"))("@supabase/supabase-js");
+const orch = createRequire(join(here, "../../../services/orchestrator/package.json"));
+const { createClient } = orch("@supabase/supabase-js");
+const { zipSync } = orch("fflate");
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const { SUPABASE_URL: URL, SUPABASE_SERVICE_ROLE_KEY: SERVICE, SUPABASE_ANON_KEY: ANON } = process.env;
@@ -146,7 +148,7 @@ try {
     { name: "bracket.step", mimeType: "application/step", buffer: Buffer.from(STEP.toString().replace(/RVT101HVHNWC00-B/g, "BRKT").replace("display_model", "bracket")) },
   ]);
   await pf.getByRole("button", { name: "Upload and read the files" }).click();
-  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): RVT101HVHNWC00-B \(Riverdi\)\. Attached 1 model file\(s\)\.$/).waitFor();
+  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): RVT101HVHNWC00-B \(Riverdi\)\. Attached 1 file\(s\) to their parts\.$/).waitFor();
   await page.reload();
   const row = page.getByTestId("parts-display").locator("tr[data-part='RVT101HVHNWC00-B']");
   const files = await row.innerText();
@@ -223,28 +225,49 @@ try {
   assert.match(await page.locator("li.task", { hasText: "Preliminary power budget" }).getByTestId("basis").innerText(), /^starts fresh/);
   await shot(page, "03-plan");
 
-  // 3b. Something new after the plan: another part, from its datasheet. The project, inputs and plan pages list what is new
-  // since the plan; regenerating gives the planner the change and the old plan's tasks, and the new plan uses the part.
+  // 3b. Something new after the plan: parts arrive as manufacturers' ZIP packages. One is dropped on Parts chosen; one was
+  // added earlier as a reference and is read as parts from there. The project, inputs and plan pages list what is new;
+  // updating the plan works only the changes into it, and the new version uses the parts.
   await page.goto(`${P}/inputs?step=3`);
-  await pf.getByLabel("Part files").setInputFiles([{ name: "sitime-tcxo.pdf", mimeType: "application/pdf", buffer: Buffer.from(textPdf(["SiTime Super-TCXO",
-    "Part number: SIT5356AI-FQ-33E0-10.000000", "Manufacturer: SiTime", "Description: 10 MHz Super-TCXO oscillator for timecode", "Frequency stability: 0.1 ppm", "Supply voltage: 3.3 V"])) }]);
+  const tcxoSheet = Buffer.from(textPdf(["SiTime Super-TCXO", "Part number: SIT5356AI-FQ-33E0-10.000000", "Manufacturer: SiTime",
+    "Description: 10 MHz Super-TCXO oscillator for timecode", "Frequency stability: 0.1 ppm", "Supply voltage: 3.3 V"]));
+  const oscStep = Buffer.from("ISO-10303-21;\nHEADER;\nFILE_NAME('osc','2024-01-01',(''),(''),'','','');\nENDSEC;\nDATA;\n#1=PRODUCT('OSC','OSC body','',(#2));\nENDSEC;\nEND-ISO-10303-21;\n");
+  const tcxoZip = Buffer.from(zipSync({ "docs/sitime-tcxo.pdf": new Uint8Array(tcxoSheet), "3d/osc.step": new Uint8Array(oscStep), "__MACOSX/3d/._osc.step": new Uint8Array([0]) }));
+  await pf.getByLabel("Part files").setInputFiles([{ name: "SiTime oscillator pack.zip", mimeType: "application/zip", buffer: tcxoZip }]);
   await pf.getByRole("button", { name: "Upload and read the files" }).click();
-  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): SIT5356AI-FQ-33E0-10\.000000 \(SiTime\)/).waitFor();
+  await page.getByTestId("upload-partfiles-status").getByText("SiTime oscillator pack.zip: 2 file(s) unpacked").waitFor();
+  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): SIT5356AI-FQ-33E0-10\.000000 \(SiTime\)\. Attached 1 file\(s\) to their parts\.$/).waitFor();
+  await page.reload();
+  assert.match(await page.getByTestId("parts-timecode").locator("tr[data-part='SIT5356AI-FQ-33E0-10.000000']").innerText(), /osc\.step/, "the model with no part number in it goes with the part its package describes");
+  // A package added earlier as a plain reference.
+  const sdZip = Buffer.from(zipSync({ "Hirose/DM1AA datasheet.pdf": new Uint8Array(Buffer.from(textPdf(["Hirose micro SD card socket", "Part number: DM1AA-SF-PEJ", "Manufacturer: Hirose",
+    "Description: microSD card socket, push-push", "Contact rating: 0.5 A"]))) }));
+  const sdPath = `${project.id}/references/${stamp}-Hirose_SD.zip`;
+  assert.ifError((await api.storage.from("project-files").upload(sdPath, sdZip, { contentType: "application/zip" })).error);
+  assert.ifError((await api.rpc("add_project_reference", { p_project: project.id, p_kind: "other", p_title: "Hirose SD", p_note: null, p_filename: "Hirose SD.zip",
+    p_path: sdPath, p_sha256: "0".repeat(64), p_size: sdZip.length, p_mime: "application/zip" })).error);
+  await page.reload();
+  const elsewhere = page.getByTestId("packages-elsewhere");
+  assert.match(await elsewhere.innerText(), /1 ZIP package\(s\) were added as references, not as parts:\s+Hirose SD\.zip/);
+  await elsewhere.getByRole("button", { name: "Read them as parts" }).click();
+  await page.getByText(/Unpacked Hirose SD\.zip: 1 file\(s\)\. Found 1 part\(s\): DM1AA-SF-PEJ \(Hirose\)/).first().waitFor();
+  assert.equal(await page.getByTestId("packages-elsewhere").count(), 0, "the ZIP is replaced by its files");
   await page.goto(P);
-  assert.match(await page.getByTestId("plan-changes").innerText(), /^New since plan v1[\s\S]*1 part added: PT-2 SIT5356AI-FQ-33E0-10\.000000 \(10 MHz Super-TCXO oscillator for timecode\)/);
+  assert.match(await page.getByTestId("plan-changes").innerText(), /^New since plan v1[\s\S]*2 parts added: PT-2 SIT5356AI-FQ-33E0-10\.000000 \(10 MHz Super-TCXO oscillator for timecode\); PT-3 DM1AA-SF-PEJ/);
   await page.goto(`${P}/inputs?step=5`);
   const ctx2 = await page.getByTestId("plan-context").locator("pre").textContent();
   assert.match(ctx2, /^- \[PT-2\] \(selected\) SIT5356AI-FQ-33E0-10\.000000 \(SiTime\) \[timecode\]\n {2}- used for: 10 MHz Super-TCXO oscillator for timecode$/m);
   assert.match(ctx2, /^ {2}- specifications: Frequency stability 0\.1 ppm; Supply voltage 3\.3 V$/m);
+  assert.match(ctx2, /^ {2}- files: sitime-tcxo\.pdf \(datasheet\), osc\.step \(3D model\)$/m);
   assert.match(ctx2, /^Changed since the last plan \(version 1, made \d{4}-\d{2}-\d{2}\)\. This plan replaces it/m);
-  assert.match(ctx2, /^- 1 part added: PT-2 SIT5356AI-FQ-33E0-10\.000000/m);
   assert.match(ctx2, /^Tasks in plan version 1:\n- architecture: System and component architecture/m);
   await shot(page, "03b-changed");
-  await page.getByTestId("plan-changes").getByRole("button", { name: "Regenerate the plan with these changes" }).click();
+  await page.getByTestId("plan-changes").getByRole("button", { name: "Update plan v1 with these changes" }).click();
   await page.waitForURL(/\/plans\//);
   assert.match(await page.getByRole("heading", { level: 1 }).innerText(), /v2/);
-  assert.match(await page.getByTestId("built-from").innerText(), /PT-1 RVT101HVHNWC00-B \(Riverdi\); PT-2 SIT5356AI-FQ-33E0-10\.000000 \(SiTime\);/);
-  assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(), /PT-2 SIT5356AI/);
+  assert.match(await page.getByTestId("revision").innerText(), /^Updated from plan v1 with what changed, not planned again: changed architecture; 0 new or changed requirement\(s\); every other task kept as it was\.$/);
+  assert.match(await page.getByTestId("built-from").innerText(), /PT-1 RVT101HVHNWC00-B \(Riverdi\); PT-2 SIT5356AI-FQ-33E0-10\.000000 \(SiTime\); PT-3 DM1AA-SF-PEJ \(Hirose\);/);
+  assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(), /PT-2 SIT5356AI[\s\S]*PT-3 DM1AA/);
   assert.equal(await page.getByTestId("plan-changes").count(), 0, "the new plan has taken the change in");
 
   // 4. Leave a reference out; use the mock-up for concepts.

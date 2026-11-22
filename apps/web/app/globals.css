@@ -438,3 +438,20 @@ details.about > summary { color: var(--accent); }
 .stage-row > details[open] { padding-bottom: 12px; }
 [data-testid="stages"] > li.stage-row { margin: 8px 0; }
 .compliance-group h3 { margin: 18px 0 6px; display: flex; gap: 8px; align-items: center; }
+
+/* A plan being built: large, with a moving bar and the steps */
+.build-status { border: 1px solid var(--tech); background: linear-gradient(180deg, var(--tech-bg), var(--surface) 70%); }
+.build-status h2 { margin: 0; font-size: 20px; }
+.build-clock { text-align: right; display: grid; }
+.build-clock .mono { font-size: 28px; font-weight: 700; color: var(--tech); }
+.build-bar { height: 6px; border-radius: 3px; background: var(--line2); overflow: hidden; margin: 14px 0 10px; }
+.build-bar span { display: block; width: 35%; height: 100%; background: var(--tech); border-radius: 3px; animation: build-slide 1.6s ease-in-out infinite; }
+@keyframes build-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@media (prefers-reduced-motion: reduce) { .build-bar span { animation: none; width: 100%; opacity: .5; } }
+.build-steps { display: flex; gap: 18px; flex-wrap: wrap; list-style: none; padding: 0; margin: 0 0 8px; }
+.build-steps li { color: var(--soft); }
+.build-steps li::before { content: "○ "; }
+.build-steps li.done { color: var(--ok); }
+.build-steps li.done::before { content: "✓ "; }
+.build-steps li.now { color: var(--fg); font-weight: 650; }
+.build-steps li.now::before { content: "● "; color: var(--tech); }

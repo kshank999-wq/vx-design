@@ -5,12 +5,14 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { planChanges } from "@/lib/plan-inputs";
 import { createPlan } from "../../actions";
 import { authorizeRun, decidePlan, revisePlan, submitPlan, updateTask } from "./actions";
 
 interface AcceptanceTest { id: string; description: string; method: string; validationKind?: string }
-interface Generator { model?: string; offline?: boolean; prompt_version?: string; attempts?: number; adjustments?: string[] }
+interface Generator { model?: string; offline?: boolean; prompt_version?: string; attempts?: number; adjustments?: string[];
+  revision?: { from_version: number; changed: string[]; added: string[]; removed: { key: string; reason: string }[]; new_requirements: number } }
 interface Req { id: string; ref_code: string; text: string; source_section: string | null; source_excerpt: string | null; status: string }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -44,6 +46,8 @@ export default async function PlanPage({ params, searchParams }: {
   // On the newest plan: what has been added since it was made, and a button to regenerate it.
   const changes = role === "owner" || role === "engineer" ? await planChanges(supabase, projectId) : null;
   const isLatest = changes?.version === plan.version;
+  const building = isLatest ? await activePlanRequest(supabase, projectId) : null;
+  const rev = gen.revision;
   const keyOf = new Map((tasks ?? []).map((t) => [t.id, t.key]));
   const reqById = new Map((reqs ?? []).map((r) => [r.id, r as Req]));
   const deferred = (plan.deferred ?? []) as { ref: string; reason: string }[];
@@ -89,7 +93,14 @@ export default async function PlanPage({ params, searchParams }: {
           {reuses} task(s) reuse or adapt earlier work{replaces ? `, ${replaces} replace it` : ""}. <Link href={`/projects/${projectId}/inputs`}>Project inputs</Link></p>
       )}
 
-      {isLatest && <PlanChangesNotice changes={changes} canEdit action={createPlan.bind(null, projectId, "project")} />}
+      {isLatest && <PlanRequestStatus supabase={supabase} projectId={projectId} />}
+      {isLatest && <PlanChangesNotice changes={changes} canEdit building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />}
+      {rev && (
+        <p className="card small" data-testid="revision">Updated from <strong>plan v{rev.from_version}</strong> with what changed, not planned again:{" "}
+          {rev.changed.length ? <>changed {rev.changed.join(", ")}; </> : null}{rev.added.length ? <>added {rev.added.join(", ")}; </> : null}
+          {rev.removed.length ? <>removed {rev.removed.map((r) => `${r.key} (${r.reason})`).join(", ")}; </> : null}
+          {rev.new_requirements} new or changed requirement(s); every other task kept as it was.</p>
+      )}
       <div className="card row spread">
         <span className="small">
           {plan.status === "draft" && "Draft: edit tasks, then submit the plan for approval."}

@@ -4,7 +4,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
 import { InputsUpload } from "@/components/InputsUpload";
-import { PlanRequestStatus } from "@/components/PlanRequestStatus";
+import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { crossDocumentDuplicates } from "@/lib/documents";
@@ -12,7 +12,7 @@ import { SUBSYSTEMS, subsystemLabel, type RegisterItem } from "@vx/planning";
 import { IMAGE_TYPES, ITEM_STATUS_LABEL, loadPlanInputs, PART_STATUS, refCode, REFERENCE_KINDS, VISUAL_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
 import { PlanChangesNotice } from "@/components/PlanChangesNotice";
-import { placePartFile, readPartFiles } from "./actions";
+import { placePartFile, readPackagesAsParts, readPartFiles } from "./actions";
 import { editRegisterItem, extractAll, removePart, removeReference, requestRegister, savePart, setAuditInPlan, updateReference } from "./actions";
 import { createAudit, runAudit } from "../flux/actions";
 
@@ -58,6 +58,7 @@ export default async function InputsPage({ params, searchParams }: {
   if (!project) notFound();
   if (me?.role === "client") redirect(`/projects/${projectId}/workspace`);
   const canEdit = me?.role === "owner" || me?.role === "engineer";
+  const planBuilding = await activePlanRequest(supabase, projectId);
   const reqCount = (id: string) => (reqs ?? []).filter((r) => r.document_id === id && r.status !== "rejected").length;
   const pending = (docs ?? []).filter((d) => d.extraction_status === "pending" || d.extraction_status === "failed");
   const active = (reqs ?? []).filter((r) => r.status !== "rejected");
@@ -75,6 +76,7 @@ export default async function InputsPage({ params, searchParams }: {
   const filesOf = (partId: string) => (refs ?? []).filter((r) => r.part_id === partId);
   const partFile = (r: NonNullable<typeof refs>[number]) => !r.part_id && ["datasheet", "model_3d"].includes(r.kind);
   const unread = (refs ?? []).filter((r) => partFile(r) && !r.identified_at);
+  const packages = (refs ?? []).filter((r) => !r.part_id && ["other", "datasheet", "prior_design"].includes(r.kind) && /\.zip$/i.test(r.filename));
   const unplaced = (refs ?? []).filter((r) => partFile(r) && r.identified_at);
   const building = (registers ?? []).find((r) => r.status === "queued" || r.status === "running");
   const lastFailed = (registers ?? [])[0]?.status === "failed" ? (registers ?? [])[0] : null;
@@ -135,6 +137,7 @@ export default async function InputsPage({ params, searchParams }: {
       <div className="title-row"><h1>Project inputs</h1>
         {((audits ?? []).some((a) => a.status === "queued" || a.status === "running") || (docs ?? []).some((d) => d.extraction_status === "running")) && !building && <AutoRefresh intervalMs={3000} />}</div>
       <Banner error={error} notice={notice} />
+      <PlanRequestStatus supabase={supabase} projectId={projectId} />
       <div className="setup-grid">
         <nav className="card setup-rail" aria-label="Input steps" data-testid="input-steps">
           <h2 className="eyebrow">Inputs</h2>
@@ -204,8 +207,16 @@ export default async function InputsPage({ params, searchParams }: {
         <h2 className="setup-title">Parts already chosen</h2>
         <p className="small muted">Upload the manufacturer datasheets (PDF) and the 3D or CAD files (STEP, STL, IGES) of the parts already picked. Each
           datasheet is read for the part number, manufacturer, what the part is and its key specifications, and becomes a part; each model is
-          matched to its part by the part number inside it or in its file name. Check the result and set how far each part got. The plan must
-          continue, adapt or replace each one.</p>
+          matched to its part by the part number inside it or in its file name. A manufacturer&apos;s ZIP package can go in as it is: it is opened
+          and its datasheets and models are read. Check the result and set how far each part got. The plan must continue, adapt or replace each one.</p>
+        {canEdit && packages.length > 0 && (
+          <form action={readPackagesAsParts.bind(null, projectId)} className="card notice-changes" data-testid="packages-elsewhere">
+            <strong>{packages.length} ZIP package(s) were added as references, not as parts:</strong>
+            <span className="small"> {packages.map((r) => r.filename).join(", ")}.</span>
+            <div className="row"><SubmitButton pendingText="Opening and reading… (a minute or two)">Read them as parts</SubmitButton>
+              <span className="small muted">Each is opened; its datasheets and 3D models become part files and are read; the ZIP itself is removed.</span></div>
+          </form>
+        )}
         {canEdit && <div className="card dropzone" data-testid="part-files"><InputsUpload projectId={projectId} mode="partfiles" /></div>}
         {canEdit && unread.length > 0 && (
           <form action={readPartFiles.bind(null, projectId)} className="row" data-testid="read-part-files">
@@ -415,11 +426,11 @@ export default async function InputsPage({ params, searchParams }: {
       <section>
         <h2>The plan</h2>
         <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.filter((m) => m.id.startsWith("PR-")).length} of which the plan must address` : ""}{loaded.inputs.parts?.length ? `; ${loaded.inputs.parts.length} chosen part(s), each to be used by a task` : ""}.</p>
-        <PlanChangesNotice changes={loaded.changes} canEdit={canEdit} action={createPlan.bind(null, projectId, "inputs")} />
+        <PlanChangesNotice changes={loaded.changes} canEdit={canEdit} building={!!planBuilding} action={createPlan.bind(null, projectId, "inputs", "revise")} fresh={createPlan.bind(null, projectId, "inputs", "fresh")} />
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
-        {canEdit && !loaded.changes?.items.length && (
-          <form action={createPlan.bind(null, projectId, "inputs")} className="row">
-            <SubmitButton disabled={!active.length} pendingText="Starting…">{plans?.length ? "Regenerate the plan from these inputs" : "Generate plan from these inputs"}</SubmitButton>
+        {canEdit && !planBuilding && !loaded.changes?.items.length && (
+          <form action={createPlan.bind(null, projectId, "inputs", plans?.length ? "fresh" : undefined)} className="row">
+            <SubmitButton variant={plans?.length ? "secondary" : undefined} disabled={!active.length} pendingText="Starting…">{plans?.length ? "Rebuild the plan from scratch" : "Generate plan from these inputs"}</SubmitButton>
             {!active.length && <span className="small muted">Extract requirements first.</span>}
           </form>
         )}
@@ -437,7 +448,6 @@ export default async function InputsPage({ params, searchParams }: {
             <h2 className="eyebrow">The plan builds on</h2>
             <ul className="manifest">{summary.map((m) => <li key={m.label} className={m.done ? "done" : ""}><span className="mdot" /><span><strong>{m.label}</strong><small>{m.text}</small></span></li>)}</ul>
           </div>
-          <PlanRequestStatus supabase={supabase} projectId={projectId} />
         </aside>
       </div>
     </main>

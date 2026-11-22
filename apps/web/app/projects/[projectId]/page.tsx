@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { StageBar } from "@/components/StageBar";
 import { Banner } from "@/components/Banner";
-import { PlanRequestStatus } from "@/components/PlanRequestStatus";
+import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StagedFileInput } from "@/components/StagedFileInput";
@@ -70,6 +70,7 @@ export default async function ProjectPage({ params, searchParams }: {
     supabase.from("sources").select("id, title, identifier, publisher, license, status, indexed_chunks").eq("project_id", projectId).order("created_at"),
   ]);
   const changes = me?.role && me.role !== "client" ? await planChanges(supabase, projectId) : null;
+  const building = await activePlanRequest(supabase, projectId);
   const roleCounts = Object.entries((members ?? []).reduce<Record<string, number>>((m, x) => ({ ...m, [x.role]: (m[x.role] ?? 0) + 1 }), {}));
   const { data: scans } = await supabase.from("file_scans").select("path, status, signature").eq("bucket", "project-files")
     .in("path", (docs ?? []).map((d) => d.storage_path));
@@ -100,7 +101,8 @@ export default async function ProjectPage({ params, searchParams }: {
       </div>
       <StageBar supabase={supabase} projectId={projectId} />
       <Banner error={error} notice={notice} />
-      <PlanChangesNotice changes={changes} canEdit={canEdit} action={createPlan.bind(null, projectId, "project")} />
+      {me?.role && me.role !== "client" && <PlanRequestStatus supabase={supabase} projectId={projectId} />}
+      <PlanChangesNotice changes={changes} canEdit={canEdit} building={!!building} action={createPlan.bind(null, projectId, "project", "revise")} fresh={createPlan.bind(null, projectId, "project", "fresh")} />
       <nav className="tabs" aria-label="Project sections" data-testid="project-tabs">{TABS.map(([k, l]) => (
         <Link key={k} href={k === "overview" ? `/projects/${projectId}` : `/projects/${projectId}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className="tab">
           {l}{tabCount[k] ? <span className="tab-count">{tabCount[k]}</span> : null}</Link>))}</nav>
@@ -250,7 +252,6 @@ export default async function ProjectPage({ params, searchParams }: {
       {tab === "plans" && <>
       <section>
         <h2>Plans</h2>
-        <PlanRequestStatus supabase={supabase} projectId={projectId} />
         <ul className="list">
           {(plans ?? []).map((p) => (
             <li key={p.id}>
