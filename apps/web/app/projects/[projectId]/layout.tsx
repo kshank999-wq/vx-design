@@ -14,7 +14,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const staff = me.role !== "viewer";
   const groups: NavGroup[] = [
     { label: "Define", items: [{ href: `${b}/setup`, label: "Guided setup" }, { href: `${b}/risks`, label: "Intake and risks" }, { href: `${b}/wizard`, label: "Requirement wizard" },
-      { href: `${b}/concepts`, label: "Concepts" }, { href: `${b}/trades`, label: "Trade studies" }, { href: `${b}/stages`, label: "Stages" }] },
+      { href: `${b}/concepts`, label: "Concepts" }, { href: `${b}/trades`, label: "Trade studies" }, { href: `${b}/build-vs-buy`, label: "Build vs buy" }, { href: `${b}/stages`, label: "Stages" }] },
     { label: "Design", items: [{ href: `${b}/mechanical`, label: "Mechanical checks" }, { href: `${b}/models`, label: "3D model library" },
       ...(staff ? [{ href: `${b}/flux`, label: "Flux import" }, { href: `${b}/optimize`, label: "Optimize" }] : [])] },
     { label: "Make", items: [...(staff ? [{ href: `${b}/manufacturing`, label: "Manufacturing routes" }, { href: `${b}/assembly`, label: "Assembly instructions" },

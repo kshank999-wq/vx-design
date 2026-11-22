@@ -40,6 +40,8 @@ export interface PlanInputs {
   parts?: ChosenPart[];
   /** What changed since the plan this one replaces, with that plan's tasks, so a new plan takes it all in. */
   changes?: PlanChanges | null;
+  /** Decided trade studies (build vs buy, component choices): decisions the plan builds on, cited as TS-n. */
+  decisions?: { id: string; question: string; chosen: string; mpn?: string | null; note?: string | null }[];
 }
 export interface ChosenPart {
   id: string;                 // "PT-1"
@@ -94,6 +96,10 @@ export function planContext(inputs: PlanInputs): { text: string; sources: PlanIn
   }
   if (inputs.standards?.length) L.push("", "Standards that apply:", ...inputs.standards.map((s) => `- ${s.identifier} ${s.title} (${s.applicability})`));
   if (inputs.documents?.length) L.push("", "Specification documents (their requirements are listed below):", ...inputs.documents.map((d) => `- ${d.title}: ${d.requirements} requirement(s)`));
+  if (inputs.decisions?.length) {
+    L.push("", "Decided trade studies (the team's decisions; plan around them, e.g. integrate a chosen module instead of designing it chip-down):",
+      ...inputs.decisions.map((d) => `- ${d.id}: ${one(d.question)} → ${d.chosen}${d.mpn ? ` (${d.mpn})` : ""}${d.note ? `: ${clip(one(d.note), 200)}` : ""}`));
+  }
 
   if (inputs.references?.length) {
     L.push("", "References (mock-ups, sketches, drawings, datasheets; cite as REF-n):");

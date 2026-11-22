@@ -135,6 +135,15 @@ sit beside the steps.
   calendar month. When the balance reaches zero, AI work pauses (running runs stop at their next checkpoint, plan
   builds and AI actions are refused before any call is made) until credit is added. The internal plans (`standard`,
   `unlimited`) are not billed and keep their monthly allowances. Estimates on billed plans include the markup.
+- **Build vs buy** (Define → Build vs buy, and a link on the plan's selection tasks): describe a subsystem (kind,
+  interfaces, radios, the supply rail, the space, the markets it must be certified for). Code checks every module in
+  the modules catalog against it and says why each one does not fit, or which facts the catalog lacks (unknown, never
+  assumed). **Find more modules with AI** asks the model for candidates; only part numbers a distributor (or the parts
+  catalog) confirms are added, as draft catalog entries that say where they came from (the model's certification
+  claims are kept as a note, not as certifications). **Compare** creates a trade study of up to four fitting modules
+  against a custom (chip-down) design on the module-vs-custom criteria: catalog facts where known, stated rules of
+  thumb (integration and design hours at $120/h, certification costs, weeks to prototype) where not, all editable;
+  **Fill from catalog** adds current prices. A decided study is a decision the next plan update builds on (TS-n).
 - **Cost before you click:** each button that starts AI work shows its likely cost and where the figure comes from:
   plan update and rebuild, plan from requirements, reading specifications (only the blocks rules cannot read are
   counted; "no AI cost" when rules read it all), reading datasheets, chat questions and model comparisons. Figures come

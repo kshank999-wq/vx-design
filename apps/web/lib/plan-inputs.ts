@@ -78,6 +78,7 @@ export async function planChanges(supabase: Supa, projectId: string, parts?: Awa
     supabase.from("project_standards").select("standards(identifier)").eq("project_id", projectId).eq("status", "confirmed").gt("confirmed_at", t),
     parts ? Promise.resolve(parts) : loadParts(supabase, projectId),
   ]);
+  const { data: studies } = await supabase.from("trade_studies").select("study_no, question, chosen_option, options").eq("project_id", projectId).eq("status", "decided").gt("decided_at", t);
   const items: string[] = [];
   const label = (p: (typeof ps)[number]) => { const what = p.row.summary || p.row.role; return `${p.code} ${p.row.mpn}${what ? ` (${what.slice(0, 80)})` : ""}`; };
   const addedParts = ps.filter((p) => p.row.created_at > t);
@@ -94,6 +95,7 @@ export async function planChanges(supabase: Supa, projectId: string, parts?: Awa
   if (routes?.length) items.push(`manufacturing routes added or changed: ${few(routes.map((r) => `${r.name}${r.created_at > t ? " (new)" : ""}`))}`);
   if (intake) items.push("the project setup (intended use, markets, quantity, cost, size, power, radios or standards) changed");
   if (freeze?.length) items.push("the industrial design freeze changed");
+  if (studies?.length) items.push(`${n(studies.length, "trade study", "trade studies")} decided: ${few(studies.map((s) => `TS-${s.study_no} ${s.question} → ${(s.options as { key: string; name: string }[]).find((o) => o.key === s.chosen_option)?.name ?? s.chosen_option}`))}`);
   if (stds?.length) items.push(`${n(stds.length, "standard")} confirmed: ${few(stds.map((s) => (s.standards as unknown as { identifier: string }).identifier))}`);
   return { version: plan.version as number, since: t, items, tasks: (tasks ?? []).map((x) => ({ key: x.key, title: x.title, stage: x.stage, status: x.status })) };
 }
@@ -158,6 +160,9 @@ export async function loadPlanInputs(supabase: SupabaseClient, projectId: string
   const chosen = parts.filter((p) => p.row.status !== "rejected");
   if (chosen.length) inputs.parts = chosen.map((p) => ({ ...p.part, register: live0.find((i) => i.mpn && norm(i.mpn) === norm(p.row.mpn))?.id ?? null }));
   if (changes) inputs.changes = changes;
+  const { data: decided } = await supabase.from("trade_studies").select("study_no, question, chosen_option, options, decision_note").eq("project_id", projectId).eq("status", "decided").order("study_no");
+  if (decided?.length) inputs.decisions = decided.map((d) => { const o = (d.options as { key: string; name: string; mpn?: string }[]).find((x) => x.key === d.chosen_option);
+    return { id: `TS-${d.study_no}`, question: d.question, chosen: o?.name ?? String(d.chosen_option), mpn: o?.mpn ?? null, note: d.decision_note }; });
   const { text, sources } = planContext(inputs);
   const record: LoadedInputs["record"] = sources.map((s) => ({
     id: s.id, kind: s.kind, label: s.label,

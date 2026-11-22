@@ -229,6 +229,10 @@ export default async function PlanPage({ params, searchParams }: {
                   </div>
                 )}
                 {t.description && <p>{t.description}</p>}
+                {["components", "architecture", "power"].includes(t.discipline) && /\b(select(ion)?|choose|choice|module|som|radio|camera|display|battery|charger)\b/i.test(`${t.key} ${t.title}`) && (
+                  <p className="small" data-testid="build-vs-buy-link"><Link href={`/projects/${projectId}/build-vs-buy?title=${encodeURIComponent(t.title)}`}>Build vs buy</Link>
+                    <span className="muted">: check ready-made modules for this before designing it</span></p>
+                )}
                 {(() => {
                   const b = t.basis as { mode: string; sources: string[]; reason: string; concerns?: string[]; alternatives?: string[] } | null;
                   if (!b) return null;
