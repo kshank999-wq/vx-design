@@ -35,7 +35,7 @@ async function staged(supabase: Awaited<ReturnType<typeof requireUser>>["supabas
 type Supa = Awaited<ReturnType<typeof requireUser>>["supabase"];
 /** Stores one file as a project reference (checked, content-addressed); returns its id or a problem. */
 async function storeReference(supabase: Supa, projectId: string, name: string, mime: string, bytes: Uint8Array, kind: string, title: string, note: string | null):
-    Promise<{ id: string } | { problem: string }> {
+    Promise<{ id: string } | { problem: string } | { duplicate: true }> {
   const refused = uploadProblem(name, bytes, POLICIES.reference);
   if (refused) return { problem: `${name}: ${refused}` };
   const sha = createHash("sha256").update(bytes).digest("hex");
@@ -46,41 +46,92 @@ async function storeReference(supabase: Supa, projectId: string, name: string, m
     p_project: projectId, p_kind: kind, p_title: title.trim() || name.replace(/\.[^.]+$/, ""), p_note: note,
     p_filename: name, p_path: path, p_sha256: sha, p_size: bytes.length, p_mime: mime,
   });
-  if (error) { if (!upErr) await supabase.storage.from("project-files").remove([path]); return { problem: `${name}: ${error.message}` }; }
+  if (error) {
+    if (/already a reference/.test(error.message)) return { duplicate: true };
+    if (!upErr) await supabase.storage.from("project-files").remove([path]);
+    return { problem: `${name}: ${error.message}` };
+  }
   return { id: data as string };
 }
 
 const PACKAGE_FILE = /\.(pdf|docx|txt|md|step|stp|stl|igs|iges|wrl|x_t|x_b)$/i;
+const ARCHIVE = /\.(zip|7z)$/i;
 const JUNK = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|desktop\.ini$|\._)/i;
 const MIME: Record<string, string> = { pdf: "application/pdf", step: "application/step", stp: "application/step", stl: "model/stl", txt: "text/plain", md: "text/markdown",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
 
-/**
- * A manufacturer's package (ZIP): its datasheets and 3D models become part files, each noted with the package it came
- * from (so a model with no part number in it can still be matched to the part its own package describes).
- */
-async function expandPackage(supabase: Supa, projectId: string, zipName: string, bytes: Uint8Array): Promise<{ added: number; skipped: number; problems: string[] }> {
+type Entry = { name: string; bytes: Uint8Array };
+/** The files in a 7-Zip archive (manufacturers ship large STEP models this way). */
+async function un7z(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
+  const SevenZip = (await import("7z-wasm")).default;
+  const sz = await SevenZip({ print: () => {}, printErr: () => {} });
+  sz.FS.mkdir("/w"); sz.FS.writeFile("/w/a.7z", bytes);
+  sz.callMain(["x", "/w/a.7z", "-o/w/out", "-y"]);
+  const out: Record<string, Uint8Array> = {};
+  const walk = (d: string) => {
+    for (const x of sz.FS.readdir(d)) {
+      if (x === "." || x === "..") continue;
+      const p = `${d}/${x}`;
+      if (sz.FS.isDir(sz.FS.stat(p).mode)) walk(p); else out[p.slice("/w/out/".length)] = sz.FS.readFile(p);
+    }
+  };
+  try { walk("/w/out"); } catch { /* nothing extracted */ }
+  return out;
+}
+
+/** Datasheets and models in an archive, opening archives inside it (two levels: vendors nest their STEP ZIP). */
+async function openArchive(name: string, bytes: Uint8Array, depth = 0): Promise<{ files: Entry[]; problems: string[] }> {
   const { unzipSync } = await import("fflate");
+  const files: Entry[] = [], problems: string[] = [];
   let entries: Record<string, Uint8Array>;
   try {
-    let total = 0;
-    entries = unzipSync(bytes, { filter: (f) => { total += f.originalSize; return total < 400_000_000 && !f.name.endsWith("/") && !JUNK.test(f.name) && PACKAGE_FILE.test(f.name); } });
-  } catch (e) { return { added: 0, skipped: 0, problems: [`${zipName}: not a readable ZIP (${(e as Error).message})`] }; }
+    if (/\.7z$/i.test(name)) entries = await un7z(bytes);
+    else {
+      let total = 0;
+      entries = unzipSync(bytes, { filter: (f) => { total += f.originalSize; return total < 600_000_000 && !f.name.endsWith("/") && !JUNK.test(f.name) && (PACKAGE_FILE.test(f.name) || ARCHIVE.test(f.name)); } });
+    }
+  } catch (e) { return { files, problems: [`${name}: could not be opened (${(e as Error).message})`] }; }
+  for (const [raw, b] of Object.entries(entries)) {
+    // ZIPs made on Windows or macOS often store UTF-8 names without saying so; they are read as Latin-1. Undo that.
+    const utf = Buffer.from(raw, "latin1").toString("utf8");
+    const n = /[\u0080-\u00ff]/.test(raw) && !utf.includes("\ufffd") ? utf : raw;
+    if (JUNK.test(n)) continue;
+    if (ARCHIVE.test(n)) {
+      if (depth < 2) { const r = await openArchive(n, b, depth + 1); files.push(...r.files); problems.push(...r.problems); }
+      continue;
+    }
+    if (PACKAGE_FILE.test(n)) files.push({ name: n.split("/").pop()!, bytes: b });
+  }
+  return { files, problems };
+}
+
+/**
+ * A manufacturer's package (ZIP): its datasheets and 3D models (including those in archives inside it, ZIP or 7-Zip)
+ * become part files, each noted with the package it came from, so a model with no part number in it can still be
+ * matched to the part its own package describes. A model too large to store as it is (over 45 MB) is stored compressed.
+ */
+async function expandPackage(supabase: Supa, projectId: string, zipName: string, bytes: Uint8Array): Promise<{ added: number; duplicates: number; skipped: number; problems: string[] }> {
   const pkg = zipName.replace(/\.zip$/i, "");
-  const names = Object.keys(entries).slice(0, 200);
-  const base = (n: string) => n.split("/").pop()!;
+  const { files, problems } = await openArchive(zipName, bytes);
+  const { zipSync } = await import("fflate");
   const seen = new Set<string>();
-  let added = 0; const problems: string[] = [];
-  for (const n of names) {
-    let name = base(n);
+  let added = 0, duplicates = 0;
+  for (const f of files.slice(0, 200)) {
+    let name = f.name;
     if (seen.has(name.toLowerCase())) name = `${pkg}-${name}`;
     seen.add(name.toLowerCase());
     const ext = name.split(".").pop()!.toLowerCase();
     const kind = /\.(pdf|docx|txt|md)$/i.test(name) ? "datasheet" : "model_3d";
-    const r = await storeReference(supabase, projectId, name, MIME[ext] ?? "application/octet-stream", entries[n]!, kind, name.replace(/\.[^.]+$/, ""), `From the package ${pkg}`);
-    if ("problem" in r) problems.push(r.problem); else added++;
+    let data = f.bytes, store = name, mime = MIME[ext] ?? "application/octet-stream", title = name.replace(/\.[^.]+$/, "");
+    if (data.length > 45 * 1048576) {
+      data = zipSync({ [name]: f.bytes }, { level: 6 });
+      store = `${name}.zip`; mime = "application/zip"; title = `${title} (compressed, ${Math.round(f.bytes.length / 1048576)} MB unpacked)`;
+      if (data.length > 45 * 1048576) { problems.push(`${name}: ${Math.round(f.bytes.length / 1048576)} MB, too large to store even compressed`); continue; }
+    }
+    const r = await storeReference(supabase, projectId, store, mime, data, kind, title, `From the package ${pkg}`);
+    if ("problem" in r) problems.push(r.problem); else if ("duplicate" in r) duplicates++; else added++;
   }
-  return { added, skipped: Object.keys(entries).length - names.length, problems };
+  return { added, duplicates, skipped: Math.max(0, files.length - 200), problems };
 }
 
 /** A part package (ZIP) dropped on Parts chosen: opened, its datasheets and models stored as part files. */
@@ -114,11 +165,11 @@ export async function readPackagesAsParts(projectId: string) {
     const { data } = await supabase.storage.from("project-files").download(z.storage_path);
     if (!data) { lines.push(`${z.filename}: could not be read`); continue; }
     const r = await expandPackage(supabase, projectId, z.filename, new Uint8Array(await data.arrayBuffer()));
-    if (r.added) {
+    if (r.added || r.duplicates) {
       const { data: path } = await supabase.rpc("remove_project_reference", { p_id: z.id });
       if (path) await supabase.storage.from("project-files").remove([path as string]);
     }
-    lines.push(`${z.filename}: ${r.added ? `${r.added} file(s)` : "nothing to read inside"}${r.problems.length ? ` (${r.problems.length} not stored)` : ""}`);
+    lines.push(`${z.filename}: ${r.added ? `${r.added} file(s)` : r.duplicates ? "its files were already here" : "nothing to read inside"}${r.problems.length ? ` (${r.problems.length} not stored: ${r.problems.join("; ")})` : ""}`);
   }
   const read = await identifyPartFiles(projectId);
   go(`${base(projectId)}?step=3`, `Unpacked ${lines.join("; ")}. ${read.message}`);
@@ -324,7 +375,9 @@ export async function identifyPartFiles(projectId: string): Promise<UploadOutcom
   const { data: placed } = await supabase.from("project_references").select("part_id, note").eq("project_id", projectId).not("part_id", "is", null).like("note", "From the package %");
   const { data: loose } = await supabase.from("project_references").select("id, note").eq("project_id", projectId).is("part_id", null).like("note", "From the package %");
   for (const f of loose ?? []) {
-    const owners = [...new Set((placed ?? []).filter((x) => x.note === f.note).map((x) => x.part_id as string))];
+    let owners = [...new Set((placed ?? []).filter((x) => x.note === f.note).map((x) => x.part_id as string))];
+    // A package with no readable datasheet (a STEP and a readme): its name usually carries the part number.
+    if (owners.length === 0) { const m = matchModelToPart(pkgOf(f.note) ?? "", [], known); if (m) owners = [m.id]; }
     if (owners.length !== 1) continue;
     const { error } = await supabase.rpc("attach_reference_to_part", { p_reference: f.id, p_part: owners[0] });
     if (!error) { attached++; await supabase.rpc("note_part_file", { p_reference: f.id, p_note: `attached with its package (${pkgOf(f.note)})` }); }

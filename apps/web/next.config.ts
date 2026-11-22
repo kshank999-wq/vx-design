@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
   transpilePackages: ["@vx/contracts", "@vx/planning", "@vx/power", "@vx/integrations", "@vx/flux", "@vx/security", "@vx/optimize", "@vx/dfm", "@vx/mech"],
   // Document parsers run on the server only.
-  serverExternalPackages: ["mammoth", "unpdf"],
+  serverExternalPackages: ["mammoth", "unpdf", "7z-wasm"],
   experimental: {
     serverActions: { bodySizeLimit: "25mb" },
   },
