@@ -545,3 +545,30 @@ table.statement td.num, table.statement th.num { text-align: right; font-variant
 .verdict-none { background: var(--line2); color: var(--muted); font-weight: 600; }
 .plain-checks { list-style: none; padding: 0; margin: 0; font-size: 13px; display: grid; gap: 3px; }
 .plain-checks .pc-pass { color: #067647; } .plain-checks .pc-note { color: #475467; } .plain-checks .pc-fail { color: #b42318; font-weight: 600; }
+
+/* Run page: what stopped the run and what to do about it. */
+.card.todo { border: 2px solid #f79009; background: color-mix(in srgb, #f79009 7%, var(--surface)); }
+.card.todo h2 { margin-top: 0; color: #b54708; }
+.todo-list { margin: 0 0 12px; padding-left: 1.3em; display: grid; gap: 8px; }
+.todo-list ul { margin: 4px 0; }
+
+/* Questions for you: one card per question, grouped by the step that raised it. */
+.questions-page { max-width: 1000px; margin: 0 auto; }
+.questions-page .lead { font-size: 15.5px; }
+.q-summary { margin: 12px 0 18px; }
+.q-group { margin: 22px 0; }
+.q-group h2 { font-size: 17px; margin: 0 0 10px; }
+.q-card { display: grid; grid-template-columns: 34px 1fr; gap: 14px; margin: 0 0 14px; border-left: 4px solid #2e90fa; }
+.q-num { width: 30px; height: 30px; border-radius: 50%; background: #2e90fa; color: #fff; display: grid; place-items: center; font-weight: 700; }
+.q-body h3 { margin: 2px 0 8px; font-size: 17px; line-height: 1.35; }
+.q-why { margin: 0 0 6px; }
+.q-rec { margin: 0 0 14px; padding: 10px 14px; border-radius: 8px; border: 2px solid #12b76a; background: color-mix(in srgb, #12b76a 12%, var(--surface)); }
+.q-rec p { margin: 4px 0 0; font-size: 15.5px; font-weight: 600; }
+.q-rec p.small { font-size: 12.5px; font-weight: 400; }
+.q-rec-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #12b76a; color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.btn.q-opt-rec { background: #12b76a; border-color: #12b76a; color: #fff; }
+.btn.q-opt-rec:hover { background: #0e9a59; }
+.q-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.q-input { flex: 1 1 320px; min-width: 0; }
+.q-done { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.ws-questions ul.q-titles { margin: 6px 0 10px; padding-left: 1.2em; display: grid; gap: 4px; font-size: 13.5px; }

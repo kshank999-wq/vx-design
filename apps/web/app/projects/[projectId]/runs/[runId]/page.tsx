@@ -30,6 +30,17 @@ const EVIDENCE: Record<string, string> = {
   datasheet_verified: "datasheet", simulation: "simulation", hardware_test: "hardware test",
 };
 
+/** Why a step failed, in everyday words; the technical message stays in the task's activity. */
+function plainFailure(reason: string | null): string {
+  const r = reason ?? "";
+  if (/cut off at the \d+-token limit/.test(r)) return "the AI's answer ran too long to finish. VX Design now gives it more room and retries automatically.";
+  if (/compiled grammar is too large|schema is too complex/i.test(r)) return "the answer format was too complex for the AI service. VX Design now handles this automatically.";
+  if (/budget|cost cap/i.test(r)) return "it reached its spending limit.";
+  if (/not making progress|no progress/i.test(r)) return "repeated attempts were not getting closer to passing its checks.";
+  if (/overloaded|529|timeout|ECONNRESET|5\d\d /i.test(r)) return "the AI service was busy or unreachable.";
+  return r ? `${r.slice(0, 160)}${r.length > 160 ? "…" : ""}` : "no reason was recorded.";
+}
+
 export default async function RunPage({ params, searchParams }: {
   params: Promise<{ projectId: string; runId: string }>;
   searchParams: Promise<{ error?: string; notice?: string }>;
@@ -86,7 +97,14 @@ export default async function RunPage({ params, searchParams }: {
   // Something in scope could run now (e.g. after an approval): offer a follow-up run.
   const runnable = (tasks ?? []).filter((t) => t.status === "ready" && inScope(t)
     && (depRows ?? []).filter((d) => d.task_id === t.id).every((d) => taskStatus.get(d.depends_on_task_id) === "complete"));
-  const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0) && !["canceled", "failed"].includes(run.status);
+  // What stopped the run, in plain terms, and what continuing will do about each.
+  const failed = (tasks ?? []).filter((t) => t.status === "failed");
+  const outOfScope = (tasks ?? []).filter((t) => t.status === "ready" && !inScope(t));
+  const critical = outOfScope.filter((t) => t.risk_level === "critical");
+  const heldBlocked = (tasks ?? []).filter((t) => t.status === "blocked");
+  const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
+  const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0 || failed.length > 0 || critical.length > 0)
+    && !["canceled", "failed"].includes(run.status);
   // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
   const online = new Set((workers ?? []).flatMap((w) => w.disciplines as string[]));
   const uncovered = run.status === "running" && (workers ?? []).length > 0
@@ -165,6 +183,44 @@ export default async function RunPage({ params, searchParams }: {
         <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Math.max(Number(run.max_ai_spend_usd) * 2, 150)} style={{ width: "6em" }} aria-label="New AI budget" />
         <input type="hidden" name="compute" value={Math.max(Number(run.max_compute_spend_usd), 20)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
+      {!active && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || canContinue) && (
+        <section className="card todo" data-testid="what-to-do">
+          <h2>What you need to do</h2>
+          <ol className="todo-list">
+            {!failed.length && !outOfScope.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <li>Nothing needs fixing. Continue the run when you are ready.</li>}
+            {failed.length > 0 && (
+              <li><strong>{failed.length} step{failed.length > 1 ? "s" : ""} could not finish.</strong> Everything after {failed.length > 1 ? "them" : "it"} is waiting.
+                <ul className="small">{failed.map((t) => <li key={t.id}>{t.title}: {plainFailure(t.blocker_reason)}</li>)}</ul>
+                {canControl && <span className="small">Continuing tries {failed.length > 1 ? "them" : "it"} again.</span>}</li>
+            )}
+            {critical.length > 0 && (
+              <li><strong>{critical.length} critical-risk step{critical.length > 1 ? "s are" : " is"} outside this run.</strong> Runs leave out critical-risk work unless the owner includes it:
+                <span className="small"> {critical.map((t) => t.title).join(", ")}.</span>
+                {role === "owner" ? <span className="small"> Tick “include critical-risk steps” below.</span> : <span className="small"> Only the project owner can include {critical.length > 1 ? "them" : "it"}.</span>}</li>
+            )}
+            {outOfScope.length > critical.length && (
+              <li className="small">{outOfScope.length - critical.length} other step(s) are outside this run&apos;s scope and will not run in it.</li>
+            )}
+            {waiting.length > 0 && <li><strong>{waiting.length} result{waiting.length > 1 ? "s wait" : " waits"} for your go-ahead</strong> (below). “Run straight through” approves those whose checks passed.</li>}
+            {(openQuestions ?? 0) > 0 && <li><strong>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you.</strong> The work does not wait for them, but your answers guide every later step. <Link href={`/projects/${projectId}/questions`}>Answer the questions</Link></li>}
+            {heldBlocked.length > 0 && <li className="small">{heldBlocked.length} step(s) wait for something outside the design work: {heldBlocked.map((t) => `${t.title}${t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}`).join("; ")}.</li>}
+          </ol>
+          {canContinue ? (
+            <form className="stack" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
+              <div className="row tight wrap">
+                <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
+                <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_compute_spend_usd), 20)} style={{ width: "5em" }} /></label>
+                <label className="inline small"><input type="checkbox" name="auto_approve" defaultChecked /> run straight through</label>
+                {failed.length > 0 && <label className="inline small"><input type="checkbox" name="retry_failed" value="off" /> don&apos;t retry the failed steps</label>}
+                {critical.length > 0 && role === "owner" && <label className="inline small"><input type="checkbox" name="include_critical" defaultChecked data-testid="include-critical" /> include critical-risk steps</label>}
+              </div>
+              <div><SubmitButton pendingText="Continuing…">{failed.length || critical.length ? "Fix these and continue the run" : waiting.length ? "Approve what passed and continue" : "Continue the run"}</SubmitButton></div>
+              {runnable.length > 0 && <p className="small muted">Next up: {runnable.map((t) => t.title).slice(0, 4).join(", ")}{runnable.length > 4 ? ` and ${runnable.length - 4} more` : ""}.</p>}
+            </form>
+          ) : !canControl ? <p className="small muted">The project owner or an engineer continues the run.</p> : null}
+        </section>
+      )}
+
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">
           No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
@@ -243,16 +299,6 @@ export default async function RunPage({ params, searchParams }: {
             );
           })}
         </section>
-      )}
-
-      {canContinue && (
-        <div className="card row spread">
-          <span className="small">{runnable.length ? <>Next up: {runnable.map((t) => t.title).slice(0, 4).join(", ")}{runnable.length > 4 ? ` and ${runnable.length - 4} more` : ""}.</> : <>{waiting.length} result(s) wait for your go-ahead; then the run continues.</>}</span>
-          <form className="row tight" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
-            <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
-            <label className="inline small"><input type="checkbox" name="auto_approve" defaultChecked /> run straight through</label>
-            <SubmitButton pendingText="Continuing…">{waiting.length ? "Approve what passed and continue" : "Continue the run"}</SubmitButton></form>
-        </div>
       )}
 
       <SectionTabs id="run" sections={[

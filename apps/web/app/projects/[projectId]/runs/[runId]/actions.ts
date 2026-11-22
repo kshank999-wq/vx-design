@@ -67,7 +67,9 @@ export async function continueThisRun(projectId: string, runId: string, form: Fo
   const path = `/projects/${projectId}/runs/${runId}`;
   const { supabase } = await requireUser();
   const auto = form.get("auto_approve") === "on";
-  const { data, error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: Number(form.get("ai")) || 0, p_auto_approve: auto });
+  const { data, error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: Number(form.get("ai")) || 0, p_auto_approve: auto,
+    p_retry_failed: form.get("retry_failed") !== "off", p_include_critical: form.get("include_critical") === "on",
+    p_compute: Number(form.get("compute")) || null });
   if (error) fail(path, error);
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(`The run continues${auto ? " straight through: results whose checks pass are approved automatically" : ""}.` +

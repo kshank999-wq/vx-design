@@ -8,7 +8,7 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
-import { answerQuestion, approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
 import { PlainSummary } from "@/components/PlainSummary";
 import { ChatForm } from "@/components/ChatForm";
 import { CostHint } from "@/components/CostHint";
@@ -86,7 +86,6 @@ export default async function WorkspacePage({ params, searchParams }: {
   const { data: chatPlans } = canDraft ? await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null) : { data: [] };
   const drafted = new Map((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
   const canDecide = ["owner", "reviewer", "client"].includes(role);
-  const canAnswer = ["owner", "engineer", "reviewer", "client"].includes(role);
   const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
   const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
   const outputName = new Map(ctx.outputs.map((o) => [o.id, o.name]));
@@ -126,7 +125,7 @@ export default async function WorkspacePage({ params, searchParams }: {
             { key: "concept", label: "Concept", state: c.freeze ? "done" : "you", detail: c.freeze ? `frozen: ${c.freeze.name}` : "freeze the mock-up or a concept", href: href("concepts") },
             { key: "plan", label: "Plan", state: ctx.plan ? "done" : latest ? "you" : "todo", detail: ctx.plan ? `v${ctx.plan.version} approved` : latest ? `v${latest.version} ${latest.status.replace("_", " ")}: approve it` : "not made yet", href: latest ? `${P}/plans/${latest.id}` : `${P}?tab=plans` },
             { key: "design", label: "Design run", state: !ctx.tasks.length ? "todo" : doneN === ctx.tasks.length ? "done" : runActive ? "now" : "you", detail: ctx.tasks.length ? `${doneN} of ${ctx.tasks.length} done${runActive ? ", running" : lastRun ? `, ${lastRun.status}` : ", not started"}` : "after the plan", href: lastRun ? `${P}/runs/${lastRun.id}` : `${P}/runs` },
-            { key: "approvals", label: "Your approvals", state: waitingN || openQs.length ? "you" : "done", detail: [waitingN ? `${waitingN} waiting` : "", openQs.length ? `${openQs.length} question(s)` : ""].filter(Boolean).join(", ") || "none waiting", href: openQs.length && !waitingN ? "#questions" : "#approvals" },
+            { key: "approvals", label: "Your approvals", state: waitingN || openQs.length ? "you" : "done", detail: [waitingN ? `${waitingN} waiting` : "", openQs.length ? `${openQs.length} question(s)` : ""].filter(Boolean).join(", ") || "none waiting", href: openQs.length && !waitingN ? `${P}/questions` : "#approvals" },
             { key: "release", label: "Manufacturer package", state: (releases ?? []).some((r) => r.status === "released") ? "done" : (releases ?? []).length ? "you" : "todo", detail: (releases ?? []).length ? "draft release ready to check" : "at the end of the run", href: `${P}/releases` },
           ];
           return (
@@ -248,30 +247,10 @@ export default async function WorkspacePage({ params, searchParams }: {
               {openQs.length > 0 && (
                 <div className="ws-questions" id="questions" data-testid="ws-questions">
                   <p className="ws-approvals-head">{openQs.length} question{openQs.length > 1 ? "s" : ""} for you</p>
-                  <p className="small">The work does not wait: VX Design follows its recommendation until you answer, and every later step uses your answer.</p>
-                  {openQs.map((q) => (
-                    <div key={q.id} className="ws-question" data-testid="question">
-                      <div><strong>{q.question}</strong></div>
-                      {q.why && <div className="small">{q.why}</div>}
-                      <div className="small q-rec">Recommended: {q.recommendation}</div>
-                      {(q.tasks as unknown as { title: string } | null)?.title && <div className="small muted">Raised by: {(q.tasks as unknown as { title: string }).title}</div>}
-                      {canAnswer ? (
-                        <form className="stack" action={answerQuestion.bind(null, projectId, q.id)}>
-                          {(q.options ?? []).length > 0 && (
-                            <div className="row tight wrap">{(q.options as string[]).map((o) => (
-                              <button key={o} type="submit" name="answer" value={o} className="btn btn-secondary btn-small">{o}</button>
-                            ))}</div>
-                          )}
-                          <input name="custom" placeholder="Or write your own answer" aria-label={`Your answer to: ${q.question}`} />
-                          <div className="row tight">
-                            <SubmitButton name="answer" value="__custom" pendingText="Saving…">Save my answer</SubmitButton>
-                            <SubmitButton variant="secondary" name="answer" value="__recommended" pendingText="Saving…">Use the recommendation</SubmitButton>
-                            <SubmitButton variant="secondary" name="answer" value="__dismiss" pendingText="Saving…">Not relevant</SubmitButton>
-                          </div>
-                        </form>
-                      ) : <div className="small muted">The project owner answers this.</div>}
-                    </div>
-                  ))}
+                  <p className="small">The work does not wait: VX Design follows its recommendation until you answer.</p>
+                  <ul className="q-titles">{openQs.slice(0, 4).map((q) => <li key={q.id}>{q.question}</li>)}</ul>
+                  {openQs.length > 4 && <p className="small muted">and {openQs.length - 4} more</p>}
+                  <Link className="btn" href={`/projects/${projectId}/questions`} data-testid="answer-questions">Answer the questions</Link>
                 </div>
               )}
               {wait.length > 0 && (

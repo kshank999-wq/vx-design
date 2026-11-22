@@ -163,7 +163,14 @@ sit beside the steps.
   owner can decide (markets, budget, features), each with a recommendation. Runs never wait on a question: the work
   follows the recommendation until someone answers under **Questions for you** in the Workspace (a choice, their own
   words, the recommendation, or "Not relevant"), and every later step is given the answers. The live strip shows how
-  many questions are open. Cost: part of "Plain-language summaries" on the AI usage page.
+  many questions are open; **Questions** (project menu) lists them one card per question, grouped by the step that
+  raised them, with the recommendation highlighted and "Accept all recommendations". Cost: part of "Plain-language summaries" on the AI usage page.
+- **What you need to do.** A stopped run says in plain words what stopped it: steps that could not finish (and why),
+  critical-risk steps outside the run (only the owner can include them), results waiting, open questions, and steps
+  waiting on hardware. **Fix these and continue the run** retries the failed steps with a fresh retry allowance,
+  includes critical-risk steps if the owner ticks it, and can raise the AI and compute budgets. AI answers that run
+  past the output limit are retried once with the full 128K output and less reasoning effort; answer formats too large
+  for the API's constrained decoding are retried with the format in the instructions and checked here.
 - **Approvals for non-engineers.** Each result waiting for approval says in plain language what VX Design checked
   and whether it passed ("Passed: all 4 checks passed"), with the engineering details folded away. **Approve everything
   that passed** approves every waiting result whose checks all passed; anything with a failed check is held.

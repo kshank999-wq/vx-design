@@ -4,7 +4,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import type { z } from "zod";
+import { toJSONSchema as zToJson, type z } from "zod";
 
 export interface Usage {
   model: string;
@@ -104,17 +104,52 @@ export class ClaudeModel implements LanguageModel {
     this.maxTokens = opts.maxTokens ?? 64000;
   }
 
+  /**
+   * One call, with two recoveries instead of failing the task:
+   *  - a reply cut off at the token limit is asked again once with the full 128K output and one step less reasoning
+   *    effort (thinking and the answer share the limit);
+   *  - a schema too large for the API's constrained decoding ("compiled grammar is too large") is asked again with
+   *    the JSON Schema in the instructions, and the reply is checked against the same schema here.
+   * Tokens of the failed attempt are added to the usage reported, so the cost stays complete.
+   */
   async generate<T>(req: GenerateRequest<T>): Promise<GenerateResult<T>> {
-    const maxTokens = req.maxTokens ?? this.maxTokens;
+    let maxTokens = req.maxTokens ?? this.maxTokens;
+    let effort = req.effort ?? this.effort;
+    let constrained = true;
+    let spent: Usage | undefined;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await this.once(req, maxTokens, effort, constrained);
+        return spent ? { ...r, usage: addUsage(spent, r.usage) } : r;
+      } catch (e) {
+        const u = (e as ModelOutputError).usage;
+        if (u) spent = spent ? addUsage(spent, u) : u;
+        if (attempt >= 2) throw withUsage(e, spent);
+        if (e instanceof CutOffError && maxTokens < MAX_OUTPUT) {
+          maxTokens = MAX_OUTPUT;
+          effort = LOWER_EFFORT[effort];
+          continue;
+        }
+        if (constrained && /compiled grammar is too large|schema is too complex|too many (strict|optional)/i.test((e as Error).message)) {
+          constrained = false;
+          continue;
+        }
+        throw withUsage(e, spent);
+      }
+    }
+  }
+
+  private async once<T>(req: GenerateRequest<T>, maxTokens: number, effort: NonNullable<ClaudeOptions["effort"]>, constrained: boolean): Promise<GenerateResult<T>> {
+    const system = constrained ? req.system : `${req.system}\n\n${schemaInstructions(req.schema)}`;
     const stream = this.client.beta.messages.stream({
       model: this.model,
       max_tokens: maxTokens,
       // Server-side refusal fallback where the model offers it (Haiku 5.5 does not).
       ...(/haiku/.test(this.model) ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
       thinking: { type: "adaptive" },
-      output_config: { effort: req.effort ?? this.effort, format: betaZodOutputFormat(req.schema) },
+      output_config: constrained ? { effort, format: betaZodOutputFormat(req.schema) } : { effort },
       // The system prompt is identical across calls of the same purpose: cache it.
-      system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: cacheBreakpoints(req.messages, req.cache),
     });
     if (req.onText) stream.on("text", (delta) => req.onText!(delta));
@@ -124,7 +159,7 @@ export class ClaudeModel implements LanguageModel {
     } catch (e) {
       // A reply cut off at the token limit arrives as JSON that will not parse: say what happened.
       if (/parse structured output|Unterminated|Unexpected end of JSON/i.test((e as Error).message)) {
-        throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it), so it could not be read.`);
+        throw new CutOffError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it), so it could not be read.`);
       }
       throw e;
     }
@@ -141,17 +176,56 @@ export class ClaudeModel implements LanguageModel {
       throw new ModelOutputError(`${req.purpose}: the model declined (${details?.category ?? "no category"}).`, usage);
     }
     if (message.stop_reason === "max_tokens") {
-      throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it).`, usage);
+      throw new CutOffError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it).`, usage);
     }
-    if (message.parsed_output == null) {
+    let output: unknown = message.parsed_output;
+    if (!constrained) {
+      const text = message.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+      const parsed = req.schema.safeParse(parseJsonReply(text));
+      if (!parsed.success) throw new ModelOutputError(`${req.purpose}: the reply did not match the expected format (${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}).`, usage);
+      output = parsed.data;
+    }
+    if (output == null) {
       throw new ModelOutputError(`${req.purpose}: response did not match the expected schema.`, usage);
     }
     return {
-      output: message.parsed_output as T,
+      output: output as T,
       assistantMessage: { role: "assistant", content: message.content },
       usage,
     };
   }
+}
+
+const MAX_OUTPUT = 128000;
+const LOWER_EFFORT: Record<NonNullable<ClaudeOptions["effort"]>, NonNullable<ClaudeOptions["effort"]>> = { max: "high", xhigh: "high", high: "medium", medium: "low", low: "low" };
+
+class CutOffError extends ModelOutputError {}
+
+function addUsage(a: Usage, b: Usage): Usage {
+  return { model: b.model || a.model, inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens, cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens };
+}
+function withUsage(e: unknown, u: Usage | undefined): unknown {
+  if (u && e instanceof ModelOutputError) e.usage = u;
+  return e;
+}
+
+/** The output format, written into the instructions for a schema too large for constrained decoding. */
+export function schemaInstructions(schema: z.ZodType<unknown>): string {
+  return "Reply with one JSON object and nothing else (no prose, no code fences). It must match this JSON Schema exactly:\n" +
+    JSON.stringify(zodToJsonSchema(schema));
+}
+function zodToJsonSchema(schema: z.ZodType<unknown>): unknown {
+  return zToJson(schema);
+}
+
+/** The JSON object in a reply, tolerating code fences or a sentence around it. */
+export function parseJsonReply(text: string): unknown {
+  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try { return JSON.parse(t); } catch { /* look for the outermost object */ }
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { /* fall through */ } }
+  return undefined;
 }
 
 /** Scripted model for tests and offline development. Each call consumes the next handler. */

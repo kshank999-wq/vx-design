@@ -100,14 +100,20 @@ try {
   assert.match(await stop.getByTestId("verdict").innerText(), /^(✓ Passed: all \d+ checks passed|No automatic checks)/);
   assert.match(await stop.getByTestId("plain-summary").innerText(), /"Power tree and budget" is finished/);
   assert.match(await stop.innerText(), /See the full technical explanation/);
-  // Questions for you: answered with one of the choices.
-  const q = checklist.getByTestId("question");
-  assert.match(await q.innerText(), /Which markets will you sell in first\?[\s\S]*Recommended: US only/);
+  // Questions for you: listed in the workspace, answered on their own page with one of the choices.
+  assert.match(await checklist.getByTestId("ws-questions").innerText(), /1 question for you[\s\S]*Which markets will you sell in first\?/);
+  await checklist.getByTestId("answer-questions").click();
+  await cpage.waitForURL(/\/questions$/);
+  const q = cpage.getByTestId("question");
+  assert.match(await q.innerText(), /Which markets will you sell in first\?[\s\S]*Why it matters: It decides/);
+  assert.match(await q.getByTestId("recommendation").innerText(), /★ Recommended\s+US only/);
+  await shot(cpage, "client-questions");
   await q.getByRole("button", { name: "US and EU" }).click();
-  await cpage.getByText("Thanks: the next steps will follow your answer.").waitFor();
+  await cpage.getByText("Saved: the next steps will follow your answer.").waitFor();
   const { data: answered } = await admin.from("project_questions").select("status, answer").eq("project_id", project.id).single();
   assert.deepEqual([answered.status, answered.answer], ["answered", "US and EU"]);
-  assert.match(await checklist.getByTestId("answered-questions").innerText(), /Your answers \(1\)/);
+  assert.match(await cpage.getByTestId("answered-questions").innerText(), /Your answers \(1\)[\s\S]*US and EU/);
+  await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
   console.log("✓ plain summary on the approval, and the client answered a question");
   assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
   await shot(cpage, "client-workspace");

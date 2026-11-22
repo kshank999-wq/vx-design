@@ -38,7 +38,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
   const active = ["pending", "running", "paused"].includes(run.status);
   const waiting = live?.waiting ?? 0;
   const questions = live?.questions ?? 0;
-  const ask = questions > 0 && <Link className="live-strip-need" href={`/projects/${projectId}/workspace#questions`} data-testid="live-questions">{questions} question{questions > 1 ? "s" : ""} for you</Link>;
+  const ask = questions > 0 && <Link className="live-strip-need" href={`/projects/${projectId}/questions`} data-testid="live-questions">{questions} question{questions > 1 ? "s" : ""} for you</Link>;
   if (!active && !waiting) {
     return (
       <div className={`live-strip live-strip-idle`} data-testid="live-strip">

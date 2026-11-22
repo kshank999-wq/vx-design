@@ -202,6 +202,7 @@ try {
   const autoApproved = await db(`approvals?task_id=eq.${(await db(`tasks?plan_id=eq.${planId}&key=eq.enclosure-envelope&select=id`))[0].id}&select=status,response_note`);
   assert.ok(autoApproved.some((x) => x.status === "approved" && /every VX Design check passed/.test(x.response_note)), JSON.stringify(autoApproved));
   await page.getByText(/schematic needs a worker that can run schematic tasks \(the KiCad engineering worker\)/).waitFor();
+  assert.match(await page.getByTestId("what-to-do").innerText(), /What you need to do/);
   await shot(page, "run-report-waiting-for-kicad");
   const tasks = await taskStatus(planId);
   assert.deepEqual(tasks, {

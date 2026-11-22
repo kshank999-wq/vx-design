@@ -97,19 +97,3 @@ export async function approvePassed(projectId: string) {
   redirect(`${path}?notice=${encodeURIComponent(`${approved} result(s) approved; the work continues.` + (held.length ? ` Held for a closer look: ${held.join(", ")}.` : ""))}`);
 }
 
-/** Answers a question raised by finished work: one of its options, a written answer, the recommendation, or dismissed. */
-export async function answerQuestion(projectId: string, questionId: string, form: FormData) {
-  const path = `/projects/${projectId}/workspace`;
-  const { supabase } = await requireUser();
-  const choice = String(form.get("answer") ?? "");
-  const custom = String(form.get("custom") ?? "").trim();
-  const dismiss = choice === "__dismiss";
-  // Text typed in the box wins (Enter in the box submits with the first button, which may be an option).
-  let answer: string | null = choice === "__recommended" || dismiss ? null : custom || (choice === "__custom" ? "" : choice);
-  if (choice === "__custom" && !custom) fail(`${path}#questions`, "Write your answer first, or pick one of the choices.");
-  if (answer !== null && !answer.trim()) answer = null;
-  const { error } = await supabase.rpc("answer_question", { p_question: questionId, p_answer: answer, p_dismiss: dismiss });
-  if (error) fail(path, error);
-  revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent(dismiss ? "Question set aside." : "Thanks: the next steps will follow your answer.")}#questions`);
-}
