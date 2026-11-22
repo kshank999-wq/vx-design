@@ -107,6 +107,9 @@ try {
   const q = cpage.getByTestId("question");
   assert.match(await q.innerText(), /Which markets will you sell in first\?[\s\S]*Why it matters: It decides/);
   assert.match(await q.getByTestId("recommendation").innerText(), /★ Recommended\s+US only/);
+  await q.getByTestId("read-aloud").waitFor();   // read-aloud is offered wherever the browser can speak
+  const hasDictation = await cpage.evaluate(() => "webkitSpeechRecognition" in window || "SpeechRecognition" in window);
+  assert.equal(await q.getByTestId("dictate").count(), hasDictation ? 1 : 0, "dictation offered only where the browser supports it");
   await shot(cpage, "client-questions");
   await q.getByRole("button", { name: "US and EU" }).click();
   await cpage.getByText("Saved: the next steps will follow your answer.").waitFor();

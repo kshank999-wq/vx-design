@@ -164,7 +164,8 @@ sit beside the steps.
   follows the recommendation until someone answers under **Questions for you** in the Workspace (a choice, their own
   words, the recommendation, or "Not relevant"), and every later step is given the answers. The live strip shows how
   many questions are open; **Questions** (project menu) lists them one card per question, grouped by the step that
-  raised them, with the recommendation highlighted and "Accept all recommendations". Cost: part of "Plain-language summaries" on the AI usage page.
+  raised them, with the recommendation highlighted and "Accept all recommendations". Each question can be read aloud (🔊) and answered by
+  dictation (🎤), using the browser's own speech features (dictation in Chrome, Edge and recent Safari). Cost: part of "Plain-language summaries" on the AI usage page.
 - **What you need to do.** A stopped run says in plain words what stopped it: steps that could not finish (and why),
   critical-risk steps outside the run (only the owner can include them), results waiting, open questions, and steps
   waiting on hardware. **Fix these and continue the run** retries the failed steps with a fresh retry allowance,
