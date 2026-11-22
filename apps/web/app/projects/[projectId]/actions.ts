@@ -47,6 +47,17 @@ export async function setRequirementStatus(projectId: string, requirementId: str
   revalidatePath(base);
 }
 
+/** Confirms or rejects every extracted (or ambiguous) requirement at once, optionally one document's. */
+export async function bulkReviewRequirements(projectId: string, from: "extracted" | "ambiguous", to: "confirmed" | "rejected", form: FormData) {
+  const base = `/projects/${projectId}`, path = `${base}?tab=requirements`;
+  const { supabase } = await requireUser();
+  const doc = String(form.get("doc") ?? "") || null;
+  const { data, error } = await supabase.rpc("bulk_review_requirements", { p_project: projectId, p_from: from, p_to: to, p_document: doc });
+  if (error) fail(path, error);
+  revalidatePath(base);
+  redirect(`${path}&notice=${encodeURIComponent(`${data} ${from} requirement(s) ${to}.`)}`);
+}
+
 /** Above this many active requirements the plan is made by a worker: the web server's request limit is 5 minutes. */
 const WEB_PLAN_LIMIT = Number(process.env.VX_WEB_PLAN_MAX_REQUIREMENTS ?? 80);
 

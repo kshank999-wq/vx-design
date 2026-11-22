@@ -104,5 +104,22 @@ select pg_temp.act_as(null);
 select pg_temp.check(pg_temp.state(pg_temp.id('v4')) = 'arch=complete(reused) sch=ready pcb=ready docs=complete(reused)', pg_temp.state(pg_temp.id('v4')));
 select pg_temp.check((select count(*) = 0 from public.task_artifacts ta join public.tasks t on t.id = ta.task_id where t.plan_id = pg_temp.id('v4') and t.key in ('sch', 'pcb')), 'links removed');
 
+-- Bulk review: confirming accepts as written and does not change fingerprints (reuse survives review).
+insert into public.requirements (project_id, ref_code, kind, text, priority, status) values
+  (pg_temp.id('project'), 'REQ-2', 'power', 'Charge over USB-C.', 'must', 'extracted'),
+  (pg_temp.id('project'), 'REQ-3', 'power', 'Low standby current.', 'should', 'ambiguous');
+update public.requirements set status = 'extracted' where ref_code = 'REQ-1' and project_id = pg_temp.id('project');
+create temp table fp as select key, fingerprint from public.tasks where plan_id = pg_temp.id('v4');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a1');
+select pg_temp.check(public.bulk_review_requirements(pg_temp.id('project'), 'extracted', 'confirmed') = 2, 'two extracted confirmed');
+select pg_temp.check(public.bulk_review_requirements(pg_temp.id('project'), 'ambiguous', 'confirmed') = 1, 'one ambiguous confirmed');
+select pg_temp.expect_error($$select public.bulk_review_requirements(pg_temp.id('project'), 'confirmed', 'rejected')$$, '%extracted or ambiguous%');
+select pg_temp.act_as(null);
+select public.compute_plan_fingerprints(pg_temp.id('v4'));
+select pg_temp.check((select bool_and(t.fingerprint = f.fingerprint) from public.tasks t join fp f using (key) where t.plan_id = pg_temp.id('v4')), 'confirming did not change fingerprints');
+update public.requirements set status = 'rejected' where ref_code = 'REQ-1' and project_id = pg_temp.id('project');
+select public.compute_plan_fingerprints(pg_temp.id('v4'));
+select pg_temp.check((select t.fingerprint <> f.fingerprint from public.tasks t join fp f using (key) where t.plan_id = pg_temp.id('v4') and t.key = 'arch'), 'rejecting does');
+
 \o
 select 'reuse ok';

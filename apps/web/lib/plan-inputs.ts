@@ -86,7 +86,8 @@ export async function planChanges(supabase: Supa, projectId: string, parts?: Awa
   if (addedParts.length) items.push(`${n(addedParts.length, "part")} added: ${few(addedParts.map(label))}`);
   if (changedParts.length) items.push(`${n(changedParts.length, "part")} changed or given new files: ${few(changedParts.map((p) => `${label(p)}, now ${p.row.status.replace("_", " ")}`))}`);
   if (docs?.length) items.push(`${n(docs.length, "specification")} added: ${few(docs.map((d) => d.title))}`);
-  const newReqs = (reqs ?? []).filter((r) => r.created_at > t), changedReqs = (reqs ?? []).filter((r) => r.created_at <= t);
+  // Confirming accepts a requirement as written: not a change the plan has to take in (a rejection or an edit is).
+  const newReqs = (reqs ?? []).filter((r) => r.created_at > t), changedReqs = (reqs ?? []).filter((r) => r.created_at <= t && r.status !== "confirmed");
   if (newReqs.length) items.push(`${n(newReqs.length, "requirement")} added: ${few(newReqs.map((r) => r.ref_code), 30)}`);
   if (changedReqs.length) items.push(`${n(changedReqs.length, "requirement")} changed: ${few(changedReqs.map((r) => `${r.ref_code} (${r.status})`), 30)}`);
   if (refs?.length) items.push(`${n(refs.length, "reference")} added: ${few(refs.map((r) => `${refCode(r.ref_no)} ${r.title} (${String(r.kind).replace(/_/g, " ")})`))}`);

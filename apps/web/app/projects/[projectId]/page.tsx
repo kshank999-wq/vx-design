@@ -12,7 +12,7 @@ import { PlanChangesNotice } from "@/components/PlanChangesNotice";
 import { costHistory, estimate } from "@/lib/cost-estimate";
 import { CostHint } from "@/components/CostHint";
 import { planChanges } from "@/lib/plan-inputs";
-import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
+import { bulkReviewRequirements, createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
 import { confirmStandard, proposeStandard } from "@/app/knowledge/actions";
 import { LicenseFlag, SourceForm } from "@/components/Knowledge";
 import { APPLICABILITY, type License } from "@/lib/knowledge";
@@ -80,7 +80,8 @@ export default async function ProjectPage({ params, searchParams }: {
   const canEdit = me?.role === "owner" || me?.role === "engineer";
   const docTitle = new Map((docs ?? []).map((d) => [d.id, d.title]));
   const counts = { total: reqs?.length ?? 0, rejected: reqs?.filter((r) => r.status === "rejected").length ?? 0,
-    ambiguous: reqs?.filter((r) => r.status === "ambiguous").length ?? 0, confirmed: reqs?.filter((r) => r.status === "confirmed").length ?? 0 };
+    ambiguous: reqs?.filter((r) => r.status === "ambiguous").length ?? 0, confirmed: reqs?.filter((r) => r.status === "confirmed").length ?? 0,
+    extracted: reqs?.filter((r) => r.status === "extracted").length ?? 0 };
   const history = changes?.items.length ? await costHistory(supabase, projectId) : null;
   const genCost = !history && canEdit ? estimate(await costHistory(supabase, projectId), "planFull", { scale: Math.max(0.15, (counts.total - counts.rejected) / 714) }) : null;
   const planCost = history ? { update: estimate(history, "planUpdate"), fresh: estimate(history, "planFull", { scale: Math.max(0.15, (counts.total - counts.rejected) / 714) }) } : undefined;
@@ -200,6 +201,19 @@ export default async function ProjectPage({ params, searchParams }: {
           {counts.total} total · {counts.confirmed} confirmed · {counts.ambiguous} ambiguous · {counts.rejected} rejected.
           Every requirement links to the exact text it came from.
         </p>
+        {canEdit && (counts.extracted > 0 || counts.ambiguous > 0) && (
+          <div className="card stack" data-testid="bulk-review">
+            <p className="small"><strong>Review in bulk.</strong> Sign-off of S0 asks for every requirement to be confirmed or rejected.
+              Extracted requirements were read as clear; ambiguous ones carry the reason in their notes, which stay with them when confirmed,
+              so the plan still sees the doubt. Reject the ones that do not apply first, one by one below{sp.doc ? " (this document only)" : ""}.</p>
+            <div className="row">
+              {counts.extracted > 0 && <form action={bulkReviewRequirements.bind(null, projectId, "extracted", "confirmed")}>{sp.doc && <input type="hidden" name="doc" value={sp.doc} />}
+                <button type="submit">Confirm all {sp.doc ? "" : `${counts.extracted} `}extracted</button></form>}
+              {counts.ambiguous > 0 && <form action={bulkReviewRequirements.bind(null, projectId, "ambiguous", "confirmed")}>{sp.doc && <input type="hidden" name="doc" value={sp.doc} />}
+                <button type="submit" className="secondary">Confirm all {sp.doc ? "" : `${counts.ambiguous} `}ambiguous as written</button></form>}
+            </div>
+          </div>
+        )}
         <form method="get" className="row filters" data-testid="req-filters">
           <input type="hidden" name="tab" value="requirements" />
           <input name="q" defaultValue={sp.q ?? ""} placeholder="Search text or REQ code" aria-label="Search requirements" style={{ flex: 1, minWidth: 200 }} />
