@@ -14,6 +14,7 @@ import { CircuitDesign, ENCLOSURE_PROMPT_VERSION, EnclosureDesignError, generate
 import type { Validation } from "../db.ts";
 import { buildEnclosure, enclosureFacts, toEnclosureCheck, type EngineeringTools, type EnclosureResult } from "../engineering.ts";
 import type { Executor, ExecutorContext, ExecutorResult } from "../execution.ts";
+import { briefExecutor } from "./brief.ts";
 
 type FileKey = keyof NonNullable<EnclosureResult["files"]>;
 const FILES: { key: FileKey; suffix: string; kind: string; type: string }[] = [
@@ -72,8 +73,12 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
           return { input, draft, source: { taskKey: v.taskKey, versionId: v.versionId, storagePath: v.storagePath, offline: !!v.toolConfig?.offline } };
         });
         if (!board) {
-          return { status: "blocked", reason: "The enclosure needs a committed routed board from an upstream PCB layout task " +
-                                              "('<layout task>/kicad-project'). Run and approve the layout first." };
+          // No board exists yet (an envelope early in the plan): the envelope is written as a design record (sizes,
+          // stack-up, bays, openings) for the board and layout tasks to work to; the housing itself is built around the
+          // boards by a later enclosure task.
+          await ctx.log("no routed board upstream yet: writing the enclosure envelope as a design record");
+          const r = await briefExecutor.run({ ...ctx, step: (n, f) => ctx.step(`envelope:${n}`, f) });
+          return r.status === "passed" ? { ...r, summary: `Envelope (before the boards exist): ${r.summary}` } : r;
         }
 
         let outcome: { design: EnclosureDesign; rounds: number; result: Omit<EnclosureResult, "files">; stash: Partial<Record<FileKey, Stashed>>;

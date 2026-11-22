@@ -9,6 +9,7 @@ import { powerExecutor } from "./power.ts";
 import { schematicExecutor } from "./schematic.ts";
 import { simulationExecutor } from "./simulation.ts";
 import { verificationExecutor } from "./verification.ts";
+import { manufacturingDocExecutor, rfqExecutor } from "./manufacturing.ts";
 import { sourcingExecutor } from "./sourcing.ts";
 import type { SourcingProvider } from "@vx/integrations";
 
@@ -37,6 +38,8 @@ export function executorsFor(engineering: EngineeringTools | null, sourcing: Sou
     briefExecutor,
     powerExecutor,
     verificationExecutor,
+    manufacturingDocExecutor,
+    rfqExecutor,
     ...(engineering ? [schematicExecutor(engineering), simulationExecutor(engineering), pcbExecutor(engineering), fabExecutor(engineering), enclosureExecutor(engineering)] : []),
     // Only a worker with at least one configured distributor (or the fixture stand-in) takes sourcing tasks.
     ...(sourcing.some((p) => p.configured()) ? [sourcingExecutor(sourcing.filter((p) => p.configured()))] : []),

@@ -394,6 +394,32 @@ export class WorkerDb {
     return out;
   }
 
+  /** Committed output versions of the given tasks (one per artifact, the newest). */
+  async committedOutputs(taskIds: string[]): Promise<{ taskId: string; versionId: string; artifactId: string; name: string; kind: string }[]> {
+    if (!taskIds.length) return [];
+    const { data, error } = await this.client.from("task_artifacts")
+      .select("task_id, artifact_versions(id, artifact_id, status, version, artifacts(name, kind))").in("task_id", taskIds).eq("role", "output");
+    if (error) throw new Error(`committed outputs: ${error.message}`);
+    const best = new Map<string, { taskId: string; versionId: string; artifactId: string; name: string; kind: string; version: number }>();
+    for (const r of data ?? []) {
+      const v = r.artifact_versions as unknown as { id: string; artifact_id: string; status: string; version: number; artifacts: { name: string; kind: string } };
+      if (v.status !== "committed") continue;
+      const cur = best.get(v.artifact_id);
+      if (!cur || v.version > cur.version) best.set(v.artifact_id, { taskId: r.task_id, versionId: v.id, artifactId: v.artifact_id, name: v.artifacts.name, kind: v.artifacts.kind, version: v.version });
+    }
+    return [...best.values()].map(({ version: _v, ...x }) => x);
+  }
+
+  /** A draft release holding these committed versions (the worker's counterpart of save_release). Returns its number. */
+  async draftRelease(projectId: string, revision: string, notes: string, versionIds: string[]): Promise<{ id: string; releaseNo: number }> {
+    const { data: last } = await this.client.from("releases").select("release_no").eq("project_id", projectId).order("release_no", { ascending: false }).limit(1);
+    const no = (last?.[0]?.release_no ?? 0) + 1;
+    const { data, error } = await this.client.from("releases").insert({ project_id: projectId, release_no: no, revision, notes, version_ids: versionIds, created_by: null })
+      .select("id, release_no").single();
+    if (error) throw new Error(`release: ${error.message}`);
+    return { id: data.id, releaseNo: data.release_no };
+  }
+
   /** The checks recorded by each task's latest execution. */
   async latestValidations(taskIds: string[]): Promise<{ task_id: string; kind: string; result: string; summary: string; evidence_category: string; tool_name: string | null }[]> {
     if (!taskIds.length) return [];

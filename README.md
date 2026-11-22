@@ -299,6 +299,14 @@ Executors so far:
   later layout task takes over the earlier board when the circuit has not changed since (no second layout). One
   manufacturing task packages every board (`fab.<board>/…`) and one sourcing task buys for all of them (refs
   `board/R1`).
+- **Manufacturing tasks** by what they produce: fab outputs (Gerbers, pick-and-place, panels) make the fab packages
+  (engineering worker); documents (bring-up checklists, factory tests, fixtures) are design briefs; the **RFQ package**
+  gathers every committed manufacturing output upstream (each board's fab package, BOMs, CPL, drawings, board and
+  enclosure models, test plans, service and compliance documents, reviews) into a **draft release**, with a brief for
+  the quote request. A person checks its readiness, issues it on Releases and sends RFQs from the RFQ page.
+- **Enclosure before the boards:** an enclosure task with no routed board upstream writes the envelope as a design
+  record (sizes, stack-up, bays) for the board tasks to work to; plan fixes make a later enclosure task wait for each
+  board's last layout, so the housing is built around the real boards.
 - Schematic (G3), simulation, PCB layout (G4) and manufacturing (G4.5) tasks wait for the KiCad engineering worker.
 - **No paying for loops.** Every repair loop (plans, briefs, circuits, layouts, power trees, enclosures,
   simulations, assembly instructions) stops early when a round reports exactly the same problems as the round

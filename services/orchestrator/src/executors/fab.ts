@@ -15,6 +15,7 @@ import { join } from "node:path";
 import type { Validation } from "../db.ts";
 import { buildFabPackage, type EngineeringTools, type FabPackageResult } from "../engineering.ts";
 import type { Executor, ExecutorContext, ExecutorResult } from "../execution.ts";
+import { manufacturingKind } from "./manufacturing.ts";
 
 type FileKey = keyof NonNullable<FabPackageResult["files"]>;
 
@@ -47,7 +48,7 @@ export function fabExecutor(tools: EngineeringTools): Executor {
     version: `vx_eng-${tools.versions.vx_eng}`,
     describe: "Board-house package from the committed board, re-read independently of KiCad",
     disciplines: ["manufacturing"],
-    canRun: (task) => task.discipline === "manufacturing",
+    canRun: (task) => task.discipline === "manufacturing" && manufacturingKind(task) === "fab",
 
     async run(ctx: ExecutorContext): Promise<ExecutorResult> {
       const { task, db } = ctx;

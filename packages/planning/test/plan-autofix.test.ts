@@ -93,6 +93,7 @@ test("boards: missing boards are inferred, and one board's tasks are linked to b
     task("tc-stackup", "pcb_layout", [], ["tc-io"]),                // inherits "tc" from tc-io
     task("tc-route", "pcb_layout", [], ["arch"], { board: "tc" }),
     task("main-layout", "pcb_layout", [], ["main-io"]),             // inherits "main"
+    task("enc-detail", "enclosure", [], ["arch"]),                 // after the layouts, linked to none
     task("fab", "manufacturing", [], ["tc-route", "main-layout"]),
   ] };
   const fixes: string[] = [];
@@ -103,6 +104,7 @@ test("boards: missing boards are inferred, and one board's tasks are linked to b
   assert.equal(by.get("tc-stackup")!.board, "tc");
   assert.equal(by.get("main-layout")!.board, "main");
   assert.equal(by.get("fab")!.board ?? null, null, "fab packages every board; it has none");
+  assert.deepEqual(by.get("enc-detail")!.upstream_keys.sort(), ["arch", "main-layout", "tc-route"], "the enclosure waits for each board's last layout");
   assert.equal(by.get("main-power")!.board, "main");
   assert.equal(by.get("pwr-budget")!.board ?? null, null);
   assert.ok(by.get("main-io")!.upstream_keys.includes("main-power"), "a board's schematic builds on its power tree");

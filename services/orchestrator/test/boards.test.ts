@@ -45,6 +45,7 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
   const t = (key: string, discipline: string, upstream: string[] = [], extra: object = {}) => ({ key, title: key, discipline, upstream_keys: upstream, ...extra });
   const { data: planId, error: pe } = await user.rpc("create_plan_version", { p_project_id: project!.id, p_payload: { summary: "two boards", tasks: [
     t("holdover", "simulation"),
+    t("enc-envelope", "enclosure", [], { title: "Enclosure envelope and stack-up" }),
     t("tc-core", "schematic", ["holdover"], { board: "tc" }),
     t("tc-io", "schematic", ["tc-core"], { board: "tc" }),
     t("main-sch", "schematic", [], { board: "main" }),
@@ -54,6 +55,8 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
     t("main-layout", "pcb_layout", ["main-sch", "sch-review"], { board: "main" }),
     t("fab", "manufacturing", ["tc-route", "main-layout"]),
     t("hw-test", "verification", ["fab"], { requirement_refs: ["REQ-PWR-001"] }),
+    t("mfg-test-plan", "manufacturing", ["sch-review"], { title: "Bring-up checklist and manufacturing test" }),
+    t("rfq-package", "manufacturing", ["fab", "mfg-test-plan"], { title: "RFQ package and quotes" }),
   ] } });
   assert.ifError(pe);
   assert.ifError((await user.rpc("submit_plan", { p_plan_id: planId })).error);
@@ -69,7 +72,7 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
     const end = Date.now() + 2_200_000;
     for (;;) {
       const s = await tasks();
-      if (s.get("fab")!.status === "complete" && s.get("hw-test")!.status === "blocked") break;
+      if (s.get("rfq-package")!.status === "complete" && s.get("hw-test")!.status === "blocked") break;
       const bad = [...s.values()].filter((x) => x.status === "failed" || (x.status === "blocked" && x.key !== "hw-test"));
       assert.equal(bad.length, 0, bad.map((b) => `${b.key} ${b.status}: ${b.blocker_reason}`).join("; "));
       for (const x of s.values()) {
@@ -110,6 +113,20 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
     for (const b of ["main", "tc"]) assert.ok(fab.has(`fab.${b}/fab-package`), `fab package for ${b}: ${[...fab.keys()].join(", ")}`);
     const fabChecks = await checks("fab");
     assert.ok(fabChecks.some((c) => c.summary.startsWith("main: ")) && fabChecks.some((c) => c.summary.startsWith("tc: ")));
+
+    // An envelope before any board exists is a design record, not a blocked task.
+    assert.ok((await names("enc-envelope")).has("enc-envelope/brief"));
+    // A manufacturing document is a brief, not a fab package.
+    const mtp = await names("mfg-test-plan");
+    assert.ok(mtp.has("mfg-test-plan/brief") && ![...mtp.keys()].some((n) => n.endsWith("/fab-package")), [...mtp.keys()].join(", "));
+    // The RFQ package is a draft release holding both boards' fab packages and the supporting files.
+    const { data: rel } = await admin().from("releases").select("revision, status, version_ids, notes").eq("project_id", project!.id).single();
+    assert.equal(rel!.status, "draft");
+    const { data: relFiles } = await admin().from("artifact_versions").select("artifacts(name)").in("id", rel!.version_ids);
+    const relNames = (relFiles ?? []).map((f) => (f.artifacts as unknown as { name: string }).name);
+    for (const b of ["main", "tc"]) assert.ok(relNames.includes(`fab.${b}/fab-package`), relNames.join(", "));
+    assert.ok(relNames.includes("mfg-test-plan/brief"), "the test plan goes with it");
+    assert.ok((await checks("rfq-package")).some((c) => /Draft release RFQ-rfq-package-\w+ prepared with \d+ committed file\(s\)/.test(c.summary)));
 
     // The hardware test waits for units, with its procedure on the Validation page.
     assert.match(s.get("hw-test")!.blocker_reason ?? "", /Hardware test: waiting for built units\. Draft test procedure\(s\) TP-\d{3}/);

@@ -229,4 +229,23 @@ export function fixBoards(tasks: Task[], fixes: string[]): void {
     });
     if (added.length) fixes.push(`Board "${board}": linked so each task builds on the board so far: ${added.join(", ")}`);
   }
+
+  // An enclosure task after the layouts that depends on none of them would be built before any board exists: it
+  // waits for each board's last earlier layout. (An enclosure envelope early in the plan stays an envelope.)
+  const lastLayout = new Map<string, Task>();
+  for (const t of [...tasks].sort((a, b) => pos.get(a.key)! - pos.get(b.key)!)) {
+    if (t.discipline === "pcb_layout") lastLayout.set(t.board ?? t.key, t);
+    if (t.discipline !== "enclosure") continue;
+    const seen = new Set<string>();
+    const reach = (k: string): boolean => {
+      if (seen.has(k)) return false; seen.add(k);
+      const u = byKey.get(k);
+      return !!u && (u.discipline === "pcb_layout" || u.upstream_keys.some(reach));
+    };
+    if (t.upstream_keys.some(reach)) continue;
+    const layouts = [...lastLayout.values()].filter((l) => pos.get(l.key)! < pos.get(t.key)!);
+    if (!layouts.length) continue;
+    for (const l of layouts) if (!t.upstream_keys.includes(l.key)) t.upstream_keys.push(l.key);
+    fixes.push(`"${t.key}": an enclosure after the layouts now waits for them (${layouts.map((l) => l.key).join(", ")}), so it is built around the real boards`);
+  }
 }
