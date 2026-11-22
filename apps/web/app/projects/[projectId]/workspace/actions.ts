@@ -73,3 +73,26 @@ export async function decideFromWorkspace(projectId: string, taskId: string, app
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(approve ? "Approved. The team's next steps are unblocked." : "Returned to the team with your note.")}`);
 }
+
+/** Approves every waiting result whose VX Design checks all passed (notes allowed); anything with a failed check is left. */
+export async function approvePassed(projectId: string) {
+  const path = `/projects/${projectId}/workspace`;
+  const { supabase } = await requireUser();
+  const { data: plan } = await supabase.from("plans").select("id").eq("project_id", projectId).eq("status", "approved").maybeSingle();
+  if (!plan) fail(path, "No approved plan.");
+  const { data: waiting } = await supabase.from("tasks").select("id, title").eq("plan_id", plan.id).eq("status", "awaiting_approval");
+  const ids = (waiting ?? []).map((t) => t.id);
+  const { data: vals } = ids.length ? await supabase.from("validations").select("task_id, execution_id, result, created_at").in("task_id", ids).order("created_at", { ascending: false }) : { data: [] };
+  const latest = new Map<string, string | null>();
+  for (const v of vals ?? []) if (!latest.has(v.task_id)) latest.set(v.task_id, v.execution_id);
+  let approved = 0;
+  const held: string[] = [];
+  for (const t of waiting ?? []) {
+    const mine = (vals ?? []).filter((v) => v.task_id === t.id && v.execution_id === latest.get(t.id));
+    if (mine.some((v) => v.result === "fail" || v.result === "error")) { held.push(t.title); continue; }
+    const { error } = await supabase.rpc("decide_task", { p_task_id: t.id, p_approve: true, p_note: "Approved: every VX Design check passed." });
+    if (error) held.push(`${t.title} (${error.message})`); else approved++;
+  }
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(`${approved} result(s) approved; the work continues.` + (held.length ? ` Held for a closer look: ${held.join(", ")}.` : ""))}`);
+}

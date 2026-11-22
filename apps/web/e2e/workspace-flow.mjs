@@ -89,8 +89,11 @@ try {
   await cpage.getByRole("link", { name: "Timecode slate (workspace e2e)" }).click();
   await cpage.waitForURL(/\/workspace$/);
   const checklist = cpage.getByTestId("checklist");
-  await checklist.getByText("Power tree and budget").waitFor();
-  assert.match(await checklist.getByTestId("approval-stop").innerText(), /Approval stop\..*Offline stand-in/s);
+  await checklist.getByRole("link", { name: "Power tree and budget" }).waitFor();
+  // The approval is at the top of the activity panel, with VX Design's checks in plain language.
+  const stop = checklist.getByTestId("approval-stop");
+  assert.match(await stop.getByTestId("verdict").innerText(), /^(✓ Passed: all \d+ checks passed|No automatic checks)/);
+  assert.match(await stop.innerText(), /Engineering details/);
   assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
   await shot(cpage, "client-workspace");
   console.log("✓ client joined through the invitation and sees the checklist with the approval stop");
@@ -135,7 +138,7 @@ try {
 
   // Client approves at the stop.
   await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
-  await cpage.getByRole("button", { name: "Approve" }).click();
+  await cpage.getByRole("button", { name: "Approve", exact: true }).click();
   await cpage.getByText("Approved. The team's next steps are unblocked.").waitFor();
   assert.equal((await task()).status, "complete");
   const { data: versions } = await admin.from("artifact_versions").select("status").eq("produced_by_task_id", (await task()).id);

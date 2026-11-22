@@ -45,3 +45,21 @@ export async function freezeDesign(projectId: string, variantId: string, form: F
   revalidatePath(`/projects/${projectId}/workspace`);
   go(path, "Design frozen: recorded as a decision that engineering now works to.");
 }
+
+/** Freezes one of the team's own mock-ups (a project reference) as the concept: no images generated. */
+export async function freezeMockup(projectId: string, referenceId: string, form: FormData) {
+  const path = pagePath(projectId, form);
+  const { supabase } = await requireUser();
+  const { data: variantId, error } = await supabase.rpc("concept_from_reference", { p_reference: referenceId });
+  if (error) fail(path, error);
+  const num = (k: string) => Number(str(form, k));
+  const { error: e2 } = await supabase.rpc("freeze_design", {
+    p_variant_id: variantId,
+    p_envelope: { length_mm: num("length_mm"), width_mm: num("width_mm"), height_mm: num("height_mm"), basis: "the team's mock-up" },
+    p_cmf: { summary: str(form, "cmf") }, p_note: "Frozen from the team's own mock-up; no concepts were generated.", p_change_reason: null,
+  });
+  if (e2) fail(path, e2);
+  revalidatePath(`/projects/${projectId}/concepts`);
+  revalidatePath(`/projects/${projectId}/workspace`);
+  go(path, "Mock-up frozen as the concept: recorded as a decision that engineering now works to.");
+}

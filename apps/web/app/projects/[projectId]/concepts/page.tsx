@@ -4,7 +4,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { cancelConcepts, freezeDesign, requestConcepts } from "./actions";
+import { cancelConcepts, freezeDesign, freezeMockup, requestConcepts } from "./actions";
 
 interface Brief {
   product_summary?: string; envelope?: { length_mm: number; width_mm: number; height_mm: number; basis: string };
@@ -32,6 +32,13 @@ export default async function ConceptsPage({ params, searchParams }: {
     supabase.from("current_design_freeze").select("id, variant_id, envelope, cmf, note, change_reason, frozen_at").eq("project_id", projectId).maybeSingle(),
     supabase.from("project_references").select("id, ref_no, title").eq("project_id", projectId).in("mime_type", ["image/png", "image/jpeg", "image/webp"]).order("ref_no"),
   ]);
+  // The team's own mock-ups (any file type) can be frozen as the concept directly, without generating images.
+  const [{ data: ownMockups }, { data: intake }] = await Promise.all([
+    supabase.from("project_references").select("id, ref_no, title, kind, filename, note, storage_path, mime_type").eq("project_id", projectId)
+      .in("kind", ["mockup", "render", "sketch", "photo", "drawing"]).order("ref_no"),
+    supabase.from("project_intake").select("max_dimensions").eq("project_id", projectId).maybeSingle(),
+  ]);
+  const dims = /(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i.exec(intake?.max_dimensions ?? "");
   if (!project) notFound();
   const role = me?.role ?? "viewer";
   const canRequest = ["owner", "engineer", "client"].includes(role);
@@ -56,6 +63,27 @@ export default async function ConceptsPage({ params, searchParams }: {
       <p className="banner banner-warn">Concept images are generated pictures for choosing a direction: <strong>concept, not CAD</strong>.
         Nothing in them is a dimension or a part. Engineering works to the frozen envelope and requirements; later mock-ups come from the CAD model.</p>
       <Banner error={error} notice={notice} />
+
+      {!freeze && canFreeze && (ownMockups ?? []).length > 0 && (
+        <section className="card" data-testid="mockup-freeze">
+          <h2>Use your mock-up as the concept</h2>
+          <p className="small">You already have {(ownMockups ?? []).length === 1 ? "a mock-up" : "mock-ups"}: freeze one as the industrial design instead of generating
+            concepts. Engineering then works to it and to the envelope you give here (outside size, L × W × H). It is recorded as a decision, like any freeze.</p>
+          {(ownMockups ?? []).map((m) => (
+            <form key={m.id} action={freezeMockup.bind(null, projectId, m.id)} className="stack mockup-freeze">
+              {hidden}
+              <p><strong>REF-{m.ref_no} {m.title}</strong> <span className="muted small">({m.kind}, {m.filename})</span>{m.note ? <span className="small"> · {m.note}</span> : null}</p>
+              <div className="row tight">
+                <label>L mm<input name="length_mm" type="number" step="0.1" min="1" required defaultValue={dims?.[1]} aria-label={`Length for REF-${m.ref_no}`} /></label>
+                <label>W mm<input name="width_mm" type="number" step="0.1" min="1" required defaultValue={dims?.[2]} aria-label={`Width for REF-${m.ref_no}`} /></label>
+                <label>H mm<input name="height_mm" type="number" step="0.1" min="1" required defaultValue={dims?.[3]} aria-label={`Height for REF-${m.ref_no}`} /></label>
+              </div>
+              <input name="cmf" placeholder="Colours, materials and finish (e.g. anodised aluminium frame, matte black rear shell)" aria-label={`Finish for REF-${m.ref_no}`} />
+              <SubmitButton pendingText="Freezing…">Freeze REF-{m.ref_no} as the concept</SubmitButton>
+            </form>
+          ))}
+        </section>
+      )}
 
       {freeze && frozen && (
         <section className="card freeze" data-testid="freeze">

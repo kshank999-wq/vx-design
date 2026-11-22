@@ -22,7 +22,7 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
     return () => document.removeEventListener("click", close);
   }, []);
   useEffect(() => { for (const d of ref.current?.querySelectorAll("details[open]") ?? []) d.removeAttribute("open"); }, [path]);
-  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/usage`, label: "AI usage" }];
+  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/runs`, label: "Runs" }, { href: `${base}/usage`, label: "AI usage" }];
   return (
     <nav className="project-nav" aria-label="Project" ref={ref} data-testid="project-nav">
       <Link href={base} className="pn-name" title={name}>{name}</Link>

@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /** Re-renders the server page every few seconds while something is in progress. */
-export function AutoRefresh({ intervalMs = 3000 }: { intervalMs?: number }) {
+export function AutoRefresh({ intervalMs = 3000, quiet = false }: { intervalMs?: number; quiet?: boolean }) {
   const router = useRouter();
   useEffect(() => {
     const id = setInterval(() => {
@@ -11,5 +11,5 @@ export function AutoRefresh({ intervalMs = 3000 }: { intervalMs?: number }) {
     }, intervalMs);
     return () => clearInterval(id);
   }, [router, intervalMs]);
-  return <span className="muted small live-dot" aria-live="off">live</span>;
+  return quiet ? null : <span className="muted small live-dot" aria-live="off">live</span>;
 }

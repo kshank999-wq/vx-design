@@ -48,3 +48,15 @@ export async function continueRun(projectId: string, runId: string) {
   if (error) fail(path, error);
   redirect(`/projects/${projectId}/runs/${data}?notice=${encodeURIComponent("New run authorized with the same limits.")}`);
 }
+
+/** Raises a run's AI and compute budget; a run stopped only by its budget resumes. */
+export async function raiseBudget(projectId: string, runId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const ai = Number(form.get("ai")), compute = Number(form.get("compute"));
+  if (!Number.isFinite(ai) || !Number.isFinite(compute)) fail(path, "Give both budgets in dollars.");
+  const { data, error } = await supabase.rpc("raise_run_budget", { p_run: runId, p_ai: ai, p_compute: compute });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(`Budget raised to $${ai} AI and $${compute} compute${data === "running" ? "; the run continues." : "."}`)}`);
+}

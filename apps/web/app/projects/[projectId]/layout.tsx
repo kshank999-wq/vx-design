@@ -1,4 +1,5 @@
 import { ProjectNav, type NavGroup } from "@/components/ProjectNav";
+import { LiveRunStrip } from "@/components/LiveRunStrip";
 import { requireUser } from "@/lib/auth";
 
 /** Every project page gets the project menu (staff only: clients work in the workspace). */
@@ -22,5 +23,5 @@ export default async function ProjectLayout({ children, params }: { children: Re
       { href: `${b}/releases`, label: "Releases" }, { href: `${b}/production`, label: "Production" }, { href: `${b}/inspection`, label: "Inspection plans" }] },
     { label: "Prove", items: [{ href: `${b}/validation`, label: "Validation" }, { href: `${b}/compliance`, label: "Compliance" }, { href: `${b}/lifecycle`, label: "Lifecycle" }] },
   ];
-  return <><ProjectNav base={b} name={project.name} groups={groups} />{children}</>;
+  return <><ProjectNav base={b} name={project.name} groups={groups} /><LiveRunStrip projectId={projectId} />{children}</>;
 }

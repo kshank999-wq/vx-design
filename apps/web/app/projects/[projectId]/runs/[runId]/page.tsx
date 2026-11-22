@@ -2,10 +2,11 @@ import Link from "next/link";
 import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ElapsedClock } from "@/components/ElapsedClock";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { continueRun, controlRun, decideTask } from "./actions";
+import { continueRun, controlRun, decideTask, raiseBudget } from "./actions";
 
 interface Report {
   headline: string;
@@ -107,12 +108,53 @@ export default async function RunPage({ params, searchParams }: {
       <div className="row spread">
         <h1>{run.name || "Run"}</h1>
         <div className="row">
-          {live && <AutoRefresh />}
+          {live && <AutoRefresh quiet={active} />}
           <span className={`pill pill-${run.status} big`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
         </div>
       </div>
       <Banner error={error} notice={notice} />
-      {run.stop_reason && <p className="banner banner-warn">Stopped: {run.stop_reason}</p>}
+      {active && (() => {
+        const done = (tasks ?? []).filter((t) => t.status === "complete").length, total = (tasks ?? []).length;
+        const aiMax = Number(run.max_ai_spend_usd), share = aiMax ? Math.min(1, aiUsd / aiMax) : 0;
+        const taskOf = new Map((tasks ?? []).map((t) => [t.id, t]));
+        const engineering = new Set((workers ?? []).filter((w) => (w.disciplines as string[]).includes("schematic")).map((w) => w.id));
+        return (
+          <section className={`live-panel live-${run.status}`} data-testid="live-panel" aria-live="polite">
+            <div className="live-head">
+              <span className="live-beacon" aria-hidden="true" />
+              <div>
+                <p className="live-title">{run.status === "paused" ? "Paused" : liveExecs.length ? `Working on ${liveExecs.length} task${liveExecs.length > 1 ? "s" : ""}` : run.status === "pending" ? "Starting" : "Running: between tasks"}</p>
+                <p className="live-sub">{done} of {total} tasks done · {waiting.length ? <a href="#approvals"><strong>{waiting.length} waiting for your approval</strong></a> : "nothing waiting for you"} · {(workers ?? []).length} worker(s) online · updates every 3 s</p>
+              </div>
+            </div>
+            {liveExecs.length > 0 && (
+              <ul className="live-tasks">{liveExecs.map((e) => { const t = taskOf.get(e.task_id); return (
+                <li key={e.id} data-testid="live-task">
+                  <span className="live-clock"><ElapsedClock since={e.started_at ?? run.created_at} /></span>
+                  <span><strong>{t?.title ?? keyOf.get(e.task_id)}</strong> <span className="mono muted small">{t?.key}</span>
+                    <span className="muted small"> · {(t?.discipline ?? "").replace("_", " ")} · {engineering.has(e.worker_id) ? "engineering worker" : "worker"}{e.attempt > 1 ? ` · attempt ${e.attempt}` : ""}</span>
+                    {lastLog.get(e.id) && <span className="live-step">{lastLog.get(e.id)}</span>}</span>
+                </li>); })}</ul>
+            )}
+            <div className="live-spend">
+              <span className="small">AI spend <strong>${aiUsd.toFixed(2)}</strong> of ${aiMax.toFixed(2)}</span>
+              <span className="live-bar"><span style={{ width: `${share * 100}%`, background: share >= 0.8 ? "var(--danger, #b42318)" : undefined }} /></span>
+              {canControl && (
+                <form className="row tight" action={raiseBudget.bind(null, projectId, runId)}>
+                  <label className="inline small">AI $<input name="ai" type="number" min={aiMax} step="any" defaultValue={Math.max(aiMax, 150)} style={{ width: "6em" }} /></label>
+                  <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_compute_spend_usd), 20)} style={{ width: "5em" }} /></label>
+                  <SubmitButton variant="secondary" pendingText="Raising…">Raise budget</SubmitButton>
+                </form>
+              )}
+            </div>
+            {share >= 0.8 && <p className="small" data-testid="budget-warning"><strong>The AI budget is nearly used:</strong> the run stops when it is reached. Raise it to keep going.</p>}
+          </section>
+        );
+      })()}
+      {run.stop_reason && <p className="banner banner-warn">Stopped: {run.stop_reason}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
+        <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Math.max(Number(run.max_ai_spend_usd) * 2, 150)} style={{ width: "6em" }} aria-label="New AI budget" />
+        <input type="hidden" name="compute" value={Math.max(Number(run.max_compute_spend_usd), 20)} />
+        <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">
           No online worker can run {uncovered.map((d) => d.replace("_", " ")).join(", ")} tasks
@@ -151,7 +193,7 @@ export default async function RunPage({ params, searchParams }: {
       </div>
 
       {waiting.length > 0 && (
-        <section>
+        <section id="approvals">
           <h2>Waiting for your approval</h2>
           {waiting.map((t) => {
             const appr = pendingApproval.get(t.id);

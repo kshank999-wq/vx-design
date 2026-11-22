@@ -3,11 +3,12 @@ import { StageBar } from "@/components/StageBar";
 import { STAGES, STAGE_NAME, type StageRow } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { plainCheck, verdict } from "@/lib/plain-checks";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
-import { decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
 import { ChatForm } from "@/components/ChatForm";
 import { CostHint } from "@/components/CostHint";
 import { costHistory, estimate } from "@/lib/cost-estimate";
@@ -55,6 +56,23 @@ export default async function WorkspacePage({ params, searchParams }: {
   const vVerified = vm.filter((x) => x.status === "verified").length, vFailing = vm.filter((x) => x.status === "failing").length;
   const vTested = vm.some((x) => x.status !== "no_procedure" && x.status !== "not_tested");
   const valStep = !vm.length || !vTested ? "draft" : vFailing || (openFaults ?? []).length ? "blocked" : vVerified === vm.length ? "complete" : "running";
+  // The latest steps the workers logged (staff only; clients see the checklist).
+  const { data: activity } = await supabase.from("execution_logs").select("id, level, message, created_at, executions(tasks(key, title))")
+    .eq("project_id", projectId).neq("level", "debug").order("id", { ascending: false }).limit(15);
+  const [{ data: lastRun }, { data: plansAll }, { data: releases }, { data: reqStatus }] = await Promise.all([
+    supabase.from("runs").select("id, status").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("plans").select("id, version, status").eq("project_id", projectId).order("version", { ascending: false }).limit(1),
+    supabase.from("releases").select("id, status").eq("project_id", projectId).limit(5),
+    supabase.from("requirements").select("status").eq("project_id", projectId),
+  ]);
+  // VX Design's checks on each result waiting for approval (its latest attempt), shown in plain language.
+  const waitIds = ctx.tasks.filter((t) => t.status === "awaiting_approval").map((t) => t.id);
+  const { data: waitVals } = waitIds.length ? await supabase.from("validations").select("task_id, execution_id, kind, result, summary, created_at").in("task_id", waitIds).order("created_at", { ascending: false }) : { data: [] };
+  const checksOf = (taskId: string) => {
+    const rows = (waitVals ?? []).filter((v) => v.task_id === taskId);
+    const exec = rows[0]?.execution_id;
+    return rows.filter((v) => v.execution_id === exec);
+  };
   const role = me?.role ?? "viewer";
   const canDraft = role === "owner" || role === "engineer";
   const chatCost = role !== "client" ? estimate(await costHistory(supabase, projectId), "chat") : null;
@@ -88,6 +106,33 @@ export default async function WorkspacePage({ params, searchParams }: {
       <div className="ws-head">
         <p className="crumbs">{role === "client" ? <Link href="/projects">Projects</Link> : <><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{ctx.project.name}</Link></>} /</p>
         <h1>{ctx.project.name} <span className="muted small">workspace</span></h1>
+        {role !== "client" && (() => {
+          const P = `/projects/${projectId}`;
+          const reqs = reqStatus ?? [];
+          const open = reqs.filter((r) => r.status === "extracted" || r.status === "ambiguous").length;
+          const latest = plansAll?.[0];
+          const waitingN = ctx.tasks.filter((t) => t.status === "awaiting_approval").length;
+          const doneN = ctx.tasks.filter((t) => t.status === "complete").length;
+          const runActive = !!lastRun && ["pending", "running", "paused"].includes(lastRun.status);
+          const steps: { key: string; label: string; state: "done" | "now" | "you" | "todo"; detail: string; href: string }[] = [
+            { key: "inputs", label: "Inputs", state: reqs.length ? (open ? "you" : "done") : "now", detail: reqs.length ? (open ? `${open} requirement(s) to confirm` : `${reqs.length} requirements`) : "add specifications", href: `${P}/inputs` },
+            { key: "concept", label: "Concept", state: c.freeze ? "done" : "you", detail: c.freeze ? `frozen: ${c.freeze.name}` : "freeze the mock-up or a concept", href: href("concepts") },
+            { key: "plan", label: "Plan", state: ctx.plan ? "done" : latest ? "you" : "todo", detail: ctx.plan ? `v${ctx.plan.version} approved` : latest ? `v${latest.version} ${latest.status.replace("_", " ")}: approve it` : "not made yet", href: latest ? `${P}/plans/${latest.id}` : `${P}?tab=plans` },
+            { key: "design", label: "Design run", state: !ctx.tasks.length ? "todo" : doneN === ctx.tasks.length ? "done" : runActive ? "now" : "you", detail: ctx.tasks.length ? `${doneN} of ${ctx.tasks.length} done${runActive ? ", running" : lastRun ? `, ${lastRun.status}` : ", not started"}` : "after the plan", href: lastRun ? `${P}/runs/${lastRun.id}` : `${P}/runs` },
+            { key: "approvals", label: "Your approvals", state: waitingN ? "you" : "done", detail: waitingN ? `${waitingN} waiting` : "none waiting", href: "#approvals" },
+            { key: "release", label: "Manufacturer package", state: (releases ?? []).some((r) => r.status === "released") ? "done" : (releases ?? []).length ? "you" : "todo", detail: (releases ?? []).length ? "draft release ready to check" : "at the end of the run", href: `${P}/releases` },
+          ];
+          return (
+            <ol className="flow" data-testid="flow" aria-label="Where the project is">
+              {steps.map((st, i) => (
+                <li key={st.key} className={`flow-step flow-${st.state}`} data-state={st.state}>
+                  <Link href={st.href}><span className="flow-n">{st.state === "done" ? "✓" : i + 1}</span>
+                    <span><span className="flow-label">{st.label}</span><small>{st.state === "you" ? "Your turn: " : st.state === "now" ? "Working: " : ""}{st.detail}</small></span></Link>
+                </li>
+              ))}
+            </ol>
+          );
+        })()}
         {role !== "client" && <StageBar supabase={supabase} projectId={projectId} />}
         <Banner error={error} notice={notice} />
       </div>
@@ -185,7 +230,63 @@ export default async function WorkspacePage({ params, searchParams }: {
       </section>
 
       <aside className="ws-checklist card panel" aria-label="Checklist" data-testid="checklist">
-        <div className="row spread panel-head"><h2>Agent activity</h2>{live && <AutoRefresh intervalMs={4000} />}</div>
+        <div className="row spread panel-head"><h2>Agent activity</h2>{live && <><AutoRefresh intervalMs={4000} quiet />
+          <span className="ws-live" data-testid="ws-live"><span className="live-strip-dot" aria-hidden="true" />{ctx.tasks.some((t) => ["running", "validating"].includes(t.status)) ? "Working" : "Live"}</span></>}</div>
+        {(() => {
+          const now = ctx.tasks.filter((t) => ["running", "validating"].includes(t.status));
+          const wait = ctx.tasks.filter((t) => t.status === "awaiting_approval");
+          const ago = (iso: string) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? "now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+          return (
+            <>
+              {wait.length > 0 && (
+                <div className="ws-approvals" id="approvals" data-testid="ws-approvals">
+                  <p className="ws-approvals-head">{wait.length} result{wait.length > 1 ? "s" : ""} ready for your go-ahead</p>
+                  <p className="small">VX Design has checked each one. If its checks passed, approving lets the work move on; you do not need to read schematics.</p>
+                  {canDecide && wait.some((t) => verdict(checksOf(t.id)).verdict !== "attention") && (
+                    <form action={approvePassed.bind(null, projectId)} className="row tight" style={{ margin: "6px 0 10px" }}>
+                      <SubmitButton pendingText="Approving…">Approve everything that passed ({wait.filter((t) => verdict(checksOf(t.id)).verdict !== "attention").length})</SubmitButton>
+                    </form>
+                  )}
+                  {wait.map((t) => {
+                    const a = approvalFor.get(t.id);
+                    const o = mainOutput(t.key);
+                    const checks = checksOf(t.id);
+                    const v = verdict(checks);
+                    return (
+                      <div key={t.id} className="ws-approval" data-testid="approval-stop">
+                        <div><strong>{t.title}</strong></div>
+                        <div className={`verdict verdict-${v.verdict}`} data-testid="verdict">{v.verdict === "passed" || v.verdict === "notes" ? "✓ " : v.verdict === "attention" ? "! " : ""}{v.label}</div>
+                        {checks.length > 0 && <ul className="plain-checks">{checks.map((c, i) => { const p = plainCheck(c); return <li key={i} className={`pc-${p.level}`}>{p.level === "pass" ? "✓" : p.level === "note" ? "•" : "✕"} {p.text}</li>; })}</ul>}
+                        <details className="small"><summary>Engineering details</summary>
+                          {a && <p>{a.reason}</p>}
+                          <ul>{checks.map((c, i) => <li key={i}>{c.result}: {c.summary}</li>)}</ul>
+                          {o && <p><Link href={href(o.id)}>Open the result in the viewer</Link></p>}
+                        </details>
+                        {canDecide ? (
+                          <form className="stack" action={decideFromWorkspace.bind(null, projectId, t.id, true)}>
+                            <textarea name="note" rows={2} placeholder="Note (required to return)" aria-label={`Note for ${t.title}`} />
+                            <div className="row tight">
+                              <SubmitButton pendingText="Approving…">Approve</SubmitButton>
+                              <SubmitButton variant="danger" formAction={decideFromWorkspace.bind(null, projectId, t.id, false)} pendingText="Returning…">Return with note</SubmitButton>
+                            </div>
+                          </form>
+                        ) : <div className="small muted">Waiting for the client or a reviewer.</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {now.length > 0 && <div className="ws-now" data-testid="ws-now"><strong>Working on:</strong> {now.map((t) => t.title).join(", ")}</div>}
+              {(activity ?? []).length > 0 && (
+                <details className="ws-log" open data-testid="ws-log">
+                  <summary>Recent activity</summary>
+                  <ol>{(activity ?? []).map((l) => { const t = (l.executions as unknown as { tasks: { key: string; title: string } | null } | null)?.tasks;
+                    return <li key={l.id} className={`log-${l.level}`}><span className="muted small">{ago(l.created_at)}</span> <span className="mono small">{t?.key}</span> {l.message.slice(0, 160)}</li>; })}</ol>
+                </details>
+              )}
+            </>
+          );
+        })()}
         <ol className="checklist">
           <li className={`check check-${stageStep}`} data-status={stageStep} data-testid="stage-step">
             <span className="check-icon" aria-hidden>{ICON[stageStep]}</span>
@@ -221,20 +322,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                 <div>
                   <div>{o ? <Link href={href(o.id)}>{t.title}</Link> : t.title}</div>
                   <div className="small muted">{LABEL[t.status] ?? t.status}</div>
-                  {a && (
-                    <div className="approval-stop" data-testid="approval-stop">
-                      <div className="small"><strong>Approval stop.</strong> {a.reason}</div>
-                      {canDecide ? (
-                        <form className="stack" action={decideFromWorkspace.bind(null, projectId, t.id, true)}>
-                          <textarea name="note" rows={2} placeholder="Note (required to return)" aria-label={`Note for ${t.title}`} />
-                          <div className="row tight">
-                            <SubmitButton pendingText="Approving…">Approve</SubmitButton>
-                            <SubmitButton variant="danger" formAction={decideFromWorkspace.bind(null, projectId, t.id, false)} pendingText="Returning…">Return</SubmitButton>
-                          </div>
-                        </form>
-                      ) : <div className="small muted">Waiting for the client or a reviewer.</div>}
-                    </div>
-                  )}
+                  {a && <div className="small"><a href="#approvals"><strong>Approval needed</strong>: see the top of this panel</a></div>}
                 </div>
               </li>
             );

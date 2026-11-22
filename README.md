@@ -144,6 +144,18 @@ sit beside the steps.
   against a custom (chip-down) design on the module-vs-custom criteria: catalog facts where known, stated rules of
   thumb (integration and design hours at $120/h, certification costs, weeks to prototype) where not, all editable;
   **Fill from catalog** adds current prices. A decided study is a decision the next plan update builds on (TS-n).
+- **Where things stand, everywhere.** Under the project menu, every project page shows the design run live: what it
+  is working on (with a running clock and its latest step), how many results wait for you, the AI spend, and a link
+  back to the run; the menu has **Runs** (every run). The run page has a large live panel and **Raise budget** (a run
+  stopped only by its budget continues). The Workspace opens with a step-by-step line (inputs, concept, plan, design
+  run, your approvals, manufacturer package: done, working, or your turn) and its activity panel with the results
+  waiting for approval, what is working now and the recent activity log. With stage gates off, the stage bar follows
+  the work.
+- **Approvals for non-engineers.** Each result waiting for approval says in plain language what VX Design checked
+  and whether it passed ("Passed: all 4 checks passed"), with the engineering details folded away. **Approve everything
+  that passed** approves every waiting result whose checks all passed; anything with a failed check is held.
+- **A mock-up is the concept.** On Concepts, a project mock-up (or render, sketch, photo, drawing) can be frozen as the
+  industrial design directly, with its envelope, instead of generating concepts (`concept_from_reference`).
 - **Cost before you click:** each button that starts AI work shows its likely cost and where the figure comes from:
   plan update and rebuild, plan from requirements, reading specifications (only the blocks rules cannot read are
   counted; "no AI cost" when rules read it all), reading datasheets, chat questions and model comparisons. Figures come

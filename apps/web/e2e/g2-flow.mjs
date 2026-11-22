@@ -119,6 +119,20 @@ try {
   const run1Url = page.url().split("?")[0];
   const run1 = run1Url.split("/").pop();
   await page.getByText("you can close this page").waitFor();
+  // The live panel shows the run is going, with spend and a way to raise the budget.
+  const livePanel = page.getByTestId("live-panel");
+  await livePanel.waitFor();
+  assert.match(await livePanel.innerText(), /(Starting|Running: between tasks|Working on \d+ task)[\s\S]*AI spend \$0\.00 of \$/);
+  await livePanel.getByLabel(/AI \$/).fill("200");
+  await livePanel.getByRole("button", { name: "Raise budget" }).click();
+  await page.getByText(/Budget raised to \$200 AI/).waitFor();
+  // Every project page shows the run under the project menu, with a way back to it.
+  await page.goto(page.url().replace(/\/runs\/.*$/, "/workspace"));
+  const strip = page.getByTestId("live-strip");
+  await strip.waitFor();
+  assert.match(await strip.innerText(), /Design run (in progress|working)[\s\S]*AI \$\d+\.\d\d of \$200[\s\S]*Open the run/);
+  await strip.getByRole("link", { name: "Open the run →" }).click();
+  await page.waitForURL(/\/runs\/[0-9a-f-]{36}/);
   await shot(page, "run-authorized");
   await browser.close();
   browser = null;
