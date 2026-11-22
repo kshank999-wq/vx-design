@@ -6,6 +6,7 @@
  * position ranges, unrouted nets) until the board is clean or the repair budget is spent.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 import type { CircuitDesign } from "./circuit.ts";
@@ -137,6 +138,7 @@ export async function generateLayout(
   const usage: Usage[] = [];
   const history: LayoutResult["history"] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderLayoutPrompt(input) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const result = await model.generate({
       purpose: round === 1 ? "board_layout" : "board_layout_repair", system: SYSTEM, messages, schema: BoardLayout, cache: "follow-up",
@@ -146,6 +148,8 @@ export async function generateLayout(
     history.push({ round, stage: c.stage, problems: c.problems.length });
     await onRound?.(round, c, result.usage);
     if (c.ok) return { promptVersion: LAYOUT_PROMPT_VERSION, layout: result.output, rounds: round, check: c, history, usage };
+    const stall = progress.check(result.output, c.problems);
+    if (stall) throw new LayoutDesignError([...c.problems, stall], round);
     if (round > MAX_LAYOUT_REPAIRS) throw new LayoutDesignError(c.problems, round);
     messages.push(result.assistantMessage, {
       role: "user",

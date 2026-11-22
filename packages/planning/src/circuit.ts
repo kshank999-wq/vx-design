@@ -6,6 +6,7 @@
  * the repair budget is spent.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
@@ -140,6 +141,7 @@ export async function generateCircuit(
   const usage: Usage[] = [];
   const history: CircuitResult["history"] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderCircuitPrompt(input) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const result = await model.generate({
       purpose: round === 1 ? "circuit_design" : "circuit_design_repair", system: SYSTEM, messages, schema: CircuitDesign, cache: "follow-up",
@@ -151,6 +153,8 @@ export async function generateCircuit(
     history.push({ round, stage: c.stage, problems: c.problems.length });
     await onRound?.(round, c, result.usage);
     if (c.ok) return { promptVersion: CIRCUIT_PROMPT_VERSION, design: result.output, rounds: round, check: c, history, usage };
+    const stall = progress.check(result.output, c.problems);
+    if (stall) throw new CircuitDesignError([...c.problems, stall], round);
     if (round > MAX_CIRCUIT_REPAIRS) throw new CircuitDesignError(c.problems, round);
     messages.push(result.assistantMessage, {
       role: "user",

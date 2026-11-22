@@ -89,3 +89,13 @@ export async function authorizeRun(projectId: string, planId: string, form: Form
   if (error) fail(path, error);
   redirect(`/projects/${projectId}/runs/${data}?notice=${encodeURIComponent("Run authorized. A worker will pick it up; you can close this page.")}`);
 }
+
+/** Runs a reused task (and the reused work after it) afresh. */
+export async function redoTask(projectId: string, planId: string, taskId: string) {
+  const path = `/projects/${projectId}/plans/${planId}`;
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.rpc("redo_task", { p_task_id: taskId });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(`${data} task(s) will run again in the next run.`)}#task-${taskId}`);
+}

@@ -6,6 +6,7 @@
  * evaluate and decks that do not run go back to the model; checks that evaluate false are reported as results.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 import { evaluate, evaluateAll } from "./calc.ts";
@@ -111,6 +112,7 @@ export async function generateSimulation(
 ): Promise<SimulationResult> {
   const usage: Usage[] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderSimulationPrompt(input) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const r = await model.generate({ purpose: round === 1 ? "simulation" : "simulation_repair", system: SYSTEM, messages, schema: SimulationOutput, cache: "follow-up" });
     usage.push(r.usage);
@@ -129,6 +131,8 @@ export async function generateSimulation(
     if (!problems.length) {
       return { promptVersion: SIMULATION_PROMPT_VERSION, output: r.output, values: ev.values, checks: ev.checks, spice, rounds: round, usage };
     }
+    const stall = progress.check(r.output, problems);
+    if (stall) throw new SimulationError([...problems, stall], round);
     if (round > MAX_SIMULATION_REPAIRS) throw new SimulationError(problems, round);
     messages.push(r.assistantMessage, { role: "user", content: `The analysis does not compute yet:\n${problems.map((p) => `- ${p}`).join("\n")}\n\nReturn the complete corrected analysis.` });
   }

@@ -9,7 +9,7 @@ import { costHistory, estimate } from "@/lib/cost-estimate";
 import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { planChanges } from "@/lib/plan-inputs";
 import { createPlan } from "../../actions";
-import { authorizeRun, decidePlan, revisePlan, submitPlan, updateTask } from "./actions";
+import { authorizeRun, decidePlan, redoTask, revisePlan, submitPlan, updateTask } from "./actions";
 
 interface AcceptanceTest { id: string; description: string; method: string; validationKind?: string }
 interface Generator { model?: string; offline?: boolean; prompt_version?: string; attempts?: number; adjustments?: string[];
@@ -30,7 +30,7 @@ export default async function PlanPage({ params, searchParams }: {
 
   const [{ data: plan }, { data: tasks }, { data: reqs }, { data: approvals }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("plans").select("*, projects(name)").eq("id", planId).eq("project_id", projectId).maybeSingle(),
-    supabase.from("tasks").select("id, key, title, discipline, stage, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, basis, board, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
+    supabase.from("tasks").select("id, key, title, discipline, stage, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, basis, board, reused_from_task_id, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
       .eq("plan_id", planId).order("position"),
     supabase.from("requirements").select("id, ref_code, text, source_section, source_excerpt, status").eq("project_id", projectId).order("ref_code"),
     supabase.from("approvals").select("id, status, reason, response_note, requested_at, responded_at").eq("plan_id", planId).order("requested_at"),
@@ -52,6 +52,12 @@ export default async function PlanPage({ params, searchParams }: {
   const planCost = history ? { update: estimate(history, "planUpdate"), fresh: estimate(history, "planFull", { scale: Math.max(0.15, (reqs ?? []).filter((r) => r.status !== "rejected").length / 714) }) } : undefined;
   const rev = gen.revision;
   const keyOf = new Map((tasks ?? []).map((t) => [t.id, t.key]));
+  // Where reused tasks came from ("v3, task sch").
+  const reusedIds = [...new Set((tasks ?? []).map((t) => t.reused_from_task_id).filter((x): x is string => !!x))];
+  const { data: sources } = reusedIds.length ? await supabase.from("tasks").select("id, key, plans(version)").in("id", reusedIds) : { data: [] };
+  const reusedFrom = new Map((sources ?? []).map((x) => [x.id, `v${(x.plans as unknown as { version: number }).version} (${x.key})`]));
+  const canRedo = plan.status === "approved" && (role === "owner" || role === "engineer");
+  const reusedCount = reusedIds.length ? (tasks ?? []).filter((t) => t.reused_from_task_id).length : 0;
   const reqById = new Map((reqs ?? []).map((r) => [r.id, r as Req]));
   const deferred = (plan.deferred ?? []) as { ref: string; reason: string }[];
   const covered = new Set((tasks ?? []).flatMap((t) => (t.task_requirements as { requirement_id: string }[]).map((x) => x.requirement_id)));
@@ -109,6 +115,7 @@ export default async function PlanPage({ params, searchParams }: {
           {plan.status === "draft" && "Draft: edit tasks, then submit the plan for approval."}
           {plan.status === "awaiting_approval" && "Frozen for review. An owner or reviewer approves it or returns it with notes."}
           {plan.status === "approved" && "Approved baseline. Tasks are ready to run; changes need a new revision."}
+          {plan.status === "approved" && reusedCount > 0 && <span data-testid="reused-count"> {reusedCount} task(s) were unchanged since an earlier version and are reused, not run again.</span>}
           {plan.status === "superseded" && "Superseded by a newer approved plan."}
         </span>
         <div className="row">
@@ -214,6 +221,13 @@ export default async function PlanPage({ params, searchParams }: {
                     {plan.status === "approved" && <span className={`pill pill-${t.status}`}>{t.status}</span>}
                   </div>
                 </div>
+                {t.reused_from_task_id && (
+                  <div className="row small" data-testid="reused">
+                    <span className="pill pill-complete">reused</span>
+                    <span className="muted">Unchanged since {reusedFrom.get(t.reused_from_task_id) ?? "an earlier version"}: its approved outputs and checks are taken over, not run again.</span>
+                    {canRedo && <form action={redoTask.bind(null, projectId, plan.id, t.id)}><button type="submit" className="secondary small">Do again</button></form>}
+                  </div>
+                )}
                 {t.description && <p>{t.description}</p>}
                 {(() => {
                   const b = t.basis as { mode: string; sources: string[]; reason: string; concerns?: string[]; alternatives?: string[] } | null;

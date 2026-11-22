@@ -6,6 +6,7 @@
  * edited and approved by people.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
 export const ASSEMBLY_PROMPT_VERSION = "assembly-v1";
@@ -98,11 +99,12 @@ export async function generateAssembly(i: AssemblyInput, model: LanguageModel):
     Promise<{ promptVersion: string; draft: AssemblyDraft; rounds: number; remaining: string[]; usage: Usage[] }> {
   const usage: Usage[] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderAssemblyPrompt(i) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const r = await model.generate({ purpose: round === 1 ? "assembly_instructions" : "assembly_instructions_repair", system: SYSTEM, messages, schema: AssemblyDraft, effort: "medium" });
     usage.push(r.usage);
     const problems = checkAssembly(r.output, i);
-    if (!problems.length || round > MAX_ASSEMBLY_REPAIRS) return { promptVersion: ASSEMBLY_PROMPT_VERSION, draft: r.output, rounds: round, remaining: problems, usage };
+    if (!problems.length || round > MAX_ASSEMBLY_REPAIRS || progress.check(r.output, problems)) return { promptVersion: ASSEMBLY_PROMPT_VERSION, draft: r.output, rounds: round, remaining: problems, usage };
     messages.push(r.assistantMessage, { role: "user", content: `Fix these problems and return the complete instructions:\n${problems.map((p) => `- ${p}`).join("\n")}` });
   }
 }

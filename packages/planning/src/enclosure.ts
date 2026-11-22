@@ -5,6 +5,7 @@
  * process rules. Problems go back to the model until the housing fits or the repair budget is spent.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
@@ -108,6 +109,7 @@ export async function generateEnclosure(
   const usage: Usage[] = [];
   const history: { round: number; stage: string; problems: number }[] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderEnclosurePrompt(input) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const r = await model.generate({ purpose: round === 1 ? "enclosure_design" : "enclosure_design_repair", system: SYSTEM, messages, schema: EnclosureDesign, cache: "follow-up" });
     usage.push(r.usage);
@@ -115,6 +117,8 @@ export async function generateEnclosure(
     history.push({ round, stage: c.stage, problems: c.problems.length });
     await onRound?.(round, c, r.usage);
     if (c.ok) return { promptVersion: ENCLOSURE_PROMPT_VERSION, design: r.output, rounds: round, check: c, usage, history };
+    const stall = progress.check(r.output, c.problems);
+    if (stall) throw new EnclosureDesignError([...c.problems, stall], round);
     if (round > MAX_ENCLOSURE_REPAIRS) throw new EnclosureDesignError(c.problems, round);
     messages.push(r.assistantMessage, {
       role: "user",

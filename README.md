@@ -291,6 +291,16 @@ Executors so far:
   manufacturing task packages every board (`fab.<board>/…`) and one sourcing task buys for all of them (refs
   `board/R1`).
 - Schematic (G3), simulation, PCB layout (G4) and manufacturing (G4.5) tasks wait for the KiCad engineering worker.
+- **No paying for loops.** Every repair loop (plans, briefs, circuits, layouts, power trees, enclosures,
+  simulations, assembly instructions) stops early when a round reports exactly the same problems as the round
+  before, or returns an output it already returned with the same problems; the reason is recorded. Each task also
+  has its own AI spend cap per run (by discipline, e.g. $15 schematic, $20 layout, $6 simulation; a task's
+  `cost_budget_usd` overrides it): at the cap the task fails, not retried, for a person to decide.
+- **Unchanged work is reused across plan versions.** At approval every task gets a fingerprint over its definition,
+  the exact text of its requirements, its board and basis, and its upstream tasks' fingerprints. A task identical to
+  one finished in an earlier plan takes over its committed outputs and checks (labelled "Reused from vN … unchanged")
+  instead of running; a change anywhere upstream reruns everything below it. Sourcing is reused for 7 days only.
+  The plan page marks reused tasks; **Do again** runs a reused task, and the reused work after it, afresh.
 
 ```bash
 pnpm worker                        # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY (or VX_LLM=offline)

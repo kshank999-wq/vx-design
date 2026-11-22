@@ -110,7 +110,6 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
             const [prev] = await db.upstreamBoards(task.id, "kicad-project", ["pcb_layout"], task.board);
             if (!prev || prev.toolConfig?.source_design !== source.versionId) return null;
             const copied: Record<string, string> = {};
-            let drc: Record<string, unknown> | null = null;
             for (const f of [...FILES, { key: "layout", suffix: "layout", kind: "other", type: "application/json" }]) {
               const [v] = await db.upstreamBoards(task.id, f.suffix, ["pcb_layout"], task.board);
               if (!v || v.taskKey !== prev.taskKey) continue;
@@ -122,20 +121,24 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
                 summary: f.suffix === "kicad-project" ? `${input.circuit.title}: board taken over from ${prev.taskKey} (circuit unchanged)` : undefined,
               });
               copied[f.suffix] = st.versionId;
-              if (f.suffix === "drc-report") { try { drc = JSON.parse(Buffer.from(bytes).toString("utf8")); } catch { drc = null; } }
             }
-            return { from: prev.taskKey, copied, drc };
+            return { from: prev.taskKey, copied };
           });
           if (reused) {
-            const d = (reused.drc ?? {}) as { errors?: number; warnings?: number; unconnected?: number; parity?: number };
-            const clean = !d.errors && !d.unconnected && !d.parity;
+            // The earlier task's checks hold for the same board: carry them over, saying where they come from.
+            const prevTask = (await db.allUpstream(task.id)).find((u) => u.key === reused.from);
+            const prevChecks = prevTask ? await db.latestValidations([prevTask.id]) : [];
+            const failing = prevChecks.filter((c) => c.result === "fail" || c.result === "error");
             await ctx.log(`board ${task.board}: design unchanged since ${reused.from}; its routed board is taken over`);
+            if (failing.length) {
+              return { status: "failed", retryable: false, error: `The board taken over from ${reused.from} has failing checks: ${failing.map((c) => c.summary).join("; ")}` };
+            }
             return {
               status: "passed",
-              validations: [{ kind: "drc", result: clean ? (d.warnings ? "warning" : "pass") : "fail", evidence_category: "cad_check",
-                summary: `Board taken over from ${reused.from} (same circuit design version): KiCad DRC ${d.errors ?? "?"} errors, ` +
-                         `${d.warnings ?? "?"} warnings, ${d.unconnected ?? "?"} unrouted, ${d.parity ?? "?"} schematic differences`,
-                artifact_version_id: reused.copied["drc-report"], tool_name: "kicad", tool_version: tools.versions.kicad }],
+              validations: prevChecks.length ? prevChecks.map((c) => ({ kind: c.kind, result: c.result as Validation["result"], evidence_category: c.evidence_category,
+                  summary: `Board taken over from ${reused.from} (same circuit design version): ${c.summary}`,
+                  artifact_version_id: c.kind === "drc" ? reused.copied["drc-report"] : undefined, tool_name: c.tool_name ?? undefined }))
+                : [{ kind: "drc", result: "warning", evidence_category: "cad_check", summary: `Board taken over from ${reused.from} (same circuit design version); its checks were not found` }],
               summary: `${input.circuit.title}: board from ${reused.from} kept (the circuit has not changed since it was laid out)`,
               reviewReason: null,
             };

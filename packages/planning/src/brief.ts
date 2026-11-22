@@ -8,6 +8,7 @@
  * person to review. It is never presented as a verified calculation or check.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import { DecisionClass } from "@vx/contracts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
@@ -128,6 +129,7 @@ export function renderBriefPrompt(input: BriefInput): string {
 export async function generateBrief(input: BriefInput, model: LanguageModel): Promise<BriefResult> {
   const usage: Usage[] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: renderBriefPrompt(input) }];
+  const progress = new ProgressTracker();
   for (let attempt = 1; ; attempt++) {
     const result = await model.generate({
       purpose: attempt === 1 ? "design_brief" : "design_brief_repair", system: SYSTEM, messages, schema: DesignBrief,
@@ -135,6 +137,8 @@ export async function generateBrief(input: BriefInput, model: LanguageModel): Pr
     usage.push(result.usage);
     const problems = validateBrief(result.output, input);
     if (!problems.length) return { promptVersion: BRIEF_PROMPT_VERSION, brief: result.output, attempts: attempt, usage };
+    const stall = progress.check(result.output, problems);
+    if (stall) throw new BriefValidationError([...problems, { code: "no_progress", message: stall }] as typeof problems);
     if (attempt > MAX_REPAIR_ROUNDS) throw new BriefValidationError(problems);
     messages.push(result.assistantMessage, {
       role: "user",

@@ -65,6 +65,7 @@ export interface TaskRow {
   position: number;
   /** The circuit board a schematic, layout or board-power task belongs to (null: not tied to one board). */
   board: string | null;
+  cost_budget_usd?: number | null;
 }
 
 export interface Validation {
@@ -543,6 +544,15 @@ export class WorkerDb {
       p_input: e.usage.inputTokens, p_output: e.usage.outputTokens, p_cache_read: e.usage.cacheReadTokens, p_cache_write: e.usage.cacheWriteTokens,
       p_cost_usd: e.costUsd, p_duration_ms: e.durationMs, p_failed: e.failed,
     });
+  }
+
+  /** AI spend recorded for a task within one run. */
+  async taskRunSpend(taskId: string, runId: string | null): Promise<number> {
+    let q = this.client.from("cost_events").select("cost_usd").eq("task_id", taskId).eq("kind", "ai_tokens");
+    if (runId) q = q.eq("run_id", runId);
+    const { data, error } = await q.limit(10000);
+    if (error) throw new Error(`task spend: ${error.message}`);
+    return (data ?? []).reduce((n, r) => n + Number(r.cost_usd), 0);
   }
 
   /** Why the project's account may not spend on AI now (balance or allowance used up), or null. */

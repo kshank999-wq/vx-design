@@ -7,14 +7,14 @@
  "versions": {
   "planning": "@vx/planning@0.0.0"
  },
- "output_sha256": "789e0749103bb037c4ac4f512a31aaeea5006ac2e1e0d6adbc228a3a42b993a7",
+ "output_sha256": "f72acdadeb5b60bf5f975e7401dd3e11b8530338379c5c264a135b435e368c96",
  "output": {
   "plan": {
    "adjustments": [],
    "assumptions": [],
    "attempts": 1,
    "deferred": [],
-   "promptVersion": "plan-v3",
+   "promptVersion": "plan-v4",
    "summary": "Offline heuristic plan (not AI-generated).",
    "tasks": [
     {
@@ -28,6 +28,7 @@
      "approvalReason": "component architecture",
      "approvalRequired": true,
      "basis": null,
+     "board": null,
      "description": "System and component architecture (offline plan).",
      "discipline": "architecture",
      "estimatedHours": 4,
@@ -59,6 +60,7 @@
      "approvalReason": null,
      "approvalRequired": false,
      "basis": null,
+     "board": null,
      "description": "Preliminary power budget (offline plan).",
      "discipline": "power",
      "estimatedHours": 4,
@@ -86,6 +88,7 @@
      "approvalReason": null,
      "approvalRequired": false,
      "basis": null,
+     "board": null,
      "description": "Mechanical envelope (offline plan).",
      "discipline": "mechanical",
      "estimatedHours": 4,
@@ -115,6 +118,7 @@
      "approvalReason": null,
      "approvalRequired": false,
      "basis": null,
+     "board": null,
      "description": "Schematic capture (offline plan).",
      "discipline": "schematic",
      "estimatedHours": 4,
@@ -143,6 +147,7 @@
      "approvalReason": null,
      "approvalRequired": false,
      "basis": null,
+     "board": null,
      "description": "PCB stackup and layout (offline plan).",
      "discipline": "pcb_layout",
      "estimatedHours": 4,
@@ -170,6 +175,7 @@
      "approvalReason": null,
      "approvalRequired": false,
      "basis": null,
+     "board": null,
      "description": "Verification and manufacturing outputs (offline plan).",
      "discipline": "verification",
      "estimatedHours": 4,

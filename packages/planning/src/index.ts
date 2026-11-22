@@ -32,5 +32,6 @@ export * from "./inspection.ts";
 export * from "./assembly.ts";
 export * from "./part-identify.ts";
 export * from "./calc.ts";
+export * from "./progress.ts";
 export * from "./simulation.ts";
 export * from "./design-review.ts";

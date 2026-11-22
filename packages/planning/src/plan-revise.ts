@@ -6,6 +6,7 @@
  * cycles), so a revision can never leave a requirement or a part behind.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import { autoFixPlan } from "./plan-autofix.ts";
 import { normalizePlan, PLAN_SYSTEM, PlanOutput, PlanValidationError, validatePlan, type CapabilityInput, type PlanProblem, type PlanResult, type RequirementInput } from "./plan.ts";
@@ -95,6 +96,7 @@ export async function revisePlan(
       `${must.length ? `Inputs that some task must cite in its basis: ${must.map((m) => m.id).join(", ")}\n\n` : ""}` +
       "Return the revision: only the tasks to add or change (complete), the keys to remove, and new deferrals and assumptions.",
   }];
+  const progress = new ProgressTracker();
   for (let attempt = 1; ; attempt++) {
     const r = await model.generate({ purpose: attempt === 1 ? "revise_plan" : "repair_revise_plan", system: REVISE, messages, schema: PlanRevision, maxTokens: opts.maxTokens });
     usage.push(r.usage);
@@ -119,6 +121,8 @@ export async function revisePlan(
         revision: { ...merged.summary, new_requirements: fresh.length },
       };
     }
+    const stall = progress.check(r.output, problems);
+    if (stall) throw new PlanValidationError([...problems, { code: "no_progress", message: stall }], attempt);
     if (attempt > MAX_REPAIR_ROUNDS) throw new PlanValidationError(problems, attempt);
     messages.push(r.assistantMessage, { role: "user", content: "The revised plan failed validation:\n" + problems.map((p) => `- ${p.message}`).join("\n") +
       "\n\nReturn the complete corrected revision (all tasks to add or change, the keys to remove)." });

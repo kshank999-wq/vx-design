@@ -12,6 +12,19 @@ import { LeaseLostError, type Checkpoint, type ExecutionRow, type RunRow, type T
 import { usageCost } from "./pricing.ts";
 
 export class YieldRequested extends Error {}
+/** A task spent its own cost cap in this run: it fails (not retried) so a person decides, instead of spending on. */
+export class TaskCostCapError extends Error {}
+
+/**
+ * Default AI spend cap per task per run (USD), by discipline, at Opus prices; a task's cost_budget_usd overrides it.
+ * Generous for a normal task (a plan build is ~$2.60, a circuit with repairs a few dollars) and a stop for a runaway.
+ */
+export const TASK_COST_CAP: Record<string, number> = {
+  schematic: 15, pcb_layout: 20, enclosure: 12, simulation: 6, verification: 8, power: 6,
+  architecture: 4, components: 4, thermal: 4, mechanical: 4, documentation: 4, sourcing: 2, manufacturing: 2,
+};
+export const taskCostCap = (t: { discipline: string; cost_budget_usd?: number | null }) =>
+  t.cost_budget_usd != null ? Number(t.cost_budget_usd) : TASK_COST_CAP[t.discipline] ?? 5;
 
 export interface StoredFile {
   versionId: string;
@@ -156,7 +169,17 @@ export class ExecutionHandle {
       if ((await this.db.recordAiCall(null, this.exec.id, { purpose, usage: u, costUsd: cost, durationMs: null, failed: false })) === "over_budget") over = true;
     }
     if (over) this.requestYield("AI budget reached");
+    if (this.costCap != null) {
+      const spent = await this.db.taskRunSpend(this.exec.task_id, this.exec.run_id);
+      if (spent >= this.costCap) {
+        throw new TaskCostCapError(`This task's AI cost cap was reached: $${spent.toFixed(2)} of $${this.costCap.toFixed(2)} in this run. ` +
+          "It stopped instead of spending more; read its log, then continue the run (or raise the task's cap) to try again.");
+      }
+    }
   }
+
+  /** Per-task spend cap for this run (USD), checked after every charge. */
+  costCap: number | null = null;
 
   async storeArtifact(args: Parameters<ExecutorContext["storeArtifact"]>[0]): Promise<StoredFile> {
     this.assertActive();
@@ -218,6 +241,7 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
       return await db.fail(exec.id, opts.workerId, reason, "block");
     }
     await db.updateExecution(exec.id, { tool_versions: { executor: executor.id, executor_version: executor.version } });
+    handle.costCap = taskCostCap(task);
 
     const ctx: ExecutorContext = {
       exec, task, run, db, model: deps.model, modelLabel: deps.modelLabel, offline: deps.offline,
@@ -247,6 +271,11 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
       console.warn(`[${opts.workerId}] ${exec.id.slice(0, 8)} lease lost; abandoning without writing (${e.message})`);
       await db.log(exec.project_id, exec.id, "warn", "lease lost: this worker stopped without committing", { worker_id: opts.workerId });
       return "lease_lost";
+    }
+    if (e instanceof TaskCostCapError) {
+      await handle.log(e.message, {}, "error");
+      try { return await db.fail(exec.id, opts.workerId, e.message, "fail"); }
+      catch (f) { if (f instanceof LeaseLostError) return "lease_lost"; throw f; }
     }
     if (e instanceof YieldRequested) {
       try {

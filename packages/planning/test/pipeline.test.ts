@@ -136,11 +136,12 @@ test("plan: gives up after the repair budget with the remaining problems", async
   const model = new ScriptedModel([invalid, invalid, invalid]);
   await assert.rejects(generatePlan(REQS, model), (e: unknown) => {
     assert.ok(e instanceof PlanValidationError);
-    assert.equal(e.attempts, 3);
+    assert.equal(e.attempts, 2, "the same invalid plan twice: stopped instead of paying for a third round");
     assert.ok(e.problems.some((p) => p.code === "empty"));
+    assert.ok(e.problems.some((p) => p.code === "no_progress"));
     return true;
   });
-  assert.equal(model.calls.length, 3);
+  assert.equal(model.calls.length, 2);
 });
 
 test("validatePlan catches each structural problem", () => {
@@ -205,7 +206,7 @@ test("circuit: check problems go back to the model until the design passes", asy
 
   const never = new ScriptedModel(Array.from({ length: 4 }, () => () => bad));
   await assert.rejects(generateCircuit(input, never, async () => ({ ok: false, stage: "erc", problems: ["x"], warnings: [] })),
-    (e: unknown) => e instanceof CircuitDesignError && e.rounds === 4);
+    (e: unknown) => e instanceof CircuitDesignError && e.rounds === 2 && /stopped early/.test(e.message));
 });
 
 test("layout: placement and DRC problems go back to the model until the board passes", async () => {
@@ -237,7 +238,7 @@ test("layout: placement and DRC problems go back to the model until the board pa
   assert.match(String(model.calls[2]!.messages[2]!.content), /outside the 20 x 22 mm board/);
   const never = new ScriptedModel(Array.from({ length: 4 }, () => () => cramped));
   await assert.rejects(generateLayout(input, never, async () => ({ ok: false, stage: "drc", problems: ["x"], warnings: [] })),
-    (e: unknown) => e instanceof LayoutDesignError && e.rounds === 4);
+    (e: unknown) => e instanceof LayoutDesignError && e.rounds === 2 && /stopped early/.test(e.message));
 });
 
 test("layout: the offline fixture layout matches the engineering fixture", async () => {
@@ -265,7 +266,7 @@ test("power: calculator errors go back to the model until the tree passes", asyn
   assert.equal(r.history[0]!.errors, 1);
   assert.match(String(model.calls[1]!.messages.at(-1)!.content), /U1: U1 cannot make 3.3 V from 3 V/);
   const never = new ScriptedModel(Array.from({ length: 4 }, () => () => ldoFromCell));
-  await assert.rejects(generatePowerTree(input, never), (e: unknown) => e instanceof PowerTreeError && e.rounds === 4);
+  await assert.rejects(generatePowerTree(input, never), (e: unknown) => e instanceof PowerTreeError && e.rounds === 2);
 });
 
 test("power: the offline fixture tree passes the calculator", async () => {

@@ -45,3 +45,27 @@ test("spice results feed the checks", async () => {
   assert.equal(r.values.tau_ms, 1);
   assert.equal(r.checks[0]!.passed, true);
 });
+
+test("a repair loop stops as soon as it stops making progress", async () => {
+  const { ProgressTracker } = await import("../src/index.ts");
+  const p = new ProgressTracker();
+  assert.equal(p.check({ a: 1 }, ["x too wide", "y missing"]), null);
+  assert.equal(p.check({ a: 2 }, ["x too wide"]), null, "fewer problems: progress");
+  assert.match(p.check({ a: 3 }, ["x too wide"])!, /same 1 problem\(s\) as round 2/);
+  const q = new ProgressTracker();
+  q.check({ b: 1, a: 1 }, ["p"]);
+  q.check({ a: 2 }, ["q"]);
+  assert.match(q.check({ a: 1, b: 1 }, ["p"])!, /same output as round 1 with the same problems/, "an oscillation back to round 1; key order does not matter");
+  const r = new ProgressTracker();
+  r.check({ a: 1 }, ["routing left 2 unrouted"]);
+  assert.equal(r.check({ a: 1 }, ["routing left 1 unrouted"]), null, "same input, different tool result: not stuck");
+  // Wired into a real loop: identical problems twice ends after round 2, not after all repair rounds.
+  let calls = 0;
+  const model: LanguageModel = { async generate() { calls++; return { output: holdover(`bad_${calls}`) as never, assistantMessage: { role: "assistant", content: "" }, usage: { model: "m", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } }; } };
+  const fixed: LanguageModel = { async generate() { calls++; return { output: holdover("missing_name") as never, assistantMessage: { role: "assistant", content: "" }, usage: { model: "m", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } }; } };
+  calls = 0;
+  await assert.rejects(generateSimulation({ projectContext: "x", task: { key: "k", title: "t", description: null }, requirements: [], acceptanceTests: [], upstream: [], reviewNotes: [], spiceAvailable: false },
+    fixed, async () => { throw new Error("no"); }), /stopped early: round 2 returned the same output as round 1/);
+  assert.equal(calls, 2);
+  void model;
+});

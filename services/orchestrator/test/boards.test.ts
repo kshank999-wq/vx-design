@@ -76,7 +76,7 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
         if (x.status === "awaiting_approval") assert.ifError((await user.rpc("decide_task", { p_task_id: x.id, p_approve: true, p_note: "ok" })).error);
       }
       const { data: active } = await admin().from("runs").select("id").eq("plan_id", planId).in("status", ["pending", "running", "paused"]);
-      if (!active?.length && [...s.values()].some((x) => ["ready", "pending", "draft", "queued", "blocked"].includes(x.status) && x.key !== "hw-test")) {
+      if (!active?.length && [...s.values()].some((x) => ["ready", "draft"].includes(x.status))) {
         const { error } = await user.rpc("authorize_run", { p_plan_id: planId, p_mode: "autonomous", p_max_ai_spend_usd: 5, p_max_compute_spend_usd: 5, p_name: "boards" });
         assert.ifError(error);
       }
@@ -97,7 +97,7 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
 
     // The second "tc" layout took the first one's board over.
     const route = await checks("tc-route");
-    assert.match(route[0]!.summary, /Board taken over from tc-stackup \(same circuit design version\): KiCad DRC 0 errors/);
+    assert.ok(route.some((c) => c.kind === "drc" && /^Board taken over from tc-stackup \(same circuit design version\): KiCad DRC: 0 errors/.test(c.summary)), JSON.stringify(route));
     assert.match(await logs("tc-route"), /design unchanged since tc-stackup/);
     assert.ok((await names("tc-route")).has("tc-route/kicad-project"));
 

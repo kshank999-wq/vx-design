@@ -5,6 +5,7 @@
  * calculated numbers until the tree is clean or the repair budget is spent. Warnings are kept for review.
  */
 import { calculate, PowerTree, type PowerReport } from "@vx/power";
+import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 import type { CircuitDesign } from "./circuit.ts";
@@ -84,6 +85,7 @@ export async function generatePowerTree(input: PowerInput, model: LanguageModel,
   const usage: Usage[] = [];
   const history: PowerResult["history"] = [];
   const messages: Parameters<LanguageModel["generate"]>[0]["messages"] = [{ role: "user", content: render(input) }];
+  const progress = new ProgressTracker();
   for (let round = 1; ; round++) {
     const r = await model.generate({ purpose: round === 1 ? "power_tree" : "power_tree_repair", system: SYSTEM, messages, schema: PowerTree, cache: "follow-up" });
     usage.push(r.usage);
@@ -91,9 +93,10 @@ export async function generatePowerTree(input: PowerInput, model: LanguageModel,
     history.push({ round, errors: report.counts.errors, warnings: report.counts.warnings });
     await onRound?.(round, report, r.usage);
     if (report.ok) return { promptVersion: POWER_PROMPT_VERSION, tree: r.output, report, rounds: round, history, usage };
-    if (round > MAX_POWER_REPAIRS) {
-      throw new PowerTreeError(report.findings.filter((f) => f.severity === "error").map((f) => `${f.subject}: ${f.message}`), round);
-    }
+    const errors = report.findings.filter((f) => f.severity === "error").map((f) => `${f.subject}: ${f.message}`);
+    const stall = progress.check(r.output, errors);
+    if (stall) throw new PowerTreeError([...errors, stall], round);
+    if (round > MAX_POWER_REPAIRS) throw new PowerTreeError(errors, round);
     messages.push(r.assistantMessage, { role: "user", content: powerFeedback(report) });
   }
 }

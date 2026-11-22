@@ -3,6 +3,7 @@
  * The model proposes; deterministic validation decides what is acceptable.
  */
 import { z } from "zod";
+import { ProgressTracker } from "./progress.ts";
 import { Discipline, PlannedTask, RiskLevel, ValidationKind, topologicalOrder } from "@vx/contracts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import { autoFixPlan } from "./plan-autofix.ts";
@@ -137,6 +138,7 @@ export async function generatePlan(
       "Produce the plan.",
   }];
 
+  const progress = new ProgressTracker();
   for (let attempt = 1; ; attempt++) {
     const result = await model.generate({ purpose: attempt === 1 ? "generate_plan" : "repair_plan", system: PLAN_SYSTEM, messages, schema: PlanOutput, maxTokens: opts.maxTokens });
     usage.push(result.usage);
@@ -161,6 +163,8 @@ export async function generatePlan(
         usage,
       };
     }
+    const stall = progress.check(result.output, problems);
+    if (stall) throw new PlanValidationError([...problems, { code: "no_progress", message: stall }], attempt);
     if (attempt > MAX_REPAIR_ROUNDS) throw new PlanValidationError(problems, attempt);
     messages.push(result.assistantMessage, {
       role: "user",
