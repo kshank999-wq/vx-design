@@ -25,6 +25,8 @@ export function priceFor(model: string): { price: Price; known: boolean } {
 /** Cost of one model call in USD. Offline and scripted stand-ins cost nothing. */
 export function usageCost(u: Usage): number {
   if (u.model === "offline-heuristic" || u.model === "scripted" || u.model === "offline") return 0;
-  const { price } = priceFor(u.model);
+  let { price } = priceFor(u.model);
+  // Haiku 5.5 is priced higher for prompts over 100K tokens.
+  if (/haiku-5-5/.test(u.model) && u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens > 100_000) price = { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 };
   return (u.inputTokens * price.input + u.outputTokens * price.output + u.cacheReadTokens * price.cacheRead + u.cacheWriteTokens * price.cacheWrite) / 1_000_000;
 }

@@ -28,7 +28,7 @@ export default async function UsagePage({ params }: { params: Promise<{ projectI
       <h1>AI usage</h1>
       <p className="muted">Every AI call this project has made, priced at the API&apos;s token rates (Claude Opus 5.5: ${price.input} per million tokens read,
         ${price.output} per million written, ${price.cacheRead} per million read back from the cache). Work done by the platform&apos;s own software
-        (checks, calculations, file reading, exports) costs nothing here.</p>
+        (checks, calculations, file reading, exports) costs nothing here. <Link href={`/projects/${projectId}/compare`}>Choose or compare the model that reads specifications and datasheets</Link>.</p>
 
       <div className="tiles overview-tiles" data-testid="usage-tiles">
         <div className="tile"><strong>{usd(thisMonth.total.usd)}</strong> this month<span className="muted small">{thisMonth.total.calls} AI call(s)</span></div>

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { datasheetText, extractRequirements, identifyPart, matchModelToPart, partNumberCandidates, stepNames } from "@vx/planning";
 import { lookupPart } from "@/lib/part-lookup";
 import { fail, requireUser } from "@/lib/auth";
-import { getModel } from "@/lib/model";
+import { getModel, getReadingModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
 import { POLICIES, uploadProblem } from "@/lib/uploads";
 import { markExtractionFailed, persistExtraction, prepareExtraction, reusableRequirements, storeDocument, type PreparedExtraction } from "@/lib/documents";
@@ -198,7 +198,7 @@ export async function extractAll(projectId: string) {
   const path = await here(projectId);
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(projectId); } catch (e) { fail(path, e); }
+  try { choice = await getReadingModel(supabase, projectId); } catch (e) { fail(path, e); }
   const { data: docs } = await supabase.from("documents").select("id, title, extraction_status").eq("project_id", projectId).in("extraction_status", ["pending", "failed"]).order("created_at");
   if (!docs?.length) fail(path, "Every document has been extracted. Re-extract one from its row if it changed.");
   const ready: PreparedExtraction[] = [];
@@ -332,7 +332,7 @@ export async function identifyPartFiles(projectId: string): Promise<UploadOutcom
   const { supabase } = await requireUser();
   // The model is only needed for datasheets the catalog and distributors do not know.
   let choice: ReturnType<typeof getModel> | null = null, modelProblem: string | null = null;
-  try { choice = getModel(projectId); } catch (e) { modelProblem = (e as Error).message; }
+  try { choice = await getReadingModel(supabase, projectId); } catch (e) { modelProblem = (e as Error).message; }
   const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path, note").eq("project_id", projectId)
     .is("part_id", null).is("identified_at", null).in("kind", PART_FILE_KINDS_READ).order("ref_no");
   const pkgOf = (note: string | null) => /^From the package (.+)$/.exec(note ?? "")?.[1] ?? null;

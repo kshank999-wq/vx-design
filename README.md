@@ -127,6 +127,11 @@ sit beside the steps.
   and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
   model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
   of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
+- **Reading model:** each project chooses the model that reads its specifications and part datasheets (Opus 5.5 by
+  default, Sonnet 5.5 or Haiku 5.5): AI usage → "Choose or compare", or the link on the Specifications step. **Compare
+  models** reads one specification again with the chosen models, saves nothing as requirements, and matches each
+  result against the requirements already read from it (same source paragraph, same meaning): found, missed, extra,
+  kind and priority differences, cost and time, with the lists to check. Comparison calls show as "Model comparison".
 - **Requirements with less AI:** a block identical to one already read in another specification of the project (a
   new revision) reuses those requirements; a clear sentence with one shall/must/should is read by rules (kind from its
   words, an acceptance criterion from its figures, vague words and TBD marked ambiguous); every other block goes to the

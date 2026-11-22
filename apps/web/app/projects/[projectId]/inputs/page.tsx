@@ -40,7 +40,7 @@ export default async function InputsPage({ params, searchParams }: {
   const { supabase, userId } = await requireUser();
   const [{ data: project }, { data: me }, { data: docs }, { data: reqs }, { data: refs }, { data: audits }, { data: intake }, { data: freeze },
          { count: standards }, { count: sources }, { data: plans }, { data: parts }, { data: registers }] = await Promise.all([
-    supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
+    supabase.from("projects").select("name, reading_model").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     supabase.from("documents").select("id, title, filename, extraction_status, extraction_report").eq("project_id", projectId).order("created_at"),
     supabase.from("requirements").select("id, ref_code, text, status, document_id").eq("project_id", projectId).order("ref_code"),
@@ -156,6 +156,8 @@ export default async function InputsPage({ params, searchParams }: {
       {step === 1 && <>
       <section>
         <h2 className="setup-title">Specifications</h2>
+        <p className="small muted" data-testid="reading-with">Read by rules where a sentence is clear, otherwise by {(project as { reading_model?: string | null })?.reading_model?.replace("claude-", "Claude ").replace(/-(\d)-(\d)$/, " $1.$2").replace(/ (\w)/, (m) => m.toUpperCase()) ?? "Claude Opus 5.5"}.{" "}
+          <Link href={`/projects/${projectId}/compare`}>Change or compare models</Link></p>
         <table className="small" data-testid="specs">
           <thead><tr><th>Document</th><th>Requirements</th><th /></tr></thead>
           <tbody>{(docs ?? []).slice(0, sp.docs === "all" ? undefined : DOCS_SHOWN).map((d) => {

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** What each AI call purpose is, in the words of the product (repair rounds count with their task). */
 export const ACTIVITY: [RegExp, string][] = [
+  [/^compare:/, "Model comparison"],
   [/^(generate_plan|repair_plan)$/, "Planning: full plan"],
   [/^(revise_plan|repair_revise_plan)$/, "Planning: plan update"],
   [/^extract_requirements/, "Reading specifications"],

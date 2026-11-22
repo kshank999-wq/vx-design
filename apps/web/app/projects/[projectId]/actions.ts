@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { extractRequirements, generatePlan, planPayload, PlanValidationError, revisePlan, type PlanRequestPayload } from "@vx/planning";
 import { fail, requireUser } from "@/lib/auth";
-import { getModel } from "@/lib/model";
+import { getModel, getReadingModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
 import { markExtractionFailed, persistExtraction, prepareExtraction, reusableRequirements, storeDocument } from "@/lib/documents";
 import { loadPlanInputs, loadPreviousPlan } from "@/lib/plan-inputs";
@@ -24,7 +24,7 @@ export async function runExtraction(projectId: string, documentId: string, from?
   const path = from === "inputs" ? `/projects/${projectId}/inputs?step=1` : `/projects/${projectId}?tab=documents`;
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(projectId); } catch (e) { fail(path, e); }
+  try { choice = await getReadingModel(supabase, projectId); } catch (e) { fail(path, e); }
   let prepared;
   try { prepared = await prepareExtraction(supabase, documentId); } catch (e) { fail(path, (e as Error).message); }
   try {

@@ -76,8 +76,8 @@ export class ClaudeModel implements LanguageModel {
     const stream = this.client.beta.messages.stream({
       model: this.model,
       max_tokens: maxTokens,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+      // Server-side refusal fallback where the model offers it (Haiku 5.5 does not).
+      ...(/haiku/.test(this.model) ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
       thinking: { type: "adaptive" },
       output_config: { effort: req.effort ?? this.effort, format: betaZodOutputFormat(req.schema) },
       // The system prompt is identical across calls of the same purpose: cache it.
