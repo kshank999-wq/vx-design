@@ -426,3 +426,15 @@ details.about > summary { color: var(--accent); }
 /* What changed since the latest plan */
 .notice-changes { border-left: 4px solid var(--accent, #2563eb); }
 .notice-changes ul { margin: 8px 0 10px; padding-left: 18px; }
+
+/* Stages: one line per stage; the current one (and any reopened or waived) open */
+.stage-row { padding: 0; }
+.stage-row > details > summary { list-style: none; cursor: pointer; padding: 12px 18px; }
+.stage-row > details > summary::-webkit-details-marker { display: none; }
+.stage-row > details > summary h2 { margin: 0; font-size: 16px; }
+.stage-row > details > summary h2::before { content: "▸ "; color: var(--soft); }
+.stage-row > details[open] > summary h2::before { content: "▾ "; }
+.stage-row > details > :not(summary) { margin-left: 18px; margin-right: 18px; }
+.stage-row > details[open] { padding-bottom: 12px; }
+[data-testid="stages"] > li.stage-row { margin: 8px 0; }
+.compliance-group h3 { margin: 18px 0 6px; display: flex; gap: 8px; align-items: center; }

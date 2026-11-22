@@ -48,6 +48,7 @@ try {
 
   // 2. Intake, then the feasibility check files cited risks and lists what the intake still lacks.
   await page.getByRole("link", { name: "Intake and risks" }).click();
+  await page.getByRole("tab", { name: "Intake" }).click();
   const intake = page.getByTestId("intake");
   await intake.getByLabel("Intended use").fill("Timecode slate for film sets");
   await intake.getByLabel("Target markets").fill("US, EU");
@@ -57,6 +58,7 @@ try {
   await intake.getByLabel("Radios").fill("Bluetooth LE");
   await page.getByRole("button", { name: "Save intake" }).click();
   await page.getByText("Intake saved.").waitFor();
+  await page.getByRole("tab", { name: "Risk register" }).click();
   await page.getByRole("button", { name: "Run feasibility check" }).click();
   await page.getByText(/Feasibility check: \d+ finding\(s\)/).waitFor();
   assert.match(await page.locator(".banner").first().innerText(), /Missing from the intake: maximum dimensions, target standards/);

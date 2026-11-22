@@ -76,6 +76,7 @@ try {
   assert.equal(await page.getByTestId("release-status").innerText(), "draft");
   assert.equal(await page.getByTestId("readiness").locator("[data-severity=block]").count(), 0);
   await shot(page, "01-release-draft");
+  await page.getByRole("tab", { name: "Issue" }).click();
   await page.getByRole("button", { name: "Issue Rev A" }).click();
   await page.getByText("Released: the files and their checksums are locked").waitFor();
   assert.equal(await page.getByTestId("release-status").innerText(), "released");
@@ -142,21 +143,25 @@ try {
   await runTest(units[0], 3.30, 3); await runTest(units[1], 3.31, 3); await runTest(units[2], 3.62, 3);
   await page.goto(lotUrl);
   assert.match(await page.getByTestId("lot-summary").innerText(), /3 tested, 2 passing, 1 failing; first-pass yield 67%/);
+  await page.getByRole("tab", { name: "Inspections" }).click();
   await page.locator("summary", { hasText: "Record an inspection" }).click();
   await page.getByLabel("Inspection stage").selectOption("final");
   await page.getByLabel("Defects found").fill("0");
   await page.getByRole("button", { name: "Record inspection" }).click();
   await page.getByText("Inspection recorded: meets the sampling plan").waitFor();
+  await page.getByRole("tab", { name: "Disposition" }).click();
   await page.getByLabel("Lot status").selectOption("accepted");
   await page.getByRole("button", { name: "Set status" }).click();
   await page.getByText("1 unit(s) have not passed the production test").waitFor();
   const retest = await runTest(units[2], 3.29, 1);
   await page.goto(lotUrl);
   assert.match(await page.getByTestId("lot-summary").innerText(), /3 passing, 0 failing; first-pass yield 67%/);
+  await page.getByRole("tab", { name: "Disposition" }).click();
   await page.getByLabel("Lot status").selectOption("accepted");
   await page.getByRole("button", { name: "Set status" }).click();
   await page.getByText("Lot accepted").waitFor();
   assert.equal(await page.getByTestId("lot-status").innerText(), "accepted");
+  await page.getByRole("tab", { name: "Units" }).click();
   assert.deepEqual(await page.getByTestId("lot-units").locator("tbody tr td:nth-child(2)").allInnerTexts(), ["passed", "passed", "passed"]);
   await shot(page, "05-lot-accepted");
 
@@ -181,6 +186,7 @@ try {
   await page.getByRole("button", { name: "Make draft" }).click();
   await page.getByText("Draft release made").waitFor();
   assert.match(await page.getByTestId("readiness").locator("[data-severity=block]").innerText(), /fault F-001 \(major\) is not verified/);
+  await page.getByRole("tab", { name: "Issue" }).click();
   await page.getByLabel("Reason for releasing despite blockers").waitFor();
   await page.locator("summary", { hasText: "Delete this draft" }).click();
   await page.getByLabel("Reason for withdrawing").fill("Only checking readiness.");
@@ -198,8 +204,10 @@ try {
   assert.equal(await page.getByLabel("board/fab-package v1").isChecked(), false);
   await page.getByRole("button", { name: "Make draft" }).click();
   await page.getByText("Draft release made").waitFor();
+  await page.getByRole("tab", { name: "Readiness" }).click();
   const open = await page.getByTestId("readiness").locator("li").allInnerTexts();
   assert.ok(open.some((t) => /C-\d+ identified: EU Radio Equipment Directive/.test(t)), "open compliance items are warnings");
+  await page.getByRole("tab", { name: "Issue" }).click();
   await page.getByRole("button", { name: "Issue Rev B" }).click();
   await page.getByText("Released:").waitFor();
   await page.goto(`${P}/compliance`);

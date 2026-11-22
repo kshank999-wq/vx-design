@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -76,8 +77,9 @@ export default async function LotPage({ params, searchParams }: {
       <p data-testid="lot-summary">{s.units} unit(s) registered{s.scrapped ? `, ${s.scrapped} scrapped` : ""}. Production test: {s.tested} tested, {s.passing} passing,
         {" "}{s.failing} failing; first-pass yield {pct(s.first_pass, s.tested)}.</p>
 
+      <SectionTabs id="lot" sections={[
+        { key: "units", label: "Units", badge: n || null, content: (<>
       <section>
-        <h2>Units</h2>
         <table className="small" data-testid="lot-units">
           <thead><tr><th>Serial</th><th>Status</th><th>Production test</th><th></th></tr></thead>
           <tbody>{(units ?? []).map((u) => {
@@ -104,9 +106,9 @@ export default async function LotPage({ params, searchParams }: {
           </details>
         )}
       </section>
-
+        </>) },
+        { key: "inspections", label: "Inspections", badge: (inspections ?? []).length || null, content: (<>
       <section>
-        <h2>Inspections</h2>
         {plan && (
           <details className="small" data-testid="lot-plan-items"><summary>{planItems.length} check(s) in {planCode(plan.plan_no, plan.version)}</summary>
             <table><thead><tr><th>Stage</th><th>Characteristic</th><th>Method</th><th>Sample</th><th>Acceptance</th></tr></thead>
@@ -143,10 +145,9 @@ export default async function LotPage({ params, searchParams }: {
           </details>
         )}
       </section>
-
-      {!closed && (canEdit || canJudge) && (
+        </>) },
+        ...(!closed && (canEdit || canJudge) ? [{ key: "disposition", label: "Disposition", content: (<>
         <section className="card">
-          <h2>Disposition</h2>
           <form action={setLotStatus.bind(null, projectId, lotId)} className="stack">
             <div className="grid2">
               <label>Status<select name="status" defaultValue={canJudge ? "accepted" : "on_hold"} aria-label="Lot status">
@@ -159,7 +160,8 @@ export default async function LotPage({ params, searchParams }: {
             <div><SubmitButton pendingText="Saving…">Set status</SubmitButton></div>
           </form>
         </section>
-      )}
+        </>) }] : []),
+      ]} />
     </main>
   );
 }

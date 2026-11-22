@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -43,8 +44,9 @@ export default async function RisksPage({ params, searchParams }: {
         came from. High and critical risks hold up their stage's sign-off until they are mitigated, closed, or accepted by the owner.</p>
       <Banner error={error} notice={notice} />
 
+      <SectionTabs id="risks" initial={"register"} sections={[
+        { key: "intake", label: "Intake", content: (<>
       <section>
-        <h2>Intake</h2>
         <form action={saveIntake.bind(null, projectId)} className="card stack" data-testid="intake">
           <fieldset disabled={!canEdit} className="stack">
             <label>Intended use<input name="intended_use" defaultValue={i.intended_use ?? ""} placeholder="Who uses it, where, for what" /></label>
@@ -63,9 +65,10 @@ export default async function RisksPage({ params, searchParams }: {
           {canEdit && <div><SubmitButton pendingText="Saving…">Save intake</SubmitButton></div>}
         </form>
       </section>
-
+        </>) },
+        { key: "register", label: "Risk register", badge: shown.length || null, content: (<>
       <section>
-        <div className="row spread"><h2>Risk register</h2>
+        <div className="row spread">
           {canEdit && <form action={runFeasibility.bind(null, projectId)}><SubmitButton pendingText="Checking…">Run feasibility check</SubmitButton></form>}</div>
         <p className="small" data-testid="risk-summary">
           {intake?.feasibility_checked_at ? `Feasibility checked ${new Date(intake.feasibility_checked_at).toLocaleString()}.` : "The feasibility check has not run yet."}{" "}
@@ -130,6 +133,8 @@ export default async function RisksPage({ params, searchParams }: {
           </details>
         )}
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

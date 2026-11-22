@@ -102,6 +102,14 @@ sit beside the steps.
   - **Flux report:** summary and findings, migration plan, current design, revisions, earlier decisions, files.
   - **Validation:** verification, units, test plan, faults, test runs.
   - **Manufacturing routes:** parts to make, add a part, export for 3D printing.
+  - **Release:** readiness, files, issue (draft) or files, changes from the last revision, production lots (issued).
+  - **Compliance:** items grouped as failed, open, passed and not applicable; suggestions from the intake; certified modules.
+  - **Lifecycle:** watch, cases, cost history. A case is impact, substitutes, resolution, opening at its current step.
+  - **Production lot:** units, inspections, disposition.
+  - **Intake and risks:** intake, risk register (forms return to their tab).
+  - If a tab empties after a form (its last suggestion added), the page shows where the work is.
+- **Stages:** one line per stage with its task count and status; the current stage (and any reopened or signed off past
+  open items) is expanded.
 - **Folder uploads:** every upload box takes files, a whole folder (the "Choose a folder" button) or anything dragged onto
   it, sub-folders included. System clutter (.DS_Store, Thumbs.db, __MACOSX) is left out, and each box keeps only the
   file types it takes, saying how many it left out. Flux imports take whole export folders. When two files share a

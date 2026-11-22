@@ -6,6 +6,7 @@ import { Banner } from "@/components/Banner";
 import { ScanBadge } from "@/components/ScanBadge";
 import { StagedFileInput } from "@/components/StagedFileInput";
 import { SubmitButton } from "@/components/SubmitButton";
+import { SectionTabs } from "@/components/SectionTabs";
 import { requireUser } from "@/lib/auth";
 import { COMPLIANCE_STATUS, itemCode } from "@/lib/production";
 import { addItem, addSuggested, markNotApplicable, recordResult, setStatus } from "./actions";
@@ -14,6 +15,10 @@ interface Result {
   id: string; item_id: string; outcome: string; lab_name: string; lab_reference: string | null; certificate_ref: string | null; result_date: string;
   expires_on: string | null; tested_release_id: string; report_name: string; report_path: string; report_sha256: string; notes: string | null;
 }
+
+const COMPLIANCE_GROUPS: [string, string[]][] = [
+  ["Failed: needs a fix and a retest", ["failed"]], ["Open", ["identified", "in_progress", "at_lab"]], ["Passed", ["passed"]], ["Not applicable", ["not_applicable"]],
+];
 
 export default async function CompliancePage({ params, searchParams }: {
   params: Promise<{ projectId: string }>; searchParams: Promise<{ error?: string; notice?: string }>;
@@ -68,41 +73,13 @@ export default async function CompliancePage({ params, searchParams }: {
         {" "}{counts.failed ?? 0} failed, {(counts.identified ?? 0) + (counts.in_progress ?? 0) + (counts.at_lab ?? 0)} open,
         {" "}{counts.not_applicable ?? 0} not applicable. {current ? <>Current release: <strong>Rev {current.revision}</strong>.</> : <>No release issued yet (<Link href={`/projects/${projectId}/releases`}>Releases</Link>).</>}</p>
 
-      {canEdit && (todo.length > 0 || gaps.length > 0) && (
-        <section className="card" data-testid="suggestions">
-          <h2>Suggested from the intake</h2>
-          <p className="small muted">Worked out from the markets, radios, power source and intended use on the{" "}
-            <Link href={`/projects/${projectId}/risks`}>intake</Link>. A starting list to confirm with a test lab, not legal advice, and not complete.</p>
-          {gaps.length > 0 && <ul className="small" data-testid="gaps">{gaps.map((g) => <li key={g}>Missing: {g}</li>)}</ul>}
-          <ul className="list small">{todo.map((s) => (
-            <li key={s.key} data-key={s.key}>
-              <form action={addSuggested.bind(null, projectId)} className="row tight">
-                <input type="hidden" name="key" value={s.key} />
-                <span><strong>{s.title}</strong> <span className="pill">{s.market}</span> <span className="muted">because {s.basis}</span>
-                  {s.standards.length > 0 && <div className="muted">{s.standards.join(" · ")}</div>}{s.note && <div className="muted">{s.note}</div>}</span>
-                <SubmitButton variant="secondary" pendingText="…">Add</SubmitButton>
-              </form>
-            </li>
-          ))}</ul>
-          {todo.length > 1 && <form action={addSuggested.bind(null, projectId)}><SubmitButton pendingText="Adding…">Add all {todo.length}</SubmitButton></form>}
-        </section>
-      )}
-
-      {inBom.length > 0 && (
-        <section className="card" data-testid="bom-modules">
-          <h2>Certified modules in the BOM</h2>
-          <ul className="small">{inBom.map((m) => (
-            <li key={m.id}><Link href={`/knowledge/modules/${m.id}`}>{m.name}</Link> ({m.manufacturer} {m.mpn}):{" "}
-              {(m.certifications as { regime: string; id: string }[]).map((c) => `${c.regime} ${c.id}`).join(" · ")}{m.status !== "verified" && " (catalog entry not yet verified)"}</li>
-          ))}</ul>
-          <p className="small muted">A module&apos;s grant can cover its transmitter in your product only if its integration conditions are met (antenna,
-            label, RF exposure, host testing). Record that assessment on the relevant item; the product still needs its own tests.</p>
-        </section>
-      )}
-
+      <SectionTabs id="compliance" initial={(items ?? []).length ? "items" : "suggested"} sections={[
+        { key: "items", label: "Items", badge: (items ?? []).length, content: (<>
       <section>
-        <h2>Items</h2>
-        <ul className="list" data-testid="items">{(items ?? []).map((c) => {
+        <div data-testid="items">{COMPLIANCE_GROUPS.map(([label, statuses]) => {
+          const list = (items ?? []).filter((c) => statuses.includes(c.status));
+          return list.length > 0 && <div key={label} className="compliance-group"><h3>{label} <span className="tab-count">{list.length}</span></h3>
+            <ul className="list">{list.map((c) => {
           const history = all.filter((r) => r.item_id === c.id);
           const latest = history.find((r) => r.id === c.latest_result_id);
           const stale = latest && current && latest.tested_release_id !== current.id;
@@ -182,7 +159,8 @@ export default async function CompliancePage({ params, searchParams }: {
               )}
             </li>
           );
-        })}{!items?.length && <li className="muted">No compliance items yet.</li>}</ul>
+            })}</ul></div>;
+        })}{!items?.length && <p className="muted">No compliance items yet.</p>}</div>
         {canEdit && (
           <details className="card"><summary>Add an item by hand</summary>
             <form action={addItem.bind(null, projectId)} className="stack">
@@ -197,6 +175,36 @@ export default async function CompliancePage({ params, searchParams }: {
           </details>
         )}
       </section>
+        </>) },
+        ...(canEdit && (todo.length > 0 || gaps.length > 0) ? [{ key: "suggested", label: "Suggested from the intake", badge: todo.length, content: (<>
+        <section className="card" data-testid="suggestions">
+          <p className="small muted">Worked out from the markets, radios, power source and intended use on the{" "}
+            <Link href={`/projects/${projectId}/risks`}>intake</Link>. A starting list to confirm with a test lab, not legal advice, and not complete.</p>
+          {gaps.length > 0 && <ul className="small" data-testid="gaps">{gaps.map((g) => <li key={g}>Missing: {g}</li>)}</ul>}
+          <ul className="list small">{todo.map((s) => (
+            <li key={s.key} data-key={s.key}>
+              <form action={addSuggested.bind(null, projectId)} className="row tight">
+                <input type="hidden" name="key" value={s.key} />
+                <span><strong>{s.title}</strong> <span className="pill">{s.market}</span> <span className="muted">because {s.basis}</span>
+                  {s.standards.length > 0 && <div className="muted">{s.standards.join(" · ")}</div>}{s.note && <div className="muted">{s.note}</div>}</span>
+                <SubmitButton variant="secondary" pendingText="…">Add</SubmitButton>
+              </form>
+            </li>
+          ))}</ul>
+          {todo.length > 1 && <form action={addSuggested.bind(null, projectId)}><SubmitButton pendingText="Adding…">Add all {todo.length}</SubmitButton></form>}
+        </section>
+              </>) }] : []),
+        ...(inBom.length > 0 ? [{ key: "modules", label: "Certified modules in the BOM", badge: inBom.length, content: (<>
+        <section className="card" data-testid="bom-modules">
+          <ul className="small">{inBom.map((m) => (
+            <li key={m.id}><Link href={`/knowledge/modules/${m.id}`}>{m.name}</Link> ({m.manufacturer} {m.mpn}):{" "}
+              {(m.certifications as { regime: string; id: string }[]).map((c) => `${c.regime} ${c.id}`).join(" · ")}{m.status !== "verified" && " (catalog entry not yet verified)"}</li>
+          ))}</ul>
+          <p className="small muted">A module&apos;s grant can cover its transmitter in your product only if its integration conditions are met (antenna,
+            label, RF exposure, host testing). Record that assessment on the relevant item; the product still needs its own tests.</p>
+        </section>
+              </>) }] : []),
+      ]} />
     </main>
   );
 }

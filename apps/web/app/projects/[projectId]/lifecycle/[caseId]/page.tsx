@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -46,8 +47,9 @@ export default async function CasePage({ params, searchParams }: {
           {n.summary && ` — ${n.summary}`}{n.source_url ? <> · <a href={n.source_url} target="_blank" rel="noreferrer noopener">source</a></> : n.source_note ? ` · ${n.source_note}` : ""}</dd></>}
       </dl>
 
+      <SectionTabs id="case" initial={!open ? "resolution" : !c.impact ? "impact" : "substitutes"} sections={[
+        { key: "impact", label: "1. Impact", content: (<>
       <section>
-        <h2>Impact</h2>
         {c.impact ? <p data-testid="impact">{c.impact}</p> : <p className="muted">Not assessed yet.</p>}
         {canEdit && open && (
           <form action={assessCase.bind(null, projectId, caseId)} className="stack">
@@ -58,9 +60,9 @@ export default async function CasePage({ params, searchParams }: {
           </form>
         )}
       </section>
-
+        </>) },
+        { key: "substitutes", label: "2. Substitutes", badge: (subs ?? []).length || null, content: (<>
       <section>
-        <h2>Substitutes</h2>
         <ul className="list" data-testid="substitutes">{(subs ?? []).map((s) => {
           const checks = (s.checks ?? {}) as Record<string, Check>;
           const editable = open && canEdit && (s.status === "proposed" || s.status === "qualifying");
@@ -107,9 +109,9 @@ export default async function CasePage({ params, searchParams }: {
           </details>
         )}
       </section>
-
+        </>) },
+        { key: "resolution", label: "3. Resolution", content: (<>
       <section className={open ? "card" : ""}>
-        <h2>Resolution</h2>
         {!open ? <p data-testid="resolution">{c.resolution?.replace(/_/g, " ")}{c.ltb_quantity ? ` of ${c.ltb_quantity}` : ""}: {c.resolution_note} (recorded as a project decision)</p>
           : canDecide ? (
             <form key={qualified.map((s) => s.id).join() || "none"} action={resolveCase.bind(null, projectId, caseId)} className="stack">
@@ -126,6 +128,8 @@ export default async function CasePage({ params, searchParams }: {
             </form>
           ) : <p className="muted small">An owner or reviewer resolves the case.</p>}
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

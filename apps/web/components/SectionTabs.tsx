@@ -20,18 +20,20 @@ export function SectionTabs({ sections, id = "tabs", initial }: { sections: Sect
     if (wanted && sections.some((s) => s.key === wanted)) { setTab(wanted); return; }
     try { const t = sessionStorage.getItem(store); if (t && sections.some((s) => s.key === t)) setTab(t); } catch { /* storage blocked */ }
   }, [store, wanted, sections]);
+  // A tab can disappear after a form is sent (its last item handled): show where the work is instead.
+  const open = sections.some((s) => s.key === tab) ? tab : first;
   const choose = (k: string) => { setTab(k); try { sessionStorage.setItem(store, k); } catch { /* storage blocked */ } };
   return (
     <div className="section-tabs">
       <div className="tabs" role="tablist" aria-label="Sections" data-testid={`${id}-tabs`}>
         {sections.map((s) => (
-          <button key={s.key} type="button" role="tab" className="tab" aria-selected={tab === s.key} aria-current={tab === s.key ? "page" : undefined}
+          <button key={s.key} type="button" role="tab" className="tab" aria-selected={open === s.key} aria-current={open === s.key ? "page" : undefined}
             onClick={() => choose(s.key)} data-tab={s.key}>
             {s.label}{s.badge != null && s.badge !== "" ? <span className="tab-count">{s.badge}</span> : null}
           </button>
         ))}
       </div>
-      {sections.map((s) => <div key={s.key} role="tabpanel" hidden={tab !== s.key} data-panel={s.key}>{s.content}</div>)}
+      {sections.map((s) => <div key={s.key} role="tabpanel" hidden={open !== s.key} data-panel={s.key}>{s.content}</div>)}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { ReleaseFiles } from "@/components/ReleaseFiles";
 import { SubmitButton } from "@/components/SubmitButton";
+import { SectionTabs } from "@/components/SectionTabs";
 import { requireUser } from "@/lib/auth";
 import { lotCode, RELEASE_STATUS, type ManifestFile, type ReadinessItem } from "@/lib/production";
 import { committedFiles } from "@/lib/releases";
@@ -49,20 +50,18 @@ export default async function ReleasePage({ params, searchParams }: {
       {r.notes && <p>{r.notes}</p>}
       {r.status === "withdrawn" && <p className="banner banner-error">Withdrawn: {r.withdrawn_reason}</p>}
 
-      <section>
-        <h2>{draft ? "Readiness" : "Readiness when issued"}</h2>
-        <ul className="list small" data-testid="readiness">{readiness.map((x, i) => (
-          <li key={i} data-severity={x.severity}><span className={`pill pill-${x.severity === "block" ? "failed" : "awaiting_approval"}`}>{x.severity === "block" ? "blocker" : "warning"}</span> {x.text}</li>
-        ))}{!readiness.length && <li className="muted">Nothing outstanding.</li>}</ul>
-        {r.waiver && <p className="small">Released despite blockers: <strong>{r.waiver}</strong></p>}
-        {r.decision_id && <p className="small">Recorded as a project decision.</p>}
-      </section>
-
-      {draft ? (
-        <>
-          {canEdit && (
+      <SectionTabs id="release" initial={draft ? (blocks.length ? "readiness" : "files") : "files"} sections={[
+        { key: "readiness", label: draft ? "Readiness" : "Readiness when issued", badge: readiness.length || null, content: (
+          <section>
+            <ul className="list small" data-testid="readiness">{readiness.map((x, i) => (
+              <li key={i} data-severity={x.severity}><span className={`pill pill-${x.severity === "block" ? "failed" : "awaiting_approval"}`}>{x.severity === "block" ? "blocker" : "warning"}</span> {x.text}</li>
+            ))}{!readiness.length && <li className="muted">Nothing outstanding.</li>}</ul>
+            {r.waiver && <p className="small">Released despite blockers: <strong>{r.waiver}</strong></p>}
+            {r.decision_id && <p className="small">Recorded as a project decision.</p>}
+          </section>) },
+        ...(draft ? [
+          ...(canEdit ? [{ key: "files", label: "Files", content: (
             <section>
-              <h2>Files</h2>
               <form action={saveRelease.bind(null, projectId, releaseId)} className="stack">
                 <div className="grid2">
                   <label>Revision<input name="revision" required defaultValue={r.revision} aria-label="Revision" /></label>
@@ -71,34 +70,30 @@ export default async function ReleasePage({ params, searchParams }: {
                 <ReleaseFiles files={files} chosen={r.version_ids as string[]} />
                 <div><SubmitButton variant="secondary" pendingText="Saving…">Save draft</SubmitButton></div>
               </form>
-            </section>
-          )}
-          {role === "owner" && (
+            </section>) }] : []),
+          ...(role === "owner" ? [{ key: "issue", label: "Issue", content: (
             <section className="card">
-              <h2>Issue</h2>
               <form action={issueRelease.bind(null, projectId, releaseId)} className="stack">
                 {blocks.length > 0 && <label>{blocks.length} blocker(s): the reason for releasing anyway
                   <textarea name="waiver" required rows={2} aria-label="Reason for releasing despite blockers" /></label>}
                 <p className="small muted">Issuing freezes the file list and checksums and supersedes the current release.</p>
                 <div><SubmitButton pendingText="Issuing…">Issue Rev {r.revision}</SubmitButton></div>
               </form>
-            </section>
-          )}
-        </>
-      ) : (
-        <section>
-          <h2>Files</h2>
-          <table className="small" data-testid="manifest">
-            <thead><tr><th>File</th><th>Kind</th><th>Version</th><th>sha256</th></tr></thead>
-            <tbody>{manifest.map((f) => (
-              <tr key={f.version_id}><td><Link href={`/projects/${projectId}/artifacts/${f.version_id}`}>{f.artifact}</Link></td><td>{f.kind.replace("_", " ")}</td>
-                <td>v{f.version}</td><td className="muted"><code>{f.sha256}</code></td></tr>
-            ))}</tbody>
-          </table>
-          <p className="small">Manifest sha256 <code data-testid="manifest-sha">{r.manifest_sha256}</code>, released {new Date(r.released_at!).toLocaleString()}.</p>
-          {fileDiff && prev && (
-            <>
-              <h2>Changes from Rev {prev.revision}</h2>
+            </section>) }] : []),
+        ] : [
+          { key: "files", label: "Files", badge: manifest.length, content: (
+            <section>
+              <table className="small" data-testid="manifest">
+                <thead><tr><th>File</th><th>Kind</th><th>Version</th><th>sha256</th></tr></thead>
+                <tbody>{manifest.map((f) => (
+                  <tr key={f.version_id}><td><Link href={`/projects/${projectId}/artifacts/${f.version_id}`}>{f.artifact}</Link></td><td>{f.kind.replace("_", " ")}</td>
+                    <td>v{f.version}</td><td className="muted"><code>{f.sha256}</code></td></tr>
+                ))}</tbody>
+              </table>
+              <p className="small">Manifest sha256 <code data-testid="manifest-sha">{r.manifest_sha256}</code>, released {new Date(r.released_at!).toLocaleString()}.</p>
+            </section>) },
+          ...(fileDiff && prev ? [{ key: "changes", label: `Changes from Rev ${prev.revision}`, content: (
+            <section>
               <ul className="small" data-testid="release-changes">
                 {fileDiff.changed.map((c) => <li key={c.artifact}>changed: {c.artifact} v{c.from} → v{c.to}</li>)}
                 {fileDiff.added.map((c) => <li key={c.artifact}>added: {c.artifact} v{c.version}</li>)}
@@ -111,14 +106,15 @@ export default async function ReleasePage({ params, searchParams }: {
                   <li key={i}>{d.refs.join(", ")}: {d.kind === "added" ? `added ${d.to}` : d.kind === "removed" ? `removed ${d.from}` : `${d.from} → ${d.to}`}</li>
                 ))}{!bomDiff.length && <li className="muted">No part changes (prices or stock only).</li>}</ul>
               </>}
-            </>
-          )}
-          <h2>Production lots</h2>
-          <ul className="list small">{(lots ?? []).map((l) => (
-            <li key={l.id}><Link href={`/projects/${projectId}/production/${l.id}`}>{lotCode(l.lot_no)}</Link> {l.kind}, {l.quantity} units, {l.status.replace("_", " ")}</li>
-          ))}{!lots?.length && <li className="muted">None yet. <Link href={`/projects/${projectId}/production`}>Plan a lot</Link>.</li>}</ul>
-        </section>
-      )}
+            </section>) }] : []),
+          { key: "lots", label: "Production lots", badge: (lots ?? []).length, content: (
+            <section>
+              <ul className="list small">{(lots ?? []).map((l) => (
+                <li key={l.id}><Link href={`/projects/${projectId}/production/${l.id}`}>{lotCode(l.lot_no)}</Link> {l.kind}, {l.quantity} units, {l.status.replace("_", " ")}</li>
+              ))}{!lots?.length && <li className="muted">None yet. <Link href={`/projects/${projectId}/production`}>Plan a lot</Link>.</li>}</ul>
+            </section>) },
+        ]),
+      ]} />
 
       {role === "owner" && r.status !== "withdrawn" && (
         <details className="small"><summary>{draft ? "Delete this draft" : "Withdraw this release"}</summary>

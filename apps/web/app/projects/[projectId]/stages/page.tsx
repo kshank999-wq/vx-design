@@ -39,12 +39,16 @@ export default async function StagesPage({ params, searchParams }: {
       </p>
       <ol className="list" data-testid="stages">
         {stages.map((s) => (
-          <li key={s.stage} className={`card${s.current ? " card-current" : ""}`} data-stage={s.stage} data-status={s.status}>
-            <div className="row spread">
+          <li key={s.stage} className={`card stage-row${s.current ? " card-current" : ""}`} data-stage={s.stage} data-status={s.status}>
+            <details open={s.current || s.status === "reopened" || s.waived.length > 0}>
+            <summary className="row spread">
               <h2>{s.stage} · {STAGE_NAME[s.stage]} {s.current && <span className="pill pill-running">current</span>}</h2>
-              <span className={`pill pill-${s.status === "signed_off" ? "complete" : s.status === "reopened" ? "failed" : "awaiting_approval"}`}>
-                {s.status === "signed_off" ? "signed off" : s.status}</span>
-            </div>
+              <span className="row tight">
+                <span className="muted small">{s.tasks_total ? `${s.tasks_done}/${s.tasks_total} tasks` : "no tasks"}{s.risks_open ? ` · ${s.risks_open} risk(s)` : ""}</span>
+                <span className={`pill pill-${s.status === "signed_off" ? "complete" : s.status === "reopened" ? "failed" : "awaiting_approval"}`}>
+                  {s.status === "signed_off" ? "signed off" : s.status}</span>
+              </span>
+            </summary>
             <p className="small muted">
               {s.tasks_total ? `${s.tasks_done} of ${s.tasks_total} task(s) done` : "No plan tasks in this stage"}
               {s.risks_open ? ` · ${s.risks_open} risk(s) open or being mitigated` : ""}
@@ -81,6 +85,7 @@ export default async function StagesPage({ params, searchParams }: {
                 {!s.unlocked && <p className="small muted">Earlier stages first.</p>}
               </>
             )}
+            </details>
           </li>
         ))}
       </ol>

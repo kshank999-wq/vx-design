@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { assessPart, priceHistory, unitPriceAt, latestOffers, type OfferFact } from "@vx/planning";
 import { Banner } from "@/components/Banner";
@@ -68,8 +69,10 @@ export default async function LifecyclePage({ params, searchParams }: {
         redesign or an accepted risk, each recorded as a project decision. Ratings are calculated from the catalog, with their reasons.</p>
       <Banner error={error} notice={notice} />
 
+      <SectionTabs id="lifecycle" sections={[
+        { key: "watch", label: "Watch", badge: rows.length || null, content: (<>
       <section>
-        <div className="row spread"><h2>Watch</h2>
+        <div className="row spread">
           {canEdit && newer && <form action={loadBom.bind(null, projectId, newer.id)}>
             <SubmitButton pendingText="Loading…">{current ? `Load the newer BOM (${newer.artifact} v${newer.version})` : `Load the BOM (${newer.artifact} v${newer.version})`}</SubmitButton></form>}
         </div>
@@ -133,9 +136,9 @@ export default async function LifecyclePage({ params, searchParams }: {
           </details>
         )}
       </section>
-
+        </>) },
+        { key: "cases", label: "Cases", badge: (cases ?? []).filter((c) => c.status !== "resolved").length || null, content: (<>
       <section>
-        <h2>Cases</h2>
         <ul className="list small" data-testid="cases">{(cases ?? []).map((c) => (
           <li key={c.id} data-case={caseCode(c.case_no)} data-status={c.status}>
             <span className={`pill pill-${CASE_PILL[c.status]}`}>{c.status}</span> <Link href={`/projects/${projectId}/lifecycle/${c.id}`}><strong>{caseCode(c.case_no)}</strong></Link>
@@ -144,9 +147,9 @@ export default async function LifecyclePage({ params, searchParams }: {
           </li>
         ))}{!cases?.length && <li className="muted">No cases.</li>}</ul>
       </section>
-
+        </>) },
+        { key: "costs", label: "Cost history", content: (<>
       <section>
-        <h2>Cost history</h2>
         <table className="small" data-testid="cost-history">
           <thead><tr><th>BOM</th><th>Committed</th><th>Release</th>{(costs[0]?.json?.quantities ?? []).map((q) => <th key={q}>Per board at {q}</th>)}<th>Data</th></tr></thead>
           <tbody>{costs.map(({ b, json }) => (
@@ -161,6 +164,8 @@ export default async function LifecyclePage({ params, searchParams }: {
         </table>
         <p className="small muted">Per-part price history is under each part&apos;s unit price (change since the first distributor observation, at the build quantity).</p>
       </section>
+        </>) },
+      ]} />
     </main>
   );
 }

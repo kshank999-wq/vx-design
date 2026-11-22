@@ -150,6 +150,7 @@ try {
   await page.getByLabel(`Reason for ${SUB}`).fill("Drop-in; bench test passed.");
   await page.getByRole("button", { name: "Decide" }).click();
   await page.getByText("Substitute qualified.").waitFor();
+  await page.getByRole("tab", { name: "3. Resolution" }).click();
   await page.getByLabel("Resolution", { exact: true }).selectOption("substitute");
   await page.getByLabel("Resolution reason").fill("Pin-compatible, qualified and bench tested.");
   await page.getByRole("button", { name: "Resolve" }).click();
@@ -171,13 +172,16 @@ try {
   const bom2 = await commitBom(project.id, 2, [[["U1"], SUB, "Texas Instruments"], [["U2", "U3"], TIMER, "Texas Instruments"], [["R1", "R2"], RES, "Yageo"]], 1.38);
   const relB = await issue("B", [bom2]);
   await page.goto(`${P}/releases/${relB}`);
+  await page.getByRole("tab", { name: "Changes from Rev A" }).click();
   assert.match(await page.getByTestId("release-changes").innerText(), /changed: sourcing\/sourced-bom v1 → v2/);
   assert.equal(await page.getByTestId("bom-changes").innerText(), `U1: ${LDO} (Diodes Incorporated) → ${SUB} (Texas Instruments)`);
   await shot(page, "03-release-changes");
   await page.goto(`${P}/lifecycle`);
+  await page.getByRole("tab", { name: "Cost history" }).click();
   const hist = await page.getByTestId("cost-history").innerText();
   assert.match(hist, /sourced-bom v2.*Rev B.*\$1\.38/s);
   assert.match(hist, /sourced-bom v1.*Rev A.*\$1\.42/s);
+  await page.getByRole("tab", { name: "Watch" }).click();
   await page.getByRole("button", { name: "Load the newer BOM (sourcing/sourced-bom v2)" }).click();
   await page.getByText("3 BOM line(s) loaded").waitFor();
   const subRow = page.getByTestId("watch").locator(`tr[data-mpn="${SUB}"]`);

@@ -7,13 +7,13 @@ import { RISK_CATEGORIES, RISK_STATUSES, STAGES } from "@/lib/stages";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const items = (f: FormData, k: string) => str(f, k).split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
-const back = (projectId: string, msg: string, hash = "") => {
+const back = (projectId: string, msg: string, hash = "", tab = "register") => {
   revalidatePath(`/projects/${projectId}/risks`);
-  redirect(`/projects/${projectId}/risks?notice=${encodeURIComponent(msg)}${hash}`);
+  redirect(`/projects/${projectId}/risks?tab=${tab}&notice=${encodeURIComponent(msg)}${hash}`);
 };
 
 export async function saveIntake(projectId: string, form: FormData) {
-  const path = `/projects/${projectId}/risks`;
+  const path = `/projects/${projectId}/risks?tab=intake`;
   const { supabase } = await requireUser();
   const quantity = str(form, "quantity");
   const cost = str(form, "target_unit_cost");
@@ -25,12 +25,12 @@ export async function saveIntake(projectId: string, form: FormData) {
     radios: items(form, "radios"), target_standards: items(form, "target_standards"), notes: str(form, "notes"),
   } });
   if (error) fail(path, error);
-  back(projectId, "Intake saved. Run the feasibility check to update the risks.");
+  back(projectId, "Intake saved. Run the feasibility check to update the risks.", "", "intake");
 }
 
 /** Runs the deterministic feasibility rules over the intake and requirements and files the findings. */
 export async function runFeasibility(projectId: string) {
-  const path = `/projects/${projectId}/risks`;
+  const path = `/projects/${projectId}/risks?tab=register`;
   const { supabase } = await requireUser();
   const [{ data: intake }, { data: reqs, error: e1 }] = await Promise.all([
     supabase.from("project_intake").select("*").eq("project_id", projectId).maybeSingle(),
@@ -46,7 +46,7 @@ export async function runFeasibility(projectId: string) {
 }
 
 export async function addRisk(projectId: string, form: FormData) {
-  const path = `/projects/${projectId}/risks`;
+  const path = `/projects/${projectId}/risks?tab=register`;
   const { supabase } = await requireUser();
   const category = str(form, "category"), stage = str(form, "stage");
   if (!RISK_CATEGORIES.includes(category as never) || !STAGES.includes(stage as never)) fail(path, "Choose a category and a stage.");
@@ -60,7 +60,7 @@ export async function addRisk(projectId: string, form: FormData) {
 }
 
 export async function updateRisk(projectId: string, riskId: string, form: FormData) {
-  const path = `/projects/${projectId}/risks`;
+  const path = `/projects/${projectId}/risks?tab=register`;
   const { supabase } = await requireUser();
   const status = str(form, "status");
   if (!RISK_STATUSES.includes(status as never)) fail(path, "Choose a status.");

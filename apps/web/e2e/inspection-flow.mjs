@@ -134,6 +134,7 @@ try {
   const { data: lot } = await admin.from("production_lots").insert({ project_id: project.id, lot_no: 1, release_id: rel.id, quantity: 10, sample_size: 5 }).select("id").single();
   await page.goto(`${P}/production/${lot.id}`);
   assert.equal(await page.getByTestId("lot-plan").innerText(), "none set");
+  await page.getByRole("tab", { name: "Inspections" }).click();
   assert.equal(await page.getByLabel("Inspection plan").locator("option").count(), 2, "only approved plans are offered");
   await page.getByLabel("Inspection plan").selectOption({ label: "IP-001 v2 Assembled board" });
   await page.getByRole("button", { name: "Set plan" }).click();
