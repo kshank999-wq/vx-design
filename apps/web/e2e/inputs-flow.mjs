@@ -246,11 +246,19 @@ try {
   assert.ifError((await api.storage.from("project-files").upload(sdPath, sdZip, { contentType: "application/zip" })).error);
   assert.ifError((await api.rpc("add_project_reference", { p_project: project.id, p_kind: "other", p_title: "Hirose SD", p_note: null, p_filename: "Hirose SD.zip",
     p_path: sdPath, p_sha256: "0".repeat(64), p_size: sdZip.length, p_mime: "application/zip" })).error);
+  // The parts catalog already knows this socket (from an earlier sourcing run): it is identified from data, no AI.
+  assert.ifError((await admin.from("parts").upsert({ mpn: "DM1AA-SF-PEJ", normalized_mpn: "DM1AA-SF-PEJ", manufacturer: "Hirose", normalized_mfr: "HIROSE",
+    description: "microSD card connector, push-push, 8 positions", package: "SMD", lifecycle: "active", sources: ["digikey"],
+    specs: { "Number of Positions": "8", "Mounting Type": "Surface Mount", "Card Type": "microSD" } }, { onConflict: "normalized_mpn,normalized_mfr" })).error);
   await page.reload();
   const elsewhere = page.getByTestId("packages-elsewhere");
   assert.match(await elsewhere.innerText(), /1 ZIP package\(s\) were added as references, not as parts:\s+Hirose SD\.zip/);
   await elsewhere.getByRole("button", { name: "Read them as parts" }).click();
-  await page.getByText(/Unpacked Hirose SD\.zip: 1 file\(s\)\. Found 1 part\(s\): DM1AA-SF-PEJ \(Hirose\)/).first().waitFor();
+  await page.getByText(/Unpacked Hirose SD\.zip: 1 file\(s\)\. Found 1 part\(s\): DM1AA-SF-PEJ \(Hirose\)\. All from parts data, no AI\./).first().waitFor();
+  const { data: sd } = await admin.from("project_parts").select("role, specs, summary").eq("project_id", project.id).eq("mpn", "DM1AA-SF-PEJ").single();
+  assert.equal(sd.role, "microSD card connector, push-push, 8 positions");
+  assert.deepEqual(sd.specs.map((x) => x.name), ["Package", "Card Type", "Mounting Type", "Number of Positions", "Lifecycle"]);
+  assert.match(sd.summary, /^Specifications from the parts catalog \(digikey\)\.$/);
   assert.equal(await page.getByTestId("packages-elsewhere").count(), 0, "the ZIP is replaced by its files");
   await page.goto(P);
   assert.match(await page.getByTestId("plan-changes").innerText(), /^New since plan v1[\s\S]*2 parts added: PT-2 SIT5356AI-FQ-33E0-10\.000000 \(10 MHz Super-TCXO oscillator for timecode\); PT-3 DM1AA-SF-PEJ/);

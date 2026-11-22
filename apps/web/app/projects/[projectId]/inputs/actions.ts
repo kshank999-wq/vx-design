@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { datasheetText, extractRequirements, identifyPart, matchModelToPart, stepNames } from "@vx/planning";
+import { datasheetText, extractRequirements, identifyPart, matchModelToPart, partNumberCandidates, stepNames } from "@vx/planning";
+import { lookupPart } from "@/lib/part-lookup";
 import { fail, requireUser } from "@/lib/auth";
 import { getModel } from "@/lib/model";
 import { formFile } from "@/lib/staged";
@@ -328,26 +329,38 @@ const READ_AT_ONCE = 8;
  */
 export async function identifyPartFiles(projectId: string): Promise<UploadOutcome> {
   const { supabase } = await requireUser();
-  let choice;
-  try { choice = getModel(projectId); } catch (e) { return { ok: false, message: (e as Error).message }; }
+  // The model is only needed for datasheets the catalog and distributors do not know.
+  let choice: ReturnType<typeof getModel> | null = null, modelProblem: string | null = null;
+  try { choice = getModel(projectId); } catch (e) { modelProblem = (e as Error).message; }
   const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path, note").eq("project_id", projectId)
     .is("part_id", null).is("identified_at", null).in("kind", PART_FILE_KINDS_READ).order("ref_no");
   const pkgOf = (note: string | null) => /^From the package (.+)$/.exec(note ?? "")?.[1] ?? null;
   const sheets = (files ?? []).filter((f) => f.kind === "datasheet").slice(0, READ_AT_ONCE);
   const models = (files ?? []).filter((f) => f.kind === "model_3d");
   const found: string[] = [], problems: string[] = [];
+  let fromData = 0, byAi = 0;
+  const seen = new Set<string>();
   await Promise.all(sheets.map(async (f) => {
     try {
       const { data } = await supabase.storage.from("project-files").download(f.storage_path);
       const text = data ? await datasheetText(new Uint8Array(await data.arrayBuffer()), f.filename) : null;
       if (!text) throw new Error("no text in the file (a scanned PDF?)");
-      const r = await identifyPart(text, f.filename, choice.model);
-      if (!r.identity) throw new Error(r.problem ?? "not identified");
-      const id = r.identity;
+      // First without AI: a part number the datasheet itself confirms, looked up in the catalog and at the distributors.
+      const known = await lookupPart(supabase, partNumberCandidates(text, f.filename, pkgOf(f.note)));
+      let id, summary: string | null = null;
+      if (known) { id = known.identity; summary = `Specifications from ${known.source}.`; fromData++; }
+      else {
+        if (!choice) throw new Error(modelProblem ?? "no model configured");
+        const r = await identifyPart(text, f.filename, choice.model);
+        if (!r.identity) throw new Error(r.problem ?? "not identified");
+        id = r.identity; byAi++;
+        if (id.variants.length) summary = `Other ordering codes in the datasheet: ${id.variants.join(", ")}`;
+      }
       const { error } = await supabase.rpc("record_part_identification", { p_reference: f.id, p_mpn: id.mpn, p_manufacturer: id.manufacturer, p_role: id.title,
-        p_subsystem: id.subsystem, p_specs: id.specs, p_summary: id.variants.length ? `Other ordering codes in the datasheet: ${id.variants.join(", ")}` : null });
+        p_subsystem: id.subsystem, p_specs: id.specs, p_summary: summary });
       if (error) throw new Error(error.message);
-      found.push(`${id.mpn}${id.manufacturer ? ` (${id.manufacturer})` : ""}`);
+      const label = `${id.mpn}${id.manufacturer ? ` (${id.manufacturer})` : ""}`;
+      if (!seen.has(label)) { seen.add(label); found.push(label); }
     } catch (e) {
       problems.push(`${f.filename}: ${(e as Error).message}`);
       await supabase.rpc("note_part_file", { p_reference: f.id, p_note: (e as Error).message });
@@ -384,7 +397,8 @@ export async function identifyPartFiles(projectId: string): Promise<UploadOutcom
   }
   revalidatePath(base(projectId));
   const more = (files ?? []).filter((f) => f.kind === "datasheet").length - sheets.length;
-  const msg = [found.length ? `Found ${found.length} part(s): ${found.join(", ")}.` : "", attached ? `Attached ${attached} file(s) to their parts.` : "",
+  const how = fromData && byAi ? ` ${fromData} datasheet(s) matched from parts data, ${byAi} read by AI.` : fromData ? " All from parts data, no AI." : "";
+  const msg = [found.length ? `Found ${found.length} part(s): ${found.join(", ")}.${how}` : "", attached ? `Attached ${attached} file(s) to their parts.` : "",
     problems.length ? `Not read: ${problems.join(" | ")}` : "", more > 0 ? `${more} more datasheet(s) to read: press "Read the files" again.` : ""].filter(Boolean).join(" ");
   return { ok: problems.length === 0, message: msg || "Nothing new to read." };
 }

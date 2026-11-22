@@ -56,6 +56,48 @@ const KEYWORDS: [RegExp, (typeof SUBSYSTEMS)[number]][] = [
   [/compute module|processor|soc|microcontroller|mcu/i, "compute"], [/emmc|flash|sd card|memory/i, "storage"],
 ];
 
+/** The product subsystem a part's description points to (keyword rules). */
+export function classifySubsystem(text: string): (typeof SUBSYSTEMS)[number] {
+  return KEYWORDS.find(([re]) => re.test(text))?.[1] ?? "other";
+}
+
+const LABELLED = /(?:part\s*(?:number|no\.?|#)|ordering\s*(?:code|number|information)|order(?:ing)?\s*(?:code|no\.?|number)|p\/n|model\s*(?:number|no\.?))\s*[:#]?\s*([A-Z0-9][A-Z0-9._\/()+-]{2,40})/gi;
+const NOT_A_PART = /^(rev|ver|v|version)[\s.]*[\d.]+[a-z]?$|^(page|pages|fig|table|step|pdf|zip|3d|2d|datasheet|data|sheet)\.?\d*[a-z]?$|^\d{1,4}(mm|v|a|ma|mhz|ghz|khz|w|pin|pins|pcs|x\d+)?$|^(19|20)\d{2}[-_]?\d{0,4}$/i;
+
+/**
+ * Part numbers a datasheet points to, best first, without AI: codes labelled "Part number" or "Ordering code" in its
+ * text, then code-like words in its file name and in the name of the package it came in. A candidate is kept only if
+ * it appears in the datasheet text, so a guess from a file name is never taken on trust.
+ */
+export function partNumberCandidates(text: string, filename: string, pkg?: string | null): string[] {
+  const body = norm(text);
+  const out: string[] = [];
+  const add = (c: string) => {
+    const t = c.trim().replace(/^[^A-Z0-9]+|[^A-Z0-9)]+$/gi, "");
+    if (t.length < 4 || t.length > 40 || NOT_A_PART.test(t) || !/[A-Z]/i.test(t) || !/\d/.test(t)) return;
+    if (!body.includes(norm(t)) || out.some((x) => norm(x) === norm(t))) return;
+    out.push(t);
+  };
+  for (const m of text.matchAll(LABELLED)) add(m[1]!);
+  const names = [filename.replace(/\.[^.]+$/, ""), pkg ?? ""].join(" ");
+  const words = names.split(/[\s_,;]+/).filter(Boolean);
+  for (const w of words.sort((a, b) => b.length - a.length)) {
+    add(w);
+    add(w.replace(/\([^)]*\)$/, ""));          // DM1AA-SF-PEJ(82) -> DM1AA-SF-PEJ
+  }
+  return out;
+}
+
+/** A distributor or catalog record as a part identity: its own part number, maker, description and specifications. */
+export function identityFromRecord(r: { mpn: string; manufacturer: string | null; description: string | null; package?: string | null;
+                                        lifecycle?: string | null; specs: Record<string, string> }): PartIdentity {
+  const specs = Object.entries(r.specs ?? {}).filter(([k, v]) => k && v && String(v).trim() && String(v) !== "-").map(([name, value]) => ({ name, value: String(value) }));
+  if (r.package && !specs.some((x) => /package|case/i.test(x.name))) specs.unshift({ name: "Package", value: r.package });
+  if (r.lifecycle && r.lifecycle !== "unknown") specs.push({ name: "Lifecycle", value: r.lifecycle.replace(/_/g, " ") });
+  const title = r.description?.trim() || r.mpn;
+  return { mpn: r.mpn, manufacturer: r.manufacturer, title, subsystem: classifySubsystem(`${title}\n${specs.map((x) => x.value).join(" ")}`), specs: specs.slice(0, 12), variants: [] };
+}
+
 /** Offline stand-in (not AI): the part number after a "Part number" or "Ordering code" label, and labelled facts. */
 export function offlinePartIdentity(prompt: string): PartIdentity {
   const body = prompt.slice(prompt.indexOf("\n\n") + 2);
@@ -65,7 +107,7 @@ export function offlinePartIdentity(prompt: string): PartIdentity {
   const title = label(/(?:description|product)\s*[:]\s*([^\n]{3,120})/i) ?? body.split("\n").find((l) => l.trim().length > 8)?.trim().slice(0, 120) ?? "Part";
   const specs = [...body.matchAll(/^([A-Z][A-Za-z ()/-]{2,40}):\s*([^\n]*\d[^\n]{0,60})$/gm)]
     .filter((m) => !/part|order|manufacturer|description|product/i.test(m[1]!)).slice(0, 12).map((m) => ({ name: m[1]!.trim(), value: m[2]!.trim() }));
-  const subsystem = KEYWORDS.find(([re]) => re.test(`${title}\n${body.slice(0, 2000)}`))?.[1] ?? "other";
+  const subsystem = classifySubsystem(`${title}\n${body.slice(0, 2000)}`);
   return { mpn, manufacturer, title, subsystem, specs, variants: [] };
 }
 

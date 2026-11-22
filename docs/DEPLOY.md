@@ -67,6 +67,9 @@ New project → import this repository:
 | `VX_ASSISTANT_SIGNING_KEY` | from `set-assistant-key.sh` | Server only. Without it, assistant answers are refused. |
 | `ANTHROPIC_API_KEY` | | Server only. Requirement extraction, plans, the assistant. |
 | `VX_SITE_URL` | `https://<your-domain>` | Where confirmation emails link back to. Defaults to the request's host. |
+| `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET` | | Optional, server only. Parts from their datasheets are looked up here before the AI reads them. |
+| `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET` | | Optional, as above (the same keys as the workers'). |
+| `MOUSER_API_KEY` | | Optional, as above. Without any distributor key, parts are matched against the saved parts catalog, then read by AI. |
 
 Never set `SUPABASE_SERVICE_ROLE_KEY` on Vercel: the web app does not use it.
 

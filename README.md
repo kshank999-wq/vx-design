@@ -127,6 +127,11 @@ sit beside the steps.
   and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
   model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
   of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
+- **Parts from data before AI:** each datasheet's part number is found without AI (a "Part number" or "Ordering code"
+  label, or a code in the file or package name that the datasheet itself contains) and looked up in the saved parts
+  catalog, then at the distributors configured on the web server (Nexar, DigiKey, Mouser). An exact match supplies the
+  maker, description, specifications, package and lifecycle; only datasheets nothing matches are read by AI. The result
+  says how many came from data and how many from AI, and each part notes where its specifications came from.
 - **Part packages (ZIP):** a manufacturer's ZIP can be dropped on Parts chosen as it is: it is opened, and its datasheets
   and 3D models become part files, noted with the package they came from. A model with no part number inside goes with
   the part its own package describes. ZIPs added on another step are listed on Parts chosen with "Read them as parts".
