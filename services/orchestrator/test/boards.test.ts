@@ -117,7 +117,8 @@ test("two boards over several tasks: built up, reused, reviewed, packaged togeth
     assert.equal(procs!.length, 1);
     assert.deepEqual(procs![0]!.requirement_refs, ["REQ-PWR-001"]);
     assert.equal(procs![0]!.status, "draft");
-    assert.match(JSON.stringify(procs![0]!.measurements), /"min":50,"max":400/);
+    const m = (procs![0]!.measurements as { min?: number; max?: number; unit?: string }[])[0]!;
+    assert.deepEqual([m.min, m.max, m.unit], [50, 400, "mA"], "limits read from the requirement text");
   } finally {
     try { execFileSync("docker", ["rm", "-f", eng], { stdio: "ignore" }); } catch { /* gone */ }
   }
