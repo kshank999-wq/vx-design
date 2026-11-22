@@ -9,7 +9,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CIRCUIT_PROMPT_VERSION, CircuitDesignError, generateCircuit, type CircuitDesign, type CircuitInput } from "@vx/planning";
+import { CIRCUIT_PROMPT_VERSION, CircuitDesign, CircuitDesignError, generateCircuit, type CircuitInput } from "@vx/planning";
 import type { Validation } from "../db.ts";
 import { checkDatasheet, type DatasheetEvidence } from "../datasheet.ts";
 import { buildCircuit, toCircuitCheck, validateCircuit, type BuildResult, type EngineeringTools } from "../engineering.ts";
@@ -63,7 +63,20 @@ export function schematicExecutor(tools: EngineeringTools): Executor {
           const [project, reqs, upstream, notes] = await Promise.all([
             db.project(task.project_id), db.taskRequirements(task.id), db.upstreamOutputs(task.id), db.reviewNotes(task.id),
           ]);
+          // A board built over several tasks: start from the board's latest design and its power tree.
+          let board: CircuitInput["board"] = null;
+          if (task.board) {
+            const prior = await db.boardJson(task.id, "design", ["schematic"], task.board);
+            const parsed = prior ? CircuitDesign.safeParse(prior.value) : null;
+            const power = await db.boardJson(task.id, "power-budget", ["power"], task.board);
+            board = {
+              name: task.board,
+              base: prior && parsed?.success ? { taskKey: prior.taskKey, design: parsed.data } : null,
+              power: power ? { taskKey: power.taskKey, summary: JSON.stringify(power.value).slice(0, 8000) } : null,
+            };
+          }
           return {
+            board,
             projectContext: `${project.name}${project.description ? `: ${project.description}` : ""}`,
             task: { key: task.key, title: task.title, description: task.description },
             requirements: reqs.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, text: r.text })),

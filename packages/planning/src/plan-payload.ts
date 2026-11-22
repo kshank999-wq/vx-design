@@ -30,7 +30,7 @@ export function planPayload(plan: PlanResult, opts: { model: string; offline: bo
     tasks: plan.tasks.map((t) => ({
       key: t.key, title: t.title, discipline: t.discipline, description: t.description ?? "", upstream_keys: t.upstreamKeys,
       requirement_refs: t.requirementRefs, required_tools: t.requiredTools, acceptance_tests: t.acceptanceTests, risk_level: t.riskLevel,
-      approval_required: t.approvalRequired, approval_reason: t.approvalReason, estimated_hours: t.estimatedHours, basis: t.basis,
+      approval_required: t.approvalRequired, approval_reason: t.approvalReason, estimated_hours: t.estimatedHours, basis: t.basis, board: t.board ?? null,
     })),
   };
 }

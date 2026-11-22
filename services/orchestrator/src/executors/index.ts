@@ -7,17 +7,17 @@ import { fabExecutor } from "./fab.ts";
 import { pcbExecutor } from "./pcb.ts";
 import { powerExecutor } from "./power.ts";
 import { schematicExecutor } from "./schematic.ts";
+import { simulationExecutor } from "./simulation.ts";
+import { verificationExecutor } from "./verification.ts";
 import { sourcingExecutor } from "./sourcing.ts";
 import type { SourcingProvider } from "@vx/integrations";
 
 /**
  * Disciplines no worker can execute yet. They are blocked with a plain reason rather than
  * simulated: a placeholder board or a "passed" DRC would be worse than nothing.
- * (Schematic, PCB layout, manufacturing, enclosure and sourcing tasks are not listed: only workers with the KiCad engineering image claim them.)
+ * (Schematic, simulation, PCB layout, manufacturing, enclosure and sourcing tasks are not listed: only workers with the KiCad engineering image claim them.)
  */
 const PENDING: Record<string, string> = {
-  simulation: "ngspice simulation is verified in the engineering image (G0) but has no task executor yet.",
-  verification: "Verification (enclosure fit, bring-up checks) has no executor yet; the board's DRC and 3D outputs are on the layout task.",
 };
 
 const pendingExecutor: Executor = {
@@ -36,7 +36,8 @@ export function executorsFor(engineering: EngineeringTools | null, sourcing: Sou
   return [
     briefExecutor,
     powerExecutor,
-    ...(engineering ? [schematicExecutor(engineering), pcbExecutor(engineering), fabExecutor(engineering), enclosureExecutor(engineering)] : []),
+    verificationExecutor,
+    ...(engineering ? [schematicExecutor(engineering), simulationExecutor(engineering), pcbExecutor(engineering), fabExecutor(engineering), enclosureExecutor(engineering)] : []),
     // Only a worker with at least one configured distributor (or the fixture stand-in) takes sourcing tasks.
     ...(sourcing.some((p) => p.configured()) ? [sourcingExecutor(sourcing.filter((p) => p.configured()))] : []),
     pendingExecutor,

@@ -664,3 +664,19 @@ class EnclosureTests(unittest.TestCase):
         self.assertEqual(r["stage"], "spec")
         r = self.build("bad2", process="injection")
         self.assertEqual(r["stage"], "spec")
+
+
+
+class SpiceTest(unittest.TestCase):
+    def test_refuses_shell_access_and_runs_a_deck(self):
+        import shutil
+        from vx_eng import spice
+        self.assertTrue(spice.check_deck(".control\nshell touch /tmp/x\n.endc\n.tran 1u 1m\n.meas tran x FIND v(a) AT=1m"))
+        self.assertTrue(any(".include" in p for p in spice.check_deck(".include /etc/passwd\n.op\n.meas op x FIND v(a)")))
+        if not shutil.which("ngspice"):
+            self.skipTest("ngspice not installed")
+        with tempfile.TemporaryDirectory() as d:
+            r = spice.simulate("RC\nV1 in 0 PULSE(0 1 0 1n 1n 1 2)\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 5m\n"
+                               ".meas tran tau WHEN v(out)=0.632 RISE=1\n", Path(d))
+        self.assertTrue(r["ok"], r)
+        self.assertLess(abs(r["measures"]["tau"] - 1e-3), 2e-5)

@@ -63,6 +63,8 @@ export interface TaskRow {
   attempts: number;
   blocker_reason: string | null;
   position: number;
+  /** The circuit board a schematic, layout or board-power task belongs to (null: not tied to one board). */
+  board: string | null;
 }
 
 export interface Validation {
@@ -230,11 +232,11 @@ export class WorkerDb {
     return data;
   }
 
-  async taskRequirements(taskId: string): Promise<{ ref_code: string; kind: string; priority: string; text: string }[]> {
+  async taskRequirements(taskId: string): Promise<{ ref_code: string; kind: string; priority: string; text: string; acceptance_criteria: string | null }[]> {
     const { data, error } = await this.client.from("task_requirements")
-      .select("requirements(ref_code, kind, priority, text)").eq("task_id", taskId);
+      .select("requirements(ref_code, kind, priority, text, acceptance_criteria)").eq("task_id", taskId);
     if (error) throw new Error(`task requirements: ${error.message}`);
-    return (data ?? []).map((r) => r.requirements as unknown as { ref_code: string; kind: string; priority: string; text: string })
+    return (data ?? []).map((r) => r.requirements as unknown as { ref_code: string; kind: string; priority: string; text: string; acceptance_criteria: string | null })
       .sort((a, b) => a.ref_code.localeCompare(b.ref_code));
   }
 
@@ -332,6 +334,104 @@ export class WorkerDb {
       frontier = ups.map((u) => u.id);
     }
     return null;
+  }
+
+  /**
+   * The latest committed output ending in `/${suffix}` for each board among all upstream tasks (transitively) of the
+   * given disciplines: per board, the task furthest along in the plan wins. Tasks without a board count as one board.
+   * With `board`, only that board's.
+   */
+  async upstreamBoards(taskId: string, suffix: string, disciplines: string[], board?: string | null):
+      Promise<{ board: string | null; taskKey: string; versionId: string; storagePath: string; toolConfig: Record<string, unknown> | null }[]> {
+    const seen = new Set<string>([taskId]);
+    const found: { id: string; key: string; discipline: string; position: number; board: string | null }[] = [];
+    let frontier = [taskId];
+    while (frontier.length) {
+      const { data: deps, error } = await this.client.from("task_dependencies")
+        .select("upstream:tasks!task_dependencies_depends_on_task_id_fkey(id, key, discipline, position, board)").in("task_id", frontier);
+      if (error) throw new Error(`upstream tasks: ${error.message}`);
+      const ups = (deps ?? []).map((d) => d.upstream as unknown as (typeof found)[number]).filter((u) => !seen.has(u.id));
+      for (const u of ups) { seen.add(u.id); found.push(u); }
+      frontier = ups.map((u) => u.id);
+    }
+    const wanted = found.filter((u) => disciplines.includes(u.discipline) && (board === undefined || u.board === board))
+      .sort((a, b) => b.position - a.position);
+    const out: Awaited<ReturnType<WorkerDb["upstreamBoards"]>> = [];
+    const done = new Set<string>();
+    for (const up of wanted) {
+      const b = up.board ?? "";
+      if (done.has(b)) continue;
+      const { data: links, error } = await this.client.from("task_artifacts")
+        .select("artifact_versions(id, storage_path, status, tool_config, artifacts(name))").eq("task_id", up.id).eq("role", "output");
+      if (error) throw new Error(`upstream outputs: ${error.message}`);
+      for (const l of links ?? []) {
+        const v = l.artifact_versions as unknown as { id: string; storage_path: string; status: string;
+                                                       tool_config: Record<string, unknown> | null; artifacts: { name: string } };
+        if (v.status === "committed" && v.artifacts.name.endsWith(`/${suffix}`)) {
+          out.push({ board: up.board, taskKey: up.key, versionId: v.id, storagePath: v.storage_path, toolConfig: v.tool_config });
+          done.add(b);
+          break;
+        }
+      }
+    }
+    return out.sort((a, b) => (a.board ?? "").localeCompare(b.board ?? ""));
+  }
+
+  /** Every task upstream of this one (transitively), nearest first. */
+  async allUpstream(taskId: string): Promise<{ id: string; key: string; title: string; discipline: string; position: number; board: string | null; status: string }[]> {
+    const seen = new Set<string>([taskId]);
+    const out: Awaited<ReturnType<WorkerDb["allUpstream"]>> = [];
+    let frontier = [taskId];
+    while (frontier.length) {
+      const { data: deps, error } = await this.client.from("task_dependencies")
+        .select("upstream:tasks!task_dependencies_depends_on_task_id_fkey(id, key, title, discipline, position, board, status)").in("task_id", frontier);
+      if (error) throw new Error(`upstream tasks: ${error.message}`);
+      const ups = (deps ?? []).map((d) => d.upstream as unknown as (typeof out)[number]).filter((u) => !seen.has(u.id));
+      for (const u of ups) { seen.add(u.id); out.push(u); }
+      frontier = ups.map((u) => u.id);
+    }
+    return out;
+  }
+
+  /** The checks recorded by each task's latest execution. */
+  async latestValidations(taskIds: string[]): Promise<{ task_id: string; kind: string; result: string; summary: string; evidence_category: string; tool_name: string | null }[]> {
+    if (!taskIds.length) return [];
+    const { data, error } = await this.client.from("validations")
+      .select("task_id, execution_id, kind, result, summary, evidence_category, tool_name, created_at").in("task_id", taskIds).order("created_at", { ascending: false }).limit(5000);
+    if (error) throw new Error(`validations: ${error.message}`);
+    const latestExec = new Map<string, string | null>();
+    for (const v of data ?? []) if (!latestExec.has(v.task_id)) latestExec.set(v.task_id, v.execution_id);
+    return (data ?? []).filter((v) => latestExec.get(v.task_id) === v.execution_id);
+  }
+
+  async testProcedures(projectId: string): Promise<{ id: string; code: string; title: string; requirement_refs: string[]; status: string }[]> {
+    const { data, error } = await this.client.from("test_procedures").select("id, code, title, requirement_refs, status").eq("project_id", projectId).neq("status", "superseded");
+    if (error) throw new Error(`test procedures: ${error.message}`);
+    return data ?? [];
+  }
+
+  /** Adds a draft test procedure (people review and approve it on the Validation page). Returns its code. */
+  async addTestProcedure(projectId: string, p: { title: string; stage: string; requirement_refs: string[]; setup: string; steps: string; measurements: unknown[] }): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: last } = await this.client.from("test_procedures").select("code").eq("project_id", projectId).order("code", { ascending: false }).limit(1);
+      const n = last?.[0] ? Number(String(last[0].code).slice(3)) + 1 : 1;
+      const code = `TP-${String(n).padStart(3, "0")}`;
+      const { error } = await this.client.from("test_procedures").insert({ project_id: projectId, code, created_by: null, ...p });
+      if (!error) return code;
+      if (!/duplicate key/.test(error.message)) throw new Error(`test procedure: ${error.message}`);
+    }
+    throw new Error("test procedure: could not number it");
+  }
+
+  async requirementVerification(projectId: string): Promise<{ ref_code: string; status: string; procedures: string[]; units_passed: number }[]> {
+    return this.rpc("requirement_verification", { p_project_id: projectId });
+  }
+
+  /** As upstreamBoards for one board, read as JSON. */
+  async boardJson(taskId: string, suffix: string, disciplines: string[], board: string | null):
+      Promise<{ taskKey: string; versionId: string; value: unknown } | null> {
+    const [v] = await this.upstreamBoards(taskId, suffix, disciplines, board);
+    return v ? { taskKey: v.taskKey, versionId: v.versionId, value: JSON.parse(await this.downloadText(v.storagePath)) } : null;
   }
 
   /** Committed JSON output of an upstream task whose artifact name ends with `/${suffix}` (e.g. the schematic's design). */

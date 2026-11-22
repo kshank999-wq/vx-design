@@ -272,9 +272,25 @@ authorized, the browser can be closed.
 Executors so far:
 - **Design briefs** cover architecture, components, thermal, mechanical and documentation tasks (power tasks
   use the power calculator; enclosure tasks the enclosure generator; both below). They are Claude-drafted and checked against the task's requirements and acceptance tests.
-- **Simulation, sourcing and verification tasks** are blocked with a plain reason until their
-  executors land. Nothing is simulated. Schematic (G3), PCB layout (G4) and manufacturing
-  (G4.5) tasks wait for the KiCad engineering worker.
+- **Simulation tasks** (engineering worker): the model writes the analysis as named quantities (each input with
+  its source: requirement, datasheet, upstream task or stated assumption), checks against the requirements, and,
+  when a circuit matters, a self-contained ngspice deck with `.meas` statements. Every number is computed by the
+  built-in calculator and ngspice, not taken from the model; an analysis that does not compute goes back to the
+  model, and a check that computes but fails fails the task with the numbers, for a person to decide. Decks are
+  refused if they try anything outside the simulator (`.control`, shell, `.include`).
+- **Verification tasks**, two kinds. Before manufacturing: a design review that gathers every upstream task's
+  tool checks (ERC, DRC, parity, fit, sourcing, power, simulation; any failure fails the review), then has the
+  model read each board's circuit against the requirements and list must-fix / should-fix findings; a person
+  signs off every review, in every run mode. After manufacturing (a fab task upstream): a hardware test. Draft
+  test procedures for its requirements are added to the Validation page and the task waits for built units; it
+  passes once approved procedures have passing runs for all of them (Continue on the run page to check again).
+- **Boards.** Schematic, layout and board-power tasks name their circuit board (`tasks.board`; plan fixes infer it
+  from upstream work or the key, e.g. `tc-sch-io` → `tc`). A board's tasks build on each other: each schematic task
+  starts from the board's design so far and must keep its parts, a board's power tree feeds its schematic, and a
+  later layout task takes over the earlier board when the circuit has not changed since (no second layout). One
+  manufacturing task packages every board (`fab.<board>/…`) and one sourcing task buys for all of them (refs
+  `board/R1`).
+- Schematic (G3), simulation, PCB layout (G4) and manufacturing (G4.5) tasks wait for the KiCad engineering worker.
 
 ```bash
 pnpm worker                        # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY (or VX_LLM=offline)

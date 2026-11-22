@@ -43,10 +43,26 @@ export function sourcingExecutor(providers: SourcingProvider[]): Executor {
     async run(ctx: ExecutorContext): Promise<ExecutorResult> {
       const { task, db } = ctx;
       const source = await ctx.step("context", async () => {
+        // A product of several boards: one parts list for all of them, refs prefixed with the board ("main/U3").
+        const boards = (await db.upstreamBoards(task.id, "design", ["schematic"])).filter((b) => b.board);
+        if (boards.length > 1) {
+          const components: CircuitDesign["components"] = [];
+          const nets: CircuitDesign["nets"] = [];
+          for (const b of boards) {
+            const parsed = CircuitDesign.safeParse(JSON.parse(await db.downloadText(b.storagePath)));
+            if (!parsed.success) continue;
+            components.push(...parsed.data.components.map((c) => ({ ...c, ref: `${b.board}/${c.ref}` })));
+            nets.push(...parsed.data.nets.map((n) => ({ ...n, name: `${b.board}/${n.name}`, pins: n.pins.map((p) => `${b.board}/${p}`) })));
+          }
+          const design: CircuitDesign = { name: "all_boards", title: `All boards (${boards.map((b) => b.board).join(", ")})`,
+            summary: "", components, nets, no_connect: [], assumptions: [], open_questions: [] };
+          return { taskKey: boards.map((b) => b.taskKey).join("+"), versionId: boards.map((b) => b.versionId).join(","), design,
+                   boards: boards.map((b) => b.board!) };
+        }
         const d = await db.upstreamJson(task.id, "design");
         if (!d) return null;
         const parsed = CircuitDesign.safeParse(d.value);
-        return parsed.success ? { taskKey: d.taskKey, versionId: d.versionId, design: parsed.data } : null;
+        return parsed.success ? { taskKey: d.taskKey, versionId: d.versionId, design: parsed.data, boards: null as string[] | null } : null;
       });
       if (!source) {
         return { status: "blocked", reason: "Sourcing needs the committed circuit design of an upstream schematic task " +
@@ -112,8 +128,11 @@ export function sourcingExecutor(providers: SourcingProvider[]): Executor {
           content: bomCsv(resolution), contentType: "text/csv; charset=utf-8" });
         // Ref -> LCSC map for the fab package. Fixture numbers are invented, so they are marked and never applied.
         const lcsc = Object.fromEntries(resolution.lines.flatMap((l) => l.lcsc ? l.refs.map((r) => [r, l.lcsc]) : []));
+        // Several boards: also per board, with the board's own refs, for each board's fab package.
+        const byBoard = source.boards ? Object.fromEntries(source.boards.map((b) => [b, Object.fromEntries(Object.entries(lcsc)
+          .filter(([r]) => r.startsWith(`${b}/`)).map(([r, n]) => [r.slice(b.length + 1), n]))])) : undefined;
         const map = await ctx.storeArtifact({ ...common, name: `${task.key}/lcsc-map`, kind: "bom", filename: "lcsc-map.json",
-          content: JSON.stringify({ data_status: resolution.dataStatus, observed_at: resolution.generatedAt, lcsc }, null, 2),
+          content: JSON.stringify({ data_status: resolution.dataStatus, observed_at: resolution.generatedAt, lcsc, boards: byBoard }, null, 2),
           contentType: "application/json" });
         return { json: json.versionId, csv: csv.versionId, map: map.versionId };
       });

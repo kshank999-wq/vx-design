@@ -298,3 +298,9 @@ export function toEnclosureCheck(r: EnclosureResult): EnclosureCheck {
   if (r.stage === "spec") return { ok: false, stage: "spec", problems, warnings };
   return { ok: r.ok, stage: r.ok ? "built" : "fit", problems, warnings };
 }
+
+/** Runs a self-contained ngspice deck (checked for refused commands first) and reads its .meas results. */
+export async function runSpice(tools: EngineeringTools, deck: string, outDir: string):
+    Promise<{ ok: boolean; stage: string; problems: string[]; measures: Record<string, number>; ngspice: string | null; files?: { deck: string; log: string } }> {
+  return call(tools, ["spice", "--spec", "-", "--out", outDir], JSON.stringify({ deck }), 300_000) as never;
+}

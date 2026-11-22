@@ -26,6 +26,8 @@ export interface PlanTaskPayload {
   upstream_keys: string[]; requirement_refs: string[];
   /** What the task builds on (plan inputs); kept through chat changes. */
   basis?: { mode: string; sources: string[]; reason: string } | null;
+  /** The circuit board the task works on; kept through chat changes. */
+  board?: string | null;
 }
 
 export function slugKey(title: string, taken: Set<string>): string {

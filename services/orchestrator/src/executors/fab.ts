@@ -53,30 +53,37 @@ export function fabExecutor(tools: EngineeringTools): Executor {
       const { task, db } = ctx;
       const work = await mkdtemp(join(tmpdir(), `vx-fab-${ctx.exec.id.slice(0, 8)}-`));
       try {
-        const source = await ctx.step("context", async () =>
-          db.upstreamVersion(task.id, "kicad-project", ["pcb_layout"]));
+        // Every board of the product: the latest committed layout of each board upstream.
+        const sources = await ctx.step("context", async () =>
+          db.upstreamBoards(task.id, "kicad-project", ["pcb_layout"]));
         // LCSC numbers from an upstream sourcing task, if any. Only live distributor data is applied.
         const lcsc = await ctx.step("lcsc", async () => {
           const m = await db.upstreamJson(task.id, "lcsc-map");
-          if (!m) return { status: "none" as const, map: {} as Record<string, string>, from: null };
-          const v = m.value as { data_status: string; lcsc: Record<string, string> };
-          return v.data_status === "live" ? { status: "applied" as const, map: v.lcsc, from: m.taskKey }
-                                          : { status: "not_live" as const, map: {}, from: m.taskKey };
+          if (!m) return { status: "none" as const, map: {} as Record<string, string>, boards: null as Record<string, Record<string, string>> | null, from: null };
+          const v = m.value as { data_status: string; lcsc: Record<string, string>; boards?: Record<string, Record<string, string>> };
+          return v.data_status === "live" ? { status: "applied" as const, map: v.lcsc, boards: v.boards ?? null, from: m.taskKey }
+                                          : { status: "not_live" as const, map: {}, boards: null, from: m.taskKey };
         });
-        if (!source) {
+        if (!sources.length) {
           return { status: "blocked", reason: "The fab package needs a committed routed board from an upstream PCB layout task " +
                                               "('<layout task>/kicad-project'). Run and approve the layout first." };
         }
-        await ctx.log(`packaging ${source.taskKey}/kicad-project (version ${source.versionId.slice(0, 8)})`);
+        const multi = sources.length > 1;
+        const one = async (source: (typeof sources)[number]): Promise<ExecutorResult> => {
+        const label = multi ? (source.board ?? source.taskKey) : null;
+        const sfx = label ? `:${label}` : "";
+        const prefix = label ? `${task.key}.${label}` : task.key;
+        await ctx.log(`packaging ${source.taskKey}/kicad-project (version ${source.versionId.slice(0, 8)})${label ? ` for board ${label}` : ""}`);
 
-        const packaged = await ctx.step("package", async () => {
-          const zip = join(work, "project.zip");
+        const packaged = await ctx.step(`package${sfx}`, async () => {
+          const zip = join(work, `project${label ? `-${label}` : ""}.zip`);
           await writeFile(zip, await db.downloadBytes(source.storagePath));
-          const out = join(work, "out");
+          const out = join(work, `out${label ? `-${label}` : ""}`);
           let mapPath: string | undefined;
-          if (Object.keys(lcsc.map).length) {
-            mapPath = join(work, "lcsc.json");
-            await writeFile(mapPath, JSON.stringify(lcsc.map));
+          const boardMap = source.board && lcsc.boards?.[source.board] ? lcsc.boards[source.board]! : lcsc.map;
+          if (Object.keys(boardMap).length) {
+            mapPath = join(work, `lcsc${label ? `-${label}` : ""}.json`);
+            await writeFile(mapPath, JSON.stringify(boardMap));
           }
           const r = await buildFabPackage(tools, zip, out, mapPath);
           await ctx.log(r.ok ? `fab package ${r.revision}: all checks pass`
@@ -112,7 +119,7 @@ export function fabExecutor(tools: EngineeringTools): Executor {
                    error: "The committed board does not pass DRC with schematic parity; fix the layout before releasing it" };
         }
 
-        const stored = await ctx.step("store", async () => {
+        const stored = await ctx.step(`store${sfx}`, async () => {
           const versions: Record<string, string> = {};
           const config = { revision: r.revision, profile: r.profile?.name, house: r.profile?.house, source_board: source.versionId,
                            offline: ctx.offline || !!source.toolConfig?.offline };
@@ -123,8 +130,8 @@ export function fabExecutor(tools: EngineeringTools): Executor {
             const got = createHash("sha256").update(bytes).digest("hex");
             if (got !== s.sha256) throw new Error(`stashed ${s.name} changed in storage`);
             const v = await ctx.storeArtifact({
-              name: `${task.key}/${f.suffix}`, kind: f.kind, filename: s.name, content: bytes, contentType: f.type,
-              toolName: f.key === "check" ? "vx_eng" : "kikit", toolVersion, toolConfig: config,
+              name: `${prefix}/${f.suffix}`, kind: f.kind, filename: s.name, content: bytes, contentType: f.type,
+              toolName: f.key === "check" ? "vx_eng" : "kikit", toolVersion, toolConfig: { ...config, board: source.board },
               summary: f.key === "package" ? `${r.project} rev ${r.revision}: ${r.profile?.description} package` : undefined,
             });
             versions[f.key] = v.versionId;
@@ -182,6 +189,22 @@ export function fabExecutor(tools: EngineeringTools): Executor {
           reviewReason: "A fab package is a release: check the fab notes and drawings before ordering" +
                         (offline ? " (the board is the offline fixture, not derived from your requirements)" : ""),
         };
+        };
+
+        const outs: { label: string; r: ExecutorResult }[] = [];
+        for (const source of sources) outs.push({ label: source.board ?? source.taskKey, r: await one(source) });
+        if (!multi) return outs[0]!.r;
+        const validations = outs.flatMap((o) => (o.r.status === "blocked" ? [] : o.r.validations ?? [])
+          .map((v) => ({ ...v, summary: `${o.label}: ${v.summary}` })));
+        const failed = outs.filter((o) => o.r.status !== "passed");
+        if (failed.length) {
+          return { status: "failed", validations, retryable: failed.every((f) => f.r.status === "failed" && f.r.retryable),
+                   error: failed.map((f) => `${f.label}: ${f.r.status === "failed" ? f.r.error : f.r.status === "blocked" ? f.r.reason : ""}`).join("; ") };
+        }
+        const passed = outs.map((o) => o.r as Extract<ExecutorResult, { status: "passed" }>);
+        return { status: "passed", validations,
+                 summary: `${outs.length} boards: ` + outs.map((o, i) => `${o.label}: ${passed[i]!.summary}`).join(" · "),
+                 reviewReason: passed.find((r) => r.reviewReason)?.reviewReason ?? null };
       } finally {
         await rm(work, { recursive: true, force: true });
       }

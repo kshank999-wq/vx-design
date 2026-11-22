@@ -81,3 +81,32 @@ test("a plan update with a gap is fixed in code too", async () => {
   assert.equal(model.calls.length, 1);
   assert.ok(r.tasks.find((t) => t.key === "power-budget")!.requirementRefs.includes("REQ-PWR-003"));
 });
+
+test("boards: missing boards are inferred, and one board's tasks are linked to build on each other", () => {
+  const plan: PlanOutput = { summary: "two boards", deferred_requirements: [], assumptions: [], tasks: [
+    task("arch", "architecture", reqs.map((r) => r.refCode)),
+    task("tc-core", "schematic", [], ["arch"], { board: "Timecode" }),
+    task("tc-io", "schematic", [], ["arch"]),                       // inherits nothing upstream: key prefix "tc"
+    task("main-power", "power", [], ["arch"]),                     // named after board "main"
+    task("pwr-budget", "power", [], ["arch"]),                     // not a board
+    task("main-io", "schematic", [], ["arch"], { board: "main" }),
+    task("tc-stackup", "pcb_layout", [], ["tc-io"]),                // inherits "tc" from tc-io
+    task("tc-route", "pcb_layout", [], ["arch"], { board: "tc" }),
+    task("main-layout", "pcb_layout", [], ["main-io"]),             // inherits "main"
+    task("fab", "manufacturing", [], ["tc-route", "main-layout"]),
+  ] };
+  const fixes: string[] = [];
+  const { plan: out } = autoFixPlan(plan, { requirements: reqs, inputIds: [], mustAddress: [] });
+  const by = new Map(out.tasks.map((t) => [t.key, t]));
+  assert.equal(by.get("tc-core")!.board, "timecode");
+  assert.equal(by.get("tc-io")!.board, "tc");
+  assert.equal(by.get("tc-stackup")!.board, "tc");
+  assert.equal(by.get("main-layout")!.board, "main");
+  assert.equal(by.get("fab")!.board ?? null, null, "fab packages every board; it has none");
+  assert.equal(by.get("main-power")!.board, "main");
+  assert.equal(by.get("pwr-budget")!.board ?? null, null);
+  assert.ok(by.get("main-io")!.upstream_keys.includes("main-power"), "a board's schematic builds on its power tree");
+  assert.ok(by.get("tc-route")!.upstream_keys.includes("tc-stackup"), "layouts of one board chain");
+  assert.ok(by.get("tc-route")!.upstream_keys.includes("tc-io"), "a layout depends on the board's last schematic");
+  void fixes;
+});

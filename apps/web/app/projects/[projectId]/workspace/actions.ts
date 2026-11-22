@@ -35,7 +35,7 @@ export async function draftPlanChange(projectId: string, messageId: number) {
   const { data: plan } = await supabase.from("plans").select("*").eq("project_id", projectId).in("status", ["draft", "awaiting_approval", "approved"])
     .order("version", { ascending: false }).limit(1).maybeSingle();
   if (!plan) fail(path, "There is no plan to change yet.");
-  const { data: tasks } = await supabase.from("tasks").select("id, key, title, discipline, description, required_tools, acceptance_tests, approval_policy, risk_level, estimated_hours, basis")
+  const { data: tasks } = await supabase.from("tasks").select("id, key, title, discipline, description, required_tools, acceptance_tests, approval_policy, risk_level, estimated_hours, basis, board")
     .eq("plan_id", plan.id).order("position");
   const ids = (tasks ?? []).map((t) => t.id);
   const [{ data: deps }, { data: reqs }] = ids.length ? await Promise.all([
@@ -47,7 +47,7 @@ export async function draftPlanChange(projectId: string, messageId: number) {
     key: t.key, title: t.title, discipline: t.discipline, description: t.description, required_tools: t.required_tools ?? [],
     acceptance_tests: t.acceptance_tests ?? [], approval_required: !!(t.approval_policy as { required?: boolean } | null)?.required,
     approval_reason: (t.approval_policy as { reason?: string | null } | null)?.reason ?? null, risk_level: t.risk_level, estimated_hours: t.estimated_hours,
-    basis: t.basis ?? null,
+    basis: t.basis ?? null, board: t.board ?? null,
     upstream_keys: (deps ?? []).filter((d) => d.task_id === t.id).map((d) => keyOf.get(d.depends_on_task_id)!).filter(Boolean).sort(),
     requirement_refs: (reqs ?? []).filter((r) => r.task_id === t.id).map((r) => (r.requirements as unknown as { ref_code: string }).ref_code).sort(),
   }));

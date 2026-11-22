@@ -197,8 +197,16 @@ def main(argv: list[str] | None = None) -> int:
     en.add_argument("--spec", help="enclosure spec JSON file (omit with --facts)")
     en.add_argument("--facts", action="store_true", help="only report the board facts used to plan an enclosure")
     en.add_argument("--out")
+    sp = sub.add_parser("spice", help="run a self-contained ngspice deck (from --spec JSON {deck}) and read its .meas results")
+    sp.add_argument("--spec", required=True)
+    sp.add_argument("--out", required=True)
     sub.add_parser("version")
     args = ap.parse_args(argv)
+    if args.cmd == "spice":
+        from . import spice
+        spec = json.load(sys.stdin if args.spec == "-" else open(args.spec))
+        print(json.dumps(spice.simulate(str(spec.get("deck", "")), Path(args.out))))
+        return 0
     if args.cmd == "version":
         print(json.dumps({"vx_eng": __version__, "kicad": kicad.version()}))
         return 0

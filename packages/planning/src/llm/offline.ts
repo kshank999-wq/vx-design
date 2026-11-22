@@ -10,6 +10,8 @@ import { OFFLINE_FIXTURE_CIRCUIT } from "../circuit.ts";
 import { OFFLINE_FIXTURE_LAYOUT } from "../layout.ts";
 import { OFFLINE_FIXTURE_POWER } from "../power.ts";
 import { OFFLINE_FIXTURE_ENCLOSURE } from "../enclosure.ts";
+import { OFFLINE_SIMULATION } from "../simulation.ts";
+import { OFFLINE_REVIEW } from "../design-review.ts";
 import { OFFLINE_FIXTURE_CONCEPT } from "../concept.ts";
 import { offlineFluxHistory } from "../flux-history.ts";
 import { offlinePriorWork } from "../prior-work.ts";
@@ -33,6 +35,8 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("board_layout") ? structuredClone(OFFLINE_FIXTURE_LAYOUT)
       : req.purpose.startsWith("power_tree") ? structuredClone(OFFLINE_FIXTURE_POWER)
       : req.purpose.startsWith("enclosure_design") ? structuredClone(OFFLINE_FIXTURE_ENCLOSURE)
+      : req.purpose.startsWith("simulation") ? structuredClone(OFFLINE_SIMULATION)
+      : req.purpose.startsWith("design_review") ? structuredClone(OFFLINE_REVIEW)
       : req.purpose.startsWith("concept_brief") ? structuredClone(OFFLINE_FIXTURE_CONCEPT)
       : req.purpose.startsWith("flux_history") ? offlineFluxHistory(prompt)
       : req.purpose.startsWith("prior_work") ? offlinePriorWork(prompt)

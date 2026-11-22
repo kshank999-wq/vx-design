@@ -30,7 +30,7 @@ export default async function PlanPage({ params, searchParams }: {
 
   const [{ data: plan }, { data: tasks }, { data: reqs }, { data: approvals }, { data: me }, { data: runs }] = await Promise.all([
     supabase.from("plans").select("*, projects(name)").eq("id", planId).eq("project_id", projectId).maybeSingle(),
-    supabase.from("tasks").select("id, key, title, discipline, stage, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, basis, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
+    supabase.from("tasks").select("id, key, title, discipline, stage, description, risk_level, status, required_tools, acceptance_tests, approval_policy, estimated_hours, basis, board, created_at, task_dependencies!task_dependencies_task_id_fkey(depends_on_task_id), task_requirements(requirement_id)")
       .eq("plan_id", planId).order("position"),
     supabase.from("requirements").select("id, ref_code, text, source_section, source_excerpt, status").eq("project_id", projectId).order("ref_code"),
     supabase.from("approvals").select("id, status, reason, response_note, requested_at, responded_at").eq("plan_id", planId).order("requested_at"),
@@ -208,6 +208,7 @@ export default async function PlanPage({ params, searchParams }: {
                   <div className="row tight">
                     <span className="pill" title={STAGE_NAME[t.stage as Stage]}>{t.stage}</span>
                     <span className="pill">{t.discipline.replace("_", " ")}</span>
+                    {t.board && <span className="pill" data-testid="task-board" title="The circuit board this task works on; its tasks build on each other">board: {t.board}</span>}
                     <span className={`pill risk-${t.risk_level}`}>{t.risk_level} risk</span>
                     {policy.required && <span className="pill pill-gate" title={policy.reason ?? ""}>approval gate</span>}
                     {plan.status === "approved" && <span className={`pill pill-${t.status}`}>{t.status}</span>}

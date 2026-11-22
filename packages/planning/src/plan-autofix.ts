@@ -84,6 +84,9 @@ export function autoFixPlan(input: PlanOutput, ctx: AutoFixContext): { plan: Pla
     }
   }
 
+  // Boards: every schematic and layout task names its board; one board's tasks build on each other.
+  fixBoards(plan.tasks, fixes);
+
   // Dependency loops: remove the link that closes each loop.
   for (let guard = 0; guard < plan.tasks.length * 2; guard++) {
     const back = findBackEdge(plan.tasks);
@@ -161,4 +164,69 @@ function findBackEdge(tasks: Task[]): { from: string; to: string } | null {
   };
   for (const t of tasks) if (!state.has(t.key)) visit(t.key);
   return found;
+}
+
+const BOARD_WORK = new Set<Disc>(["schematic", "pcb_layout"]);
+const boardSlug = (b: string) => b.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/**
+ * Board names and the links that let a board be built over several tasks: a schematic or layout task without a board
+ * takes the board of the nearest upstream schematic or layout task (else the key's prefix shared with other board
+ * tasks, else "main"); then per board, schematic tasks form a chain, each depends on the board's earlier power
+ * tasks, and each layout task depends on the board's previous layout task and its last schematic task. Links only
+ * ever point to tasks listed earlier, so no loop is created.
+ */
+export function fixBoards(tasks: Task[], fixes: string[]): void {
+  const pos = new Map(tasks.map((t, i) => [t.key, i]));
+  const byKey = new Map(tasks.map((t) => [t.key, t]));
+  for (const t of tasks) if (t.board) t.board = boardSlug(t.board) || null;
+  const prefixOf = (k: string) => k.split("-")[0]!;
+  const prefixCount = new Map<string, number>();
+  for (const t of tasks) if (BOARD_WORK.has(t.discipline)) prefixCount.set(prefixOf(t.key), (prefixCount.get(prefixOf(t.key)) ?? 0) + 1);
+  for (const t of tasks) {
+    if (!BOARD_WORK.has(t.discipline) || t.board) continue;
+    let found: string | null = null;
+    const seen = new Set<string>([t.key]);
+    let frontier = [...t.upstream_keys];
+    while (frontier.length && !found) {
+      const ups = frontier.map((k) => byKey.get(k)).filter((u): u is Task => !!u && !seen.has(u.key))
+        .sort((a, b) => pos.get(b.key)! - pos.get(a.key)!);
+      for (const u of ups) { seen.add(u.key); if (BOARD_WORK.has(u.discipline) && u.board) { found = u.board; break; } }
+      frontier = ups.flatMap((u) => u.upstream_keys);
+    }
+    const p = prefixOf(t.key);
+    const how = found ? "from its upstream board work" : (prefixCount.get(p) ?? 0) >= 2 ? "from its key" : "the only board";
+    t.board = found ?? ((prefixCount.get(p) ?? 0) >= 2 ? boardSlug(p) : "main");
+    fixes.push(`"${t.key}": board set to "${t.board}" (${how})`);
+  }
+  // A power task named after a board ("main-sch-power") is that board's power tree.
+  const boardNames = new Set(tasks.flatMap((t) => (BOARD_WORK.has(t.discipline) && t.board ? [t.board] : [])));
+  for (const t of tasks) {
+    if (t.discipline !== "power" || t.board || !boardNames.has(boardSlug(prefixOf(t.key)))) continue;
+    t.board = boardSlug(prefixOf(t.key));
+    fixes.push(`"${t.key}": board set to "${t.board}" (a power task named after the board)`);
+  }
+  const groups = new Map<string, Task[]>();
+  for (const t of tasks) if (t.board) groups.set(t.board, [...(groups.get(t.board) ?? []), t]);
+  for (const [board, list] of groups) {
+    list.sort((a, b) => pos.get(a.key)! - pos.get(b.key)!);
+    const added: string[] = [];
+    const link = (t: Task, up: Task) => {
+      if (up.key === t.key || pos.get(up.key)! >= pos.get(t.key)! || t.upstream_keys.includes(up.key)) return;
+      t.upstream_keys.push(up.key);
+      added.push(`${t.key} → ${up.key}`);
+    };
+    const sch = list.filter((t) => t.discipline === "schematic");
+    const pcb = list.filter((t) => t.discipline === "pcb_layout");
+    const pwr = list.filter((t) => t.discipline === "power");
+    sch.forEach((t, i) => { if (i) link(t, sch[i - 1]!); for (const p of pwr) link(t, p); });
+    const lastSch = sch[sch.length - 1];
+    pcb.forEach((t, i) => {
+      if (i) link(t, pcb[i - 1]!);
+      if (lastSch && pos.get(lastSch.key)! < pos.get(t.key)!) link(t, lastSch);
+      const later = sch.filter((x) => pos.get(x.key)! > pos.get(t.key)!);
+      if (later.length) fixes.push(`Board "${board}": layout "${t.key}" comes before its schematic task(s) ${later.map((x) => `"${x.key}"`).join(", ")}; it will lay out the circuit as it is then`);
+    });
+    if (added.length) fixes.push(`Board "${board}": linked so each task builds on the board so far: ${added.join(", ")}`);
+  }
 }

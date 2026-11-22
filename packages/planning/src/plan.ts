@@ -7,7 +7,7 @@ import { Discipline, PlannedTask, RiskLevel, ValidationKind, topologicalOrder } 
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import { autoFixPlan } from "./plan-autofix.ts";
 
-export const PLAN_PROMPT_VERSION = "plan-v3";
+export const PLAN_PROMPT_VERSION = "plan-v4";
 const MAX_REPAIR_ROUNDS = 2;
 
 export interface RequirementInput {
@@ -45,6 +45,7 @@ export const PlanOutput = z.object({
     approval_required: z.boolean(),
     approval_reason: z.string().nullable(),
     estimated_hours: z.number().nullable(),
+    board: z.string().nullable().optional().describe("For schematic, pcb_layout and board-level power tasks: a short slug naming the circuit board the task works on (e.g. 'main', 'timecode', 'clap-sensor'); the same slug for every task on that board. Null for other tasks."),
     basis: z.object({
       mode: z.enum(["reuse", "adapt", "replace", "new"]).describe("reuse: keep earlier work as it is and check it; adapt: start from it and change it; replace: earlier work exists but has a problem, so do it differently; new: nothing exists"),
       sources: z.array(z.string()).describe("Input ids this task builds on or replaces: PR-n register items, PW-n imports, REF-n references; empty for new"),
@@ -68,6 +69,8 @@ For each task:
 - reference the requirements it satisfies (requirement_refs), and give acceptance tests a reviewer can check: name a validation_kind when a tool check (ERC, DRC, fit, simulation, BOM, DFM) applies;
 - set approval_required for decisions a human must own: processor or SoC family, battery chemistry and charging, board dimensions and layer stackup, major connector assignments, and anything with high or critical risk;
 - choose required_tools from the capability list where possible.
+
+Boards: name the circuit board of every schematic, pcb_layout and board-level power task in board (a short slug, the same for all tasks of one board). The tasks of one board build on each other: each schematic task of a board adds to the board's circuit so far (so the board's schematic tasks form a chain), a power task of a board feeds the schematic tasks after it, and every layout task of a board comes after all of the board's schematic tasks and depends on the last one. A board's circuit is designed in schematic tasks only: a power task computes the power tree (rails, regulators, budget); the regulator circuit itself is drawn in a schematic task of that board. Separate stackup, placement and routing tasks of one board are allowed but cost little only when the circuit does not change between them; prefer one layout task per board. A manufacturing task that produces fab outputs packages every board it depends on.
 
 Every requirement must be covered by at least one task, or listed in deferred_requirements with a reason. Put open assumptions you relied on in assumptions.
 
@@ -246,6 +249,7 @@ function toContract(t: PlanOutput["tasks"][number]): PlannedTask {
     approvalReason: t.approval_reason,
     estimatedHours: t.estimated_hours,
     basis: t.basis ?? null,
+    board: t.board ? t.board.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || null : null,
   });
 }
 

@@ -64,7 +64,8 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
       const work = await mkdtemp(join(tmpdir(), `vx-pcb-${ctx.exec.id.slice(0, 8)}-`));
       try {
         const context = await ctx.step("context", async () => {
-          const source = await db.upstreamJson(task.id, "design");
+          // A board built over several tasks: its latest design. Otherwise the nearest upstream design.
+          const source = task.board ? await db.boardJson(task.id, "design", ["schematic"], task.board) : await db.upstreamJson(task.id, "design");
           if (!source) return null;
           const parsed = CircuitDesign.safeParse(source.value);
           if (!parsed.success) return null;
@@ -100,6 +101,46 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
                                               "(artifact '<schematic task>/design'). Run and approve the schematic first." };
         }
         const { input, source, models: libraryModels } = context;
+
+        // Stackup, placement and routing of one board are often separate tasks: when the board's earlier layout task
+        // already routed this exact design version, take that board over (copied, with its checks) instead of laying
+        // it out again.
+        if (task.board) {
+          const reused = await ctx.step("reuse", async () => {
+            const [prev] = await db.upstreamBoards(task.id, "kicad-project", ["pcb_layout"], task.board);
+            if (!prev || prev.toolConfig?.source_design !== source.versionId) return null;
+            const copied: Record<string, string> = {};
+            let drc: Record<string, unknown> | null = null;
+            for (const f of [...FILES, { key: "layout", suffix: "layout", kind: "other", type: "application/json" }]) {
+              const [v] = await db.upstreamBoards(task.id, f.suffix, ["pcb_layout"], task.board);
+              if (!v || v.taskKey !== prev.taskKey) continue;
+              const bytes = await db.downloadBytes(v.storagePath);
+              const st = await ctx.storeArtifact({
+                name: `${task.key}/${f.suffix}`, kind: f.kind, filename: v.storagePath.split("/").pop()!.replace(/^[0-9a-f]{16}-/, ""),
+                content: bytes, contentType: f.type, toolName: f.suffix === "layout" ? "vx-design" : "kicad", toolVersion,
+                toolConfig: { ...(v.toolConfig ?? {}), reused_from: prev.taskKey },
+                summary: f.suffix === "kicad-project" ? `${input.circuit.title}: board taken over from ${prev.taskKey} (circuit unchanged)` : undefined,
+              });
+              copied[f.suffix] = st.versionId;
+              if (f.suffix === "drc-report") { try { drc = JSON.parse(Buffer.from(bytes).toString("utf8")); } catch { drc = null; } }
+            }
+            return { from: prev.taskKey, copied, drc };
+          });
+          if (reused) {
+            const d = (reused.drc ?? {}) as { errors?: number; warnings?: number; unconnected?: number; parity?: number };
+            const clean = !d.errors && !d.unconnected && !d.parity;
+            await ctx.log(`board ${task.board}: design unchanged since ${reused.from}; its routed board is taken over`);
+            return {
+              status: "passed",
+              validations: [{ kind: "drc", result: clean ? (d.warnings ? "warning" : "pass") : "fail", evidence_category: "cad_check",
+                summary: `Board taken over from ${reused.from} (same circuit design version): KiCad DRC ${d.errors ?? "?"} errors, ` +
+                         `${d.warnings ?? "?"} warnings, ${d.unconnected ?? "?"} unrouted, ${d.parity ?? "?"} schematic differences`,
+                artifact_version_id: reused.copied["drc-report"], tool_name: "kicad", tool_version: tools.versions.kicad }],
+              summary: `${input.circuit.title}: board from ${reused.from} kept (the circuit has not changed since it was laid out)`,
+              reviewReason: null,
+            };
+          }
+        }
         await ctx.log(`laying out ${input.circuit.components.length} components from ${source.taskKey}/design` +
                       (Object.keys(libraryModels).length ? `; verified manufacturer models for ${Object.keys(libraryModels).join(", ")}` : ""));
 

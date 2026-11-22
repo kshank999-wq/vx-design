@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
-export const CIRCUIT_PROMPT_VERSION = "circuit-v1";
+export const CIRCUIT_PROMPT_VERSION = "circuit-v2";
 export const MAX_CIRCUIT_REPAIRS = 3;
 
 export const CircuitDesign = z.object({
@@ -48,6 +48,22 @@ export interface CircuitInput {
   acceptanceTests: BriefAcceptanceTest[];
   upstream: BriefUpstream[];
   reviewNotes: string[];
+  /** The board this circuit is part of, and its design so far (from the board's earlier schematic tasks). */
+  board?: { name: string; base: { taskKey: string; design: CircuitDesign } | null; power: { taskKey: string; summary: string } | null } | null;
+}
+
+/** Refs of the board's earlier design that a new design dropped or changed (symbol or footprint). */
+export function keptPartProblems(base: CircuitDesign, next: CircuitDesign): string[] {
+  const now = new Map(next.components.map((c) => [c.ref, c]));
+  const out: string[] = [];
+  for (const c of base.components) {
+    const n = now.get(c.ref);
+    if (!n) out.push(`${c.ref} (${c.value}, ${c.purpose}) from the board's earlier design is missing; keep every earlier part with the same ref`);
+    else if (n.symbol !== c.symbol || n.footprint !== c.footprint) {
+      out.push(`${c.ref} changed from ${c.symbol} / ${c.footprint} to ${n.symbol} / ${n.footprint}; keep the earlier parts as they are`);
+    }
+  }
+  return out;
 }
 
 /** Result of checking a design with the KiCad libraries and ERC (done by the engineering worker). */
@@ -97,8 +113,18 @@ export function renderCircuitPrompt(input: CircuitInput): string {
   const upstream = input.upstream.map((u) => `### ${u.title} (${u.taskKey})\n${u.content}`).join("\n\n") || "(no upstream outputs)";
   const notes = input.reviewNotes.length
     ? `\n\nA reviewer returned the previous design with these notes; address them:\n${input.reviewNotes.map((n) => `- ${n}`).join("\n")}` : "";
+  const b = input.board;
+  const board = !b ? "" :
+    `\n\nThis task is part of the board "${b.name}". ` + (b.base
+      ? `The board's design so far (from ${b.base.taskKey}) is below. Return the COMPLETE board: every earlier component with the same ref, ` +
+        `symbol and footprint, every earlier net (add pins to them where your circuit connects), plus this task's circuit. Use new refs ` +
+        `that do not clash with the earlier ones. Connect to the earlier circuit through its existing nets (supplies, buses) rather than ` +
+        `adding connectors between parts of the same board.\n\nBoard design so far:\n${JSON.stringify(b.base.design)}`
+      : "It is the first circuit on this board: include the board's connectors and supply input.") +
+    (b.power ? `\n\nThe board's power tree (from ${b.power.taskKey}); implement its rails, regulators and protection as specified:\n${b.power.summary}` : "");
   return `Project: ${input.projectContext}\n\nTask: ${input.task.title} (${input.task.key})\n${input.task.description ?? ""}\n\n` +
-    `Requirements:\n${reqs}\n\nAcceptance tests:\n${tests}\n\nUpstream outputs:\n${upstream}${notes}\n\nDesign the circuit.`;
+    `Requirements:\n${reqs}\n\nAcceptance tests:\n${tests}\n\nUpstream outputs:\n${upstream}${notes}${board}\n\n` +
+    (b?.base ? "Design the circuit and return the complete board." : "Design the circuit.");
 }
 
 /**
@@ -119,7 +145,9 @@ export async function generateCircuit(
       purpose: round === 1 ? "circuit_design" : "circuit_design_repair", system: SYSTEM, messages, schema: CircuitDesign, cache: "follow-up",
     });
     usage.push(result.usage);
-    const c = await check(result.output);
+    const base = input.board?.base?.design;
+    const kept = base ? keptPartProblems(base, result.output) : [];
+    const c: CircuitCheck = kept.length ? { ok: false, problems: kept, warnings: [], stage: "validation" } : await check(result.output);
     history.push({ round, stage: c.stage, problems: c.problems.length });
     await onRound?.(round, c, result.usage);
     if (c.ok) return { promptVersion: CIRCUIT_PROMPT_VERSION, design: result.output, rounds: round, check: c, history, usage };

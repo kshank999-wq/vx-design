@@ -108,6 +108,8 @@ export const PlannedTask = z.object({
   estimatedHours: z.number().nonnegative().nullable().default(null),
   /** What the task builds on: reuse or adapt prior work and references (cited by input id), or start fresh. */
   basis: TaskBasis.nullable().default(null),
+  /** The circuit board this task works on (schematic, layout, board power); tasks of one board build on each other. */
+  board: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).nullable().default(null),
 });
 export type PlannedTask = z.infer<typeof PlannedTask>;
 
