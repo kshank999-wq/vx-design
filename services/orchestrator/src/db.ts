@@ -1,3 +1,4 @@
+import type { Usage } from "@vx/planning";
 import { moldable, requiredDraft, routeLine } from "@vx/dfm";
 /**
  * The worker's view of the database. Every state change goes through a Postgres function
@@ -433,6 +434,15 @@ export class WorkerDb {
                          envelope: freeze.envelope as { length_mm: number; width_mm: number; height_mm: number } } : null,
       references: (refs ?? []) as { ref_no: number; title: string; note: string | null; storage_path: string; mime_type: string }[],
     };
+  }
+
+  /** One AI call: outside a run under its project; inside a run (executionId) charged to the run's budget. */
+  async recordAiCall(projectId: string | null, executionId: string | null, e: { purpose: string; usage: Usage; costUsd: number; durationMs: number | null; failed: boolean }): Promise<"ok" | "over_budget"> {
+    return this.rpc("record_ai_call", {
+      p_project: projectId, p_execution: executionId, p_purpose: e.purpose, p_model: e.usage.model,
+      p_input: e.usage.inputTokens, p_output: e.usage.outputTokens, p_cache_read: e.usage.cacheReadTokens, p_cache_write: e.usage.cacheWriteTokens,
+      p_cost_usd: e.costUsd, p_duration_ms: e.durationMs, p_failed: e.failed,
+    });
   }
 
   /** A cost outside a run (concept generation is asked for directly, not by a plan task). */

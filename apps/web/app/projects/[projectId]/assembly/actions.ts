@@ -17,7 +17,7 @@ function go(projectId: string, notice: string): never {
 export async function draftAssembly(projectId: string, form: FormData) {
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(); } catch (e) { fail(base(projectId), e); }
+  try { choice = getModel(projectId); } catch (e) { fail(base(projectId), e); }
   const guidance = str(form, "guidance") || null;
   let id: string;
   try {

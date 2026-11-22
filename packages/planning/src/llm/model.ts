@@ -39,7 +39,11 @@ export interface LanguageModel {
   generate<T>(req: GenerateRequest<T>): Promise<GenerateResult<T>>;
 }
 
-export class ModelOutputError extends Error {}
+export class ModelOutputError extends Error {
+  /** The tokens the failed call used (it is billed), when the model ran. */
+  usage?: Usage;
+  constructor(message: string, usage?: Usage) { super(message); this.usage = usage; }
+}
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
@@ -92,26 +96,27 @@ export class ClaudeModel implements LanguageModel {
       throw e;
     }
 
+    const usage: Usage = {
+      model: message.model,
+      inputTokens: message.usage.input_tokens,
+      outputTokens: message.usage.output_tokens,
+      cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
+    };
     if (message.stop_reason === "refusal") {
       const details = message.stop_details;
-      throw new ModelOutputError(`${req.purpose}: the model declined (${details?.category ?? "no category"}).`);
+      throw new ModelOutputError(`${req.purpose}: the model declined (${details?.category ?? "no category"}).`, usage);
     }
     if (message.stop_reason === "max_tokens") {
-      throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it).`);
+      throw new ModelOutputError(`${req.purpose}: the reply was cut off at the ${maxTokens}-token limit (the model's reasoning and its answer share it).`, usage);
     }
     if (message.parsed_output == null) {
-      throw new ModelOutputError(`${req.purpose}: response did not match the expected schema.`);
+      throw new ModelOutputError(`${req.purpose}: response did not match the expected schema.`, usage);
     }
     return {
       output: message.parsed_output as T,
       assistantMessage: { role: "assistant", content: message.content },
-      usage: {
-        model: message.model,
-        inputTokens: message.usage.input_tokens,
-        outputTokens: message.usage.output_tokens,
-        cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
-        cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
-      },
+      usage,
     };
   }
 }

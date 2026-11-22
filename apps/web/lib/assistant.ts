@@ -1,5 +1,6 @@
 import "server-only";
-import { ClaudeModel, PlanChange, partialStringField } from "@vx/planning";
+import { projectCostSink } from "@/lib/model";
+import { ClaudeModel, MeteredModel, PlanChange, partialStringField } from "@vx/planning";
 import { z } from "zod";
 import { citation, searchKnowledge, type KnowledgeHit } from "./knowledge";
 import type { createClient } from "./supabase/server";
@@ -233,7 +234,7 @@ export async function answer(ctx: ProjectContext, question: string, onText?: (de
     return { ...o, citations: resolveCitations(ctx, o.citations), label: "Offline status summary (not AI)", offline: true };
   }
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("The assistant is not configured: set ANTHROPIC_API_KEY (or VX_LLM=offline).");
-  const model = new ClaudeModel({ effort: "medium", maxTokens: 8000, model: process.env.VX_ASSISTANT_MODEL });
+  const model = new MeteredModel(new ClaudeModel({ effort: "medium", maxTokens: 8000, model: process.env.VX_ASSISTANT_MODEL }), projectCostSink(ctx.project.id));
   const { output, usage } = await model.generate({
     purpose: "workspace_chat",
     system: SYSTEM,

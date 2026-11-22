@@ -197,7 +197,7 @@ export async function extractAll(projectId: string) {
   const path = await here(projectId);
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(); } catch (e) { fail(path, e); }
+  try { choice = getModel(projectId); } catch (e) { fail(path, e); }
   const { data: docs } = await supabase.from("documents").select("id, title, extraction_status").eq("project_id", projectId).in("extraction_status", ["pending", "failed"]).order("created_at");
   if (!docs?.length) fail(path, "Every document has been extracted. Re-extract one from its row if it changed.");
   const ready: PreparedExtraction[] = [];
@@ -329,7 +329,7 @@ const READ_AT_ONCE = 8;
 export async function identifyPartFiles(projectId: string): Promise<UploadOutcome> {
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(); } catch (e) { return { ok: false, message: (e as Error).message }; }
+  try { choice = getModel(projectId); } catch (e) { return { ok: false, message: (e as Error).message }; }
   const { data: files } = await supabase.from("project_references").select("id, filename, kind, storage_path, note").eq("project_id", projectId)
     .is("part_id", null).is("identified_at", null).in("kind", PART_FILE_KINDS_READ).order("ref_no");
   const pkgOf = (note: string | null) => /^From the package (.+)$/.exec(note ?? "")?.[1] ?? null;

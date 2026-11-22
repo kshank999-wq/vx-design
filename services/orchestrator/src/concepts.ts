@@ -4,6 +4,7 @@
  * project's folder and records them with their provenance. A variant the provider refuses or fails on is recorded
  * as failed with the reason; the others still count.
  */
+import { meteredFor } from "./metering.ts";
 import { createHash } from "node:crypto";
 import { generateConceptBrief, type LanguageModel } from "@vx/planning";
 import { ImageProviderError, type GeneratedImage, type ImageProvider, type ReferenceImage } from "@vx/integrations";
@@ -37,12 +38,8 @@ export async function processConceptRound(db: WorkerDb, model: { model: Language
         : round.direction,
       parent: ctx.parent ? { name: ctx.parent.name, prompt: ctx.parent.prompt, cmf_summary: (ctx.parent.cmf.summary as string) ?? null } : null,
       freeze: ctx.freeze,
-    }, model.model);
-    for (const u of usage) {
-      if (u.inputTokens || u.outputTokens) {
-        await db.recordProjectCost(round.project_id, "ai_tokens", "anthropic", u.model, u.inputTokens + u.outputTokens, "tokens");
-      }
-    }
+    }, meteredFor(db, model.model, round.project_id));
+    void usage;
 
     // The chosen variant goes to the provider as the reference image. Providers take raster images only, so an
     // offline placeholder (SVG) cannot be a reference for a real provider; the refinement then works from its prompt.

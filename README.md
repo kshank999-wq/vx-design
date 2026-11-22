@@ -123,6 +123,10 @@ sit beside the steps.
 - **Plan being built:** a large card at the top of the project, Project inputs and plan pages shows what is happening
   (updating vN or building from scratch), a live clock and the steps, and warns when no worker has picked the request
   up after three minutes. The update buttons are hidden meanwhile.
+- **AI usage:** every AI call (website and workers) is priced from one token price table (`packages/planning/src/llm/pricing.ts`)
+  and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
+  model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
+  of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
 - **Part packages (ZIP):** a manufacturer's ZIP can be dropped on Parts chosen as it is: it is opened, and its datasheets
   and 3D models become part files, noted with the package they came from. A model with no part number inside goes with
   the part its own package describes. ZIPs added on another step are listed on Parts chosen with "Read them as parts".

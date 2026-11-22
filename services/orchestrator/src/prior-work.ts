@@ -7,6 +7,7 @@
 import { extractPriorWork, mergeRegister, parseDocument, type LanguageModel, type PriorDoc, type Usage } from "@vx/planning";
 import { buildInventory, historyDocuments, type Upload } from "@vx/flux";
 import type { WorkerDb } from "./db.ts";
+import { meteredFor } from "./metering.ts";
 import { pdfText } from "./flux.ts";
 
 const CONCURRENCY = Number(process.env.VX_PRIOR_WORK_CONCURRENCY ?? 3);
@@ -58,7 +59,7 @@ export async function processPriorWorkRegister(db: WorkerDb, model: { model: Lan
         if (i >= docs.length) return;
         const d = docs[i]!;
         try {
-          const r = await extractPriorWork(d, model.model);
+          const r = await extractPriorWork(d, meteredFor(db, model.model, reg.project_id));
           extracted.push(...r.items);
           usage.push(...r.usage);
           sources.push({ file: d.file, origin: d.origin, chars: d.text.length, items: r.items.length, ...(r.dropped ? { note: `${r.dropped} item(s) dropped: quote not found` } : {}) });
@@ -70,7 +71,6 @@ export async function processPriorWorkRegister(db: WorkerDb, model: { model: Lan
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, docs.length || 1) }, work));
-    for (const u of usage) if (u.inputTokens || u.outputTokens) await db.recordProjectCost(reg.project_id, "ai_tokens", "anthropic", u.model, u.inputTokens + u.outputTokens, "tokens");
 
     // 3. Merge, with the parts the owner recorded.
     const register = mergeRegister(extracted, await db.projectParts(reg.project_id));

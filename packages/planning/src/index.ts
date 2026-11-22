@@ -3,6 +3,8 @@ export * from "./ingest/parsers.ts";
 export * from "./ingest/chunks.ts";
 export * from "./llm/model.ts";
 export * from "./llm/partial.ts";
+export * from "./llm/pricing.ts";
+export * from "./llm/metered.ts";
 export * from "./extract.ts";
 export * from "./plan.ts";
 export * from "./plan-inputs.ts";

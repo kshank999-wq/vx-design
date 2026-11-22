@@ -24,7 +24,7 @@ export async function runExtraction(projectId: string, documentId: string, from?
   const path = from === "inputs" ? `/projects/${projectId}/inputs?step=1` : `/projects/${projectId}?tab=documents`;
   const { supabase } = await requireUser();
   let choice;
-  try { choice = getModel(); } catch (e) { fail(path, e); }
+  try { choice = getModel(projectId); } catch (e) { fail(path, e); }
   let prepared;
   try { prepared = await prepareExtraction(supabase, documentId); } catch (e) { fail(path, (e as Error).message); }
   try {
@@ -90,7 +90,7 @@ export async function createPlan(projectId: string, from?: string, mode?: "revis
   }
 
   let choice;
-  try { choice = getModel(); } catch (e) { fail(path, e); }
+  try { choice = getModel(projectId); } catch (e) { fail(path, e); }
   let planId: string;
   try {
     const opts = { capabilities: request.capabilities, projectContext: request.context, inputIds: request.input_ids, mustAddress: request.must_address };

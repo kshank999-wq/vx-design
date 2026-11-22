@@ -269,6 +269,11 @@ try {
   assert.match(await page.getByTestId("built-from").innerText(), /PT-1 RVT101HVHNWC00-B \(Riverdi\); PT-2 SIT5356AI-FQ-33E0-10\.000000 \(SiTime\); PT-3 DM1AA-SF-PEJ \(Hirose\);/);
   assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(), /PT-2 SIT5356AI[\s\S]*PT-3 DM1AA/);
   assert.equal(await page.getByTestId("plan-changes").count(), 0, "the new plan has taken the change in");
+  // Every AI call is recorded with its activity (offline here, so priced at $0).
+  await page.goto(`${P}/usage`);
+  const acts = await page.getByTestId("usage-by-activity").locator("tbody tr").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-activity")));
+  for (const a of ["Reading specifications", "Reading part datasheets", "Planning: full plan", "Planning: plan update"]) assert.ok(acts.includes(a), `${a} recorded: ${acts}`);
+  assert.match(await page.getByTestId("usage-tiles").innerText(), /\$0\.00\s+this month/);
 
   // 4. Leave a reference out; use the mock-up for concepts.
   await page.goto(`${P}/inputs?step=4`);

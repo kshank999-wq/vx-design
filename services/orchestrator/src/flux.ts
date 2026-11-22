@@ -8,6 +8,7 @@ import { extractFluxHistory, type LanguageModel } from "@vx/planning";
 import { buildInventory, historyDocuments, keepQuoted, normMpn, renderReport, runAudit, type CatalogEntry, type HistoryInput, type Upload } from "@vx/flux";
 import { inspectUpload, type UploadPolicy } from "@vx/security";
 import type { WorkerDb } from "./db.ts";
+import { meteredFor } from "./metering.ts";
 
 /** What a Flux export may contain: anything but programs and scripts. */
 const FLUX_POLICY: UploadPolicy = { maxBytes: 300 * 1048576,
@@ -62,8 +63,7 @@ export async function processFluxAudit(db: WorkerDb, model: { model: LanguageMod
     }
     let history: HistoryInput | null = null;
     if (docs.length) {
-      const { history: h, usage } = await extractFluxHistory(docs, model.model);
-      for (const u of usage) if (u.inputTokens || u.outputTokens) await db.recordProjectCost(audit.project_id, "ai_tokens", "anthropic", u.model, u.inputTokens + u.outputTokens, "tokens");
+      const { history: h, usage } = await extractFluxHistory(docs, meteredFor(db, model.model, audit.project_id));
       const d = keepQuoted(h.decisions, docs), c = keepQuoted(h.claims, docs);
       history = { model: model.label, offline: model.offline, dropped_quotes: d.dropped + c.dropped, decisions: d.kept, claims: c.kept };
     }

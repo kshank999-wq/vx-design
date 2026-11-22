@@ -153,9 +153,7 @@ export class ExecutionHandle {
       const cost = usageCost(u);
       await this.log(`model call (${purpose}): ${u.model}, ${u.inputTokens} in / ${u.outputTokens} out, $${cost.toFixed(4)}`,
                      { purpose, ...u, cost_usd: cost });
-      const tokens = u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheWriteTokens;
-      if ((await this.db.recordCost(this.exec.id, "ai_tokens", u.model.startsWith("claude") ? "anthropic" : u.model,
-                                    u.model, tokens, "tokens", cost)) === "over_budget") over = true;
+      if ((await this.db.recordAiCall(null, this.exec.id, { purpose, usage: u, costUsd: cost, durationMs: null, failed: false })) === "over_budget") over = true;
     }
     if (over) this.requestYield("AI budget reached");
   }
