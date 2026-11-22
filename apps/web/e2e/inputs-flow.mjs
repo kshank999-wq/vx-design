@@ -205,17 +205,47 @@ try {
   assert.match(ctx, /^- board: 160 × 100 mm, 1\.46 mm thick, 4 copper layers; parts placed but NOT routed$/m);
   assert.match(ctx, /^ {2}- \[PR-1\] \(selected, owner\) part: RVT101HVHNWC00-B \(Riverdi\) — 10\.1-inch front touchscreen\./m);
   assert.doesNotMatch(ctx, /DS3231/, "a left-out item is not given to the planner");
+  // The chosen part goes to the planner itself, with its specifications and files, cross-referenced to the register.
+  assert.match(ctx, /^- \[PT-1\] \(selected\) RVT101HVHNWC00-B \(Riverdi\) \[display\]; also PR-1 in the register\n {2}- used for: 10\.1 inch IPS TFT display with capacitive touch$/m);
+  assert.match(ctx, /^ {2}- specifications: Resolution 1280 x 800; Supply voltage 3\.3 V$/m);
+  assert.match(ctx, /^ {2}- files: riverdi-datasheet\.pdf \(datasheet\), display_model\.step \(3D model\), bracket\.step \(3D model\)$/m);
+  assert.doesNotMatch(ctx, /Changed since the last plan/, "no plan yet, so nothing has changed since one");
   await page.getByRole("button", { name: "Generate plan from these inputs" }).click();
   await page.waitForURL(/\/plans\//);
-  assert.match(await page.getByTestId("built-from").innerText(), /Built on REF-1 Front view \(mockup\); REF-2 Old slate schematic \(prior design\); PW-1 Flux audit #1: VC Smart Slate; the earlier-work register \(1 item\(s\), PR-1 onwards\);/);
+  assert.match(await page.getByTestId("built-from").innerText(), /Built on REF-1 Front view \(mockup\); REF-2 Old slate schematic \(prior design\); PW-1 Flux audit #1: VC Smart Slate; PT-1 RVT101HVHNWC00-B \(Riverdi\); the earlier-work register \(1 item\(s\), PR-1 onwards\);/);
   assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(),
-    /^adapts PW-1, REF-2, PR-1 RVT101HVHNWC00-B 10\.1-inch front touchscreen \(selected\) Continue the earlier work/);
+    /^adapts PW-1, REF-2, PR-1 RVT101HVHNWC00-B 10\.1-inch front touchscreen \(selected\), PT-1 RVT101HVHNWC00-B \(Riverdi\) Continue the earlier work/);
+  assert.equal(await page.getByTestId("plan-changes").count(), 0, "a new plan has nothing new since it");
   const schematic = page.locator("li.task", { hasText: "Schematic capture" }).getByTestId("basis");
   assert.equal(await schematic.getAttribute("data-mode"), "adapt");
   assert.match(await schematic.innerText(), /^adapts PW-1, REF-2 Start from the prior design/);
   assert.match(await page.locator("li.task", { hasText: "Mechanical envelope" }).getByTestId("basis").innerText(), /^adapts REF-1 /);
   assert.match(await page.locator("li.task", { hasText: "Preliminary power budget" }).getByTestId("basis").innerText(), /^starts fresh/);
   await shot(page, "03-plan");
+
+  // 3b. Something new after the plan: another part, from its datasheet. The project, inputs and plan pages list what is new
+  // since the plan; regenerating gives the planner the change and the old plan's tasks, and the new plan uses the part.
+  await page.goto(`${P}/inputs?step=3`);
+  await pf.getByLabel("Part files").setInputFiles([{ name: "sitime-tcxo.pdf", mimeType: "application/pdf", buffer: Buffer.from(textPdf(["SiTime Super-TCXO",
+    "Part number: SIT5356AI-FQ-33E0-10.000000", "Manufacturer: SiTime", "Description: 10 MHz Super-TCXO oscillator for timecode", "Frequency stability: 0.1 ppm", "Supply voltage: 3.3 V"])) }]);
+  await pf.getByRole("button", { name: "Upload and read the files" }).click();
+  await page.getByTestId("upload-partfiles-status").getByText(/^Found 1 part\(s\): SIT5356AI-FQ-33E0-10\.000000 \(SiTime\)/).waitFor();
+  await page.goto(P);
+  assert.match(await page.getByTestId("plan-changes").innerText(), /^New since plan v1[\s\S]*1 part added: PT-2 SIT5356AI-FQ-33E0-10\.000000 \(10 MHz Super-TCXO oscillator for timecode\)/);
+  await page.goto(`${P}/inputs?step=5`);
+  const ctx2 = await page.getByTestId("plan-context").locator("pre").textContent();
+  assert.match(ctx2, /^- \[PT-2\] \(selected\) SIT5356AI-FQ-33E0-10\.000000 \(SiTime\) \[timecode\]\n {2}- used for: 10 MHz Super-TCXO oscillator for timecode$/m);
+  assert.match(ctx2, /^ {2}- specifications: Frequency stability 0\.1 ppm; Supply voltage 3\.3 V$/m);
+  assert.match(ctx2, /^Changed since the last plan \(version 1, made \d{4}-\d{2}-\d{2}\)\. This plan replaces it/m);
+  assert.match(ctx2, /^- 1 part added: PT-2 SIT5356AI-FQ-33E0-10\.000000/m);
+  assert.match(ctx2, /^Tasks in plan version 1:\n- architecture: System and component architecture/m);
+  await shot(page, "03b-changed");
+  await page.getByTestId("plan-changes").getByRole("button", { name: "Regenerate the plan with these changes" }).click();
+  await page.waitForURL(/\/plans\//);
+  assert.match(await page.getByRole("heading", { level: 1 }).innerText(), /v2/);
+  assert.match(await page.getByTestId("built-from").innerText(), /PT-1 RVT101HVHNWC00-B \(Riverdi\); PT-2 SIT5356AI-FQ-33E0-10\.000000 \(SiTime\);/);
+  assert.match(await page.locator("li.task", { hasText: "System and component architecture" }).getByTestId("basis").innerText(), /PT-2 SIT5356AI/);
+  assert.equal(await page.getByTestId("plan-changes").count(), 0, "the new plan has taken the change in");
 
   // 4. Leave a reference out; use the mock-up for concepts.
   await page.goto(`${P}/inputs?step=4`);

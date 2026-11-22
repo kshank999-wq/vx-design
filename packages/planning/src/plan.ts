@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Discipline, PlannedTask, RiskLevel, ValidationKind, topologicalOrder } from "@vx/contracts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
-export const PLAN_PROMPT_VERSION = "plan-v2";
+export const PLAN_PROMPT_VERSION = "plan-v3";
 const MAX_REPAIR_ROUNDS = 2;
 
 export interface RequirementInput {
@@ -72,7 +72,11 @@ Every requirement must be covered by at least one task, or listed in deferred_re
 
 Earlier work comes first. When the context has an earlier-work register (PR-n), most decisions are already made: parts chosen, circuits designed, boards partitioned, layout started. Plan to CONTINUE that work, not to redo it: a task about a subsystem cites the PR items it continues and says whether each is kept (reuse), changed (adapt) or replaced (replace). Do not plan a selection or trade study for something already selected unless the register records a problem with it; then say so in concerns and give alternatives (exact part numbers where you can). Every item that is selected, designed, laid out or verified must be cited by at least one task. Items stated by the owner are decisions: keep them unless they cannot work, and then explain why.
 
-Build on what exists. The project context may list prior work (PW-n: earlier designs imported from other tools, with their parts, boards, decisions and open problems) and references (REF-n: mock-ups, sketches, drawings, datasheets). Do not plan to redo work that exists: plan to take it over, check it and finish it. For every task set basis: "reuse" when prior work or a reference is taken as it is and checked, "adapt" when it is the starting point but must change, "new" when nothing exists; cite the input ids in sources and say in reason what is taken over and what remains. Imported work is never verified: a task that reuses it still needs acceptance tests that re-establish it (ERC, DRC, fit, a review of the earlier decisions). Treat the import audit's open problems and claimed validations as work to plan, not as facts.`;
+Build on what exists. The project context may list prior work (PW-n: earlier designs imported from other tools, with their parts, boards, decisions and open problems) and references (REF-n: mock-ups, sketches, drawings, datasheets). Do not plan to redo work that exists: plan to take it over, check it and finish it. For every task set basis: "reuse" when prior work or a reference is taken as it is and checked, "adapt" when it is the starting point but must change, "new" when nothing exists; cite the input ids in sources and say in reason what is taken over and what remains. Imported work is never verified: a task that reuses it still needs acceptance tests that re-establish it (ERC, DRC, fit, a review of the earlier decisions). Treat the import audit's open problems and claimed validations as work to plan, not as facts.
+
+Parts the team has chosen (PT-n) come with their datasheet specifications and 3D models. Build the plan around them: cite each in the basis of the task that uses it (architecture, power budget, schematic, layout, enclosure fit), take its specifications into the calculations and checks, and plan a fit check against its model where it has one. Replace one only when it cannot meet a requirement, and then give the concerns and alternatives.
+
+When the context says what changed since the last plan, this plan replaces that one. Take every change into account: keep the earlier tasks that still hold under the same keys, revise the ones the changes affect, add tasks for new work, and say in the summary what changed in the plan and why.`;
 
 export interface PlanProblem {
   code: string;

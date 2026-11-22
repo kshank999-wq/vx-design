@@ -115,6 +115,8 @@ export class OfflineModel implements LanguageModel {
     const prior = [...pw, ...refsIn.filter((m) => m[2] === "prior design").map((m) => m[1]!)];
     // Register items already committed to (selected, designed, laid out, verified): the architecture task continues them.
     const committed = [...prompt.matchAll(/^\s+- \[(PR-\d+)\] \((selected|designed|laid out|verified)/gm)].map((m) => m[1]!);
+    // Parts the team chose (PT-n): the architecture task designs around them.
+    committed.push(...[...prompt.matchAll(/^- \[(PT-\d+)\] \((?!rejected)/gm)].map((m) => m[1]!));
     if (pw.length || refsIn.length || committed.length) {
       const none = { concerns: [] as string[], alternatives: [] as string[] };
       const basis = (key: string) => key === "enclosure-envelope" && looks.length ? { mode: "adapt", sources: looks, reason: "Start from the mock-ups (offline plan).", ...none }

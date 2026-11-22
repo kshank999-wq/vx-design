@@ -7,14 +7,14 @@
  "versions": {
   "planning": "@vx/planning@0.0.0"
  },
- "output_sha256": "70a399a0665f9202164630d2166f06c1400d98a8bf386b2ff946dc5460a7b93c",
+ "output_sha256": "d31acd1c1d6f596c2d7f739dbf7bebbf00521c84f75b726eaa11d118ff0a24dc",
  "output": {
   "plan": {
    "adjustments": [],
    "assumptions": [],
    "attempts": 1,
    "deferred": [],
-   "promptVersion": "plan-v2",
+   "promptVersion": "plan-v3",
    "summary": "Offline heuristic plan (not AI-generated).",
    "tasks": [
     {

@@ -11,6 +11,7 @@ import { crossDocumentDuplicates } from "@/lib/documents";
 import { SUBSYSTEMS, subsystemLabel, type RegisterItem } from "@vx/planning";
 import { IMAGE_TYPES, ITEM_STATUS_LABEL, loadPlanInputs, PART_STATUS, refCode, REFERENCE_KINDS, VISUAL_KINDS } from "@/lib/plan-inputs";
 import { createPlan, runExtraction } from "../actions";
+import { PlanChangesNotice } from "@/components/PlanChangesNotice";
 import { placePartFile, readPartFiles } from "./actions";
 import { editRegisterItem, extractAll, removePart, removeReference, requestRegister, savePart, setAuditInPlan, updateReference } from "./actions";
 import { createAudit, runAudit } from "../flux/actions";
@@ -351,7 +352,7 @@ export default async function InputsPage({ params, searchParams }: {
           {ready && <>
             <p className="small" data-testid="register-summary">
               {regItems.length} item(s) from {regSources.filter((x) => x.chars > 0).length} document(s), built {new Date(ready.completed_at!).toLocaleString()}
-              {" · "}{loaded.mustAddress.length} the plan must address
+              {" · "}{loaded.mustAddress.filter((m) => m.id.startsWith("PR-")).length} the plan must address
               {Object.values(regEdits).some((e) => e.excluded) && <> · {Object.values(regEdits).filter((e) => e.excluded).length} left out</>}
               {partsChangedSince && <span className="warn-text"> · parts changed since: rebuild to include them</span>}
               {registerNewer && plans?.length ? <span className="warn-text"> · newer than the latest plan: generate the plan again to use it</span> : null}</p>
@@ -413,11 +414,12 @@ export default async function InputsPage({ params, searchParams }: {
 
       <section>
         <h2>The plan</h2>
-        <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.length} of which the plan must address` : ""}.</p>
+        <p className="small">{active.length} requirement(s) from {(docs ?? []).length} document(s){loaded.sources.length ? `; builds on ${loaded.sources.map((s) => s.id).join(", ")}` : "; no references or prior work to build on"}{loaded.register ? `; ${loaded.register.items.length} earlier-work item(s), ${loaded.mustAddress.filter((m) => m.id.startsWith("PR-")).length} of which the plan must address` : ""}{loaded.inputs.parts?.length ? `; ${loaded.inputs.parts.length} chosen part(s), each to be used by a task` : ""}.</p>
+        <PlanChangesNotice changes={loaded.changes} canEdit={canEdit} action={createPlan.bind(null, projectId, "inputs")} />
         <details className="small" data-testid="plan-context"><summary>What the planner reads</summary><pre className="doc">{loaded.context}</pre></details>
-        {canEdit && (
+        {canEdit && !loaded.changes?.items.length && (
           <form action={createPlan.bind(null, projectId, "inputs")} className="row">
-            <SubmitButton disabled={!active.length} pendingText="Starting…">Generate plan from these inputs</SubmitButton>
+            <SubmitButton disabled={!active.length} pendingText="Starting…">{plans?.length ? "Regenerate the plan from these inputs" : "Generate plan from these inputs"}</SubmitButton>
             {!active.length && <span className="small muted">Extract requirements first.</span>}
           </form>
         )}

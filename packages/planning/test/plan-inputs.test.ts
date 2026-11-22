@@ -99,3 +99,23 @@ test("manufacturing routes go to the planner", () => {
   assert.match(text, /^Manufacturing routes \(prototype now, production later\)\. Design each part for its production process/m);
   assert.match(text, /^- Enclosure base: prototype ASA \(fdm\) × 3; production Injection molding, PC\/ABS$/m);
 });
+
+test("chosen parts and what changed since the last plan go to the planner; the offline plan designs around the parts", async () => {
+  const { text, sources } = planContext({
+    project: { name: "Slate" },
+    parts: [{ id: "PT-1", mpn: "SIT5356AI", manufacturer: "SiTime", summary: "10 MHz Super-TCXO", subsystem: "timecode", status: "selected",
+              role: "timecode reference", specs: [{ name: "Stability", value: "0.1 ppm" }], files: ["tcxo.pdf (datasheet)", "tcxo.step (3D model)"] }],
+    changes: { version: 2, since: "2026-11-21T10:00:00Z", items: ["1 part added: PT-1 SIT5356AI"], tasks: [{ key: "architecture", title: "Architecture", stage: "S1", status: "done" }] },
+  });
+  assert.deepEqual(sources, [{ id: "PT-1", kind: "part", label: "SIT5356AI (SiTime)" }]);
+  assert.match(text, /^- \[PT-1\] \(selected\) SIT5356AI \(SiTime\): 10 MHz Super-TCXO \[timecode\]$/m);
+  assert.match(text, /^ {2}- used for: timecode reference$/m);
+  assert.match(text, /^ {2}- specifications: Stability 0\.1 ppm$/m);
+  assert.match(text, /^ {2}- files: tcxo\.pdf \(datasheet\), tcxo\.step \(3D model\)$/m);
+  assert.match(text, /^Changed since the last plan \(version 2, made 2026-11-21\)\. This plan replaces it/m);
+  assert.match(text, /^- 1 part added: PT-1 SIT5356AI$/m);
+  assert.match(text, /^Tasks in plan version 2:\n- architecture: Architecture \[S1\] \(done\)$/m);
+  const plan = await generatePlan([{ refCode: "REQ-FUN-001", kind: "functional", priority: "must", status: "confirmed", text: "Keep time." }], new OfflineModel(),
+    { projectContext: text, inputIds: ["PT-1"], mustAddress: [{ id: "PT-1", label: "SIT5356AI" }] });
+  assert.deepEqual(plan.tasks.find((t) => t.key === "architecture")?.basis?.sources, ["PT-1"]);
+});

@@ -106,6 +106,12 @@ sit beside the steps.
   it, sub-folders included. System clutter (.DS_Store, Thumbs.db, __MACOSX) is left out, and each box keeps only the
   file types it takes, saying how many it left out. Flux imports take whole export folders. When two files share a
   name, the sub-folder becomes part of the name.
+- **Regenerating the plan:** the planner reads every input, including the parts chosen from their datasheets (PT-n,
+  with their specifications and model files; every one must be used by a task or its replacement argued). When anything
+  is added or changed after a plan is made (a part or its files, a specification, requirements, references, prior work,
+  the register, manufacturing routes, setup, the design freeze, standards), the project, Project inputs and plan pages
+  list what is new with a "Regenerate the plan" button. The new plan is given that list and the old plan's tasks, keeps
+  what still holds under the same keys, and revises the rest.
 - **Workspace activity panel:** the plan's tasks are grouped by stage, with done/total. Stages with open work start
   expanded.
 

@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
+import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { planChanges } from "@/lib/plan-inputs";
+import { createPlan } from "../../actions";
 import { authorizeRun, decidePlan, revisePlan, submitPlan, updateTask } from "./actions";
 
 interface AcceptanceTest { id: string; description: string; method: string; validationKind?: string }
@@ -38,6 +41,9 @@ export default async function PlanPage({ params, searchParams }: {
   const canDecide = plan.status === "awaiting_approval" && (role === "owner" || role === "reviewer");
   const canRevise = plan.status !== "draft" && (role === "owner" || role === "engineer");
   const gen = (plan.generator ?? {}) as Generator;
+  // On the newest plan: what has been added since it was made, and a button to regenerate it.
+  const changes = role === "owner" || role === "engineer" ? await planChanges(supabase, projectId) : null;
+  const isLatest = changes?.version === plan.version;
   const keyOf = new Map((tasks ?? []).map((t) => [t.id, t.key]));
   const reqById = new Map((reqs ?? []).map((r) => [r.id, r as Req]));
   const deferred = (plan.deferred ?? []) as { ref: string; reason: string }[];
@@ -83,6 +89,7 @@ export default async function PlanPage({ params, searchParams }: {
           {reuses} task(s) reuse or adapt earlier work{replaces ? `, ${replaces} replace it` : ""}. <Link href={`/projects/${projectId}/inputs`}>Project inputs</Link></p>
       )}
 
+      {isLatest && <PlanChangesNotice changes={changes} canEdit action={createPlan.bind(null, projectId, "project")} />}
       <div className="card row spread">
         <span className="small">
           {plan.status === "draft" && "Draft: edit tasks, then submit the plan for approval."}
@@ -201,7 +208,7 @@ export default async function PlanPage({ params, searchParams }: {
                   return <div className="small" data-testid="basis" data-mode={b.mode}>
                     <p><span className={`pill pill-${pill}`}>{label}</span>
                       {b.sources.length > 0 && <> {b.sources.map((x) => { const inp = inputs.find((i) => i.id === x);
-                        return <span key={x}><strong title={inp?.label}>{x}</strong>{inp?.kind === "register_item" && <span className="muted"> {inp.label}</span>}</span>; })
+                        return <span key={x}><strong title={inp?.label}>{x}</strong>{(inp?.kind === "register_item" || inp?.kind === "part") && <span className="muted"> {inp.label}</span>}</span>; })
                         .flatMap((el, k) => (k ? [", ", el] : [el]))}</>} {b.reason}</p>
                     {!!b.concerns?.length && <p data-testid="basis-concerns"><strong>Concerns:</strong> {b.concerns.join("; ")}</p>}
                     {!!b.alternatives?.length && <p data-testid="basis-alternatives"><strong>Alternatives:</strong> {b.alternatives.join("; ")}</p>}

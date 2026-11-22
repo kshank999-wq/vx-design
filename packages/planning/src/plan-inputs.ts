@@ -36,8 +36,31 @@ export interface PlanInputs {
   register?: RegisterItem[];
   /** How each physical part is made now and later, one line per part ("Enclosure base: prototype …; production …"). */
   routes?: string[];
+  /** Parts the team has chosen (recorded from their datasheets and models), cited as PT-n. */
+  parts?: ChosenPart[];
+  /** What changed since the plan this one replaces, with that plan's tasks, so a new plan takes it all in. */
+  changes?: PlanChanges | null;
 }
-export interface PlanInputSource { id: string; kind: "prior_work" | "reference"; label: string }
+export interface ChosenPart {
+  id: string;                 // "PT-1"
+  mpn: string;
+  manufacturer?: string | null;
+  summary?: string | null;    // what it is, from the datasheet
+  role?: string | null;
+  subsystem?: string | null;
+  status: string;             // candidate, selected, designed, laid_out, verified
+  note?: string | null;
+  specs?: { name: string; value: string }[];
+  files?: string[];           // "riverdi.pdf (datasheet)", "display.step (3D model)"
+  register?: string | null;   // the register item for the same part, when there is one
+}
+export interface PlanChanges {
+  version: number;            // the plan these changes are measured from
+  since: string;              // ISO time it was made
+  items: string[];            // one line per change
+  tasks: { key: string; title: string; stage?: string | null; status?: string | null }[];
+}
+export interface PlanInputSource { id: string; kind: "prior_work" | "reference" | "part"; label: string }
 
 const MAX_PART_LINES = 60, MAX_DECISIONS = 25;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -104,10 +127,32 @@ export function planContext(inputs: PlanInputs): { text: string; sources: PlanIn
     if (w.migration.length) L.push("- import audit's suggested next steps:", ...w.migration.map((m) => `  - ${clip(one(m), 200)}`));
   }
   if (inputs.register?.length) L.push("", registerText(inputs.register));
+  if (inputs.parts?.length) {
+    L.push("", "Parts the team has chosen (recorded from the manufacturers' datasheets and models; cite as PT-n). Design around them: " +
+      "do not plan to select something else for the same job unless one cannot work, and then say why. Use the specifications below " +
+      "for the power budget, interfaces, mechanical fit and the enclosure, and their 3D models for the fit checks:");
+    for (const p of inputs.parts) {
+      sources.push({ id: p.id, kind: "part", label: `${p.mpn}${p.manufacturer ? ` (${p.manufacturer})` : ""}` });
+      const head = `- [${p.id}] (${p.status.replace("_", " ")}) ${p.mpn}${p.manufacturer ? ` (${p.manufacturer})` : ""}` +
+        `${p.summary ? `: ${clip(one(p.summary), 160)}` : ""}${p.subsystem ? ` [${p.subsystem.replace(/_/g, " ")}]` : ""}${p.register ? `; also ${p.register} in the register` : ""}`;
+      L.push(head);
+      if (p.role) L.push(`  - used for: ${clip(one(p.role), 200)}`);
+      if (p.specs?.length) L.push(`  - specifications: ${p.specs.slice(0, 12).map((x) => `${one(x.name)} ${one(x.value)}`).join("; ")}`);
+      if (p.files?.length) L.push(`  - files: ${p.files.join(", ")}`);
+      if (p.note) L.push(`  - note: ${clip(one(p.note), 300)}`);
+    }
+  }
   if (inputs.routes?.length) {
     L.push("", "Manufacturing routes (prototype now, production later). Design each part for its production process from the start, plan the " +
       "prototype builds and the production tooling, and do not sign off strength or drop tests on a prototype material that differs from production:",
       ...inputs.routes.map((r) => `- ${one(r)}`));
+  }
+  if (inputs.changes) {
+    const c = inputs.changes;
+    L.push("", `Changed since the last plan (version ${c.version}, made ${c.since.slice(0, 10)}). This plan replaces it: take every change ` +
+      "below into account. Keep the tasks that still hold (with the same keys), change the ones these affect, add the work they need, " +
+      "and drop what they make unnecessary:", ...(c.items.length ? c.items.map((x) => `- ${one(x)}`) : ["- nothing recorded; review the plan against the inputs above"]));
+    if (c.tasks.length) L.push("", `Tasks in plan version ${c.version}:`, ...c.tasks.map((t) => `- ${t.key}: ${one(t.title)}${t.stage ? ` [${t.stage}]` : ""}${t.status && t.status !== "pending" ? ` (${t.status.replace(/_/g, " ")})` : ""}`));
   }
   return { text: L.join("\n"), sources };
 }

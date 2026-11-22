@@ -422,3 +422,7 @@ details.about > summary { color: var(--accent); }
 .file-picker.over { border-color: var(--accent); background: var(--mint); }
 .fp-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .fp-chosen { margin-top: 8px; }
+
+/* What changed since the latest plan */
+.notice-changes { border-left: 4px solid var(--accent, #2563eb); }
+.notice-changes ul { margin: 8px 0 10px; padding-left: 18px; }

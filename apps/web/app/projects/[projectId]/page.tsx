@@ -8,6 +8,8 @@ import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StagedFileInput } from "@/components/StagedFileInput";
 import { requireUser } from "@/lib/auth";
+import { PlanChangesNotice } from "@/components/PlanChangesNotice";
+import { planChanges } from "@/lib/plan-inputs";
 import { createPlan, inviteMember, runExtraction, setRequirementStatus, uploadDocument } from "./actions";
 import { confirmStandard, proposeStandard } from "@/app/knowledge/actions";
 import { LicenseFlag, SourceForm } from "@/components/Knowledge";
@@ -67,6 +69,7 @@ export default async function ProjectPage({ params, searchParams }: {
     supabase.from("standards").select("id, identifier, title, domain").order("domain").order("identifier"),
     supabase.from("sources").select("id, title, identifier, publisher, license, status, indexed_chunks").eq("project_id", projectId).order("created_at"),
   ]);
+  const changes = me?.role && me.role !== "client" ? await planChanges(supabase, projectId) : null;
   const roleCounts = Object.entries((members ?? []).reduce<Record<string, number>>((m, x) => ({ ...m, [x.role]: (m[x.role] ?? 0) + 1 }), {}));
   const { data: scans } = await supabase.from("file_scans").select("path, status, signature").eq("bucket", "project-files")
     .in("path", (docs ?? []).map((d) => d.storage_path));
@@ -97,6 +100,7 @@ export default async function ProjectPage({ params, searchParams }: {
       </div>
       <StageBar supabase={supabase} projectId={projectId} />
       <Banner error={error} notice={notice} />
+      <PlanChangesNotice changes={changes} canEdit={canEdit} action={createPlan.bind(null, projectId, "project")} />
       <nav className="tabs" aria-label="Project sections" data-testid="project-tabs">{TABS.map(([k, l]) => (
         <Link key={k} href={k === "overview" ? `/projects/${projectId}` : `/projects/${projectId}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className="tab">
           {l}{tabCount[k] ? <span className="tab-count">{tabCount[k]}</span> : null}</Link>))}</nav>
