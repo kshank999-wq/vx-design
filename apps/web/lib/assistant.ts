@@ -1,5 +1,5 @@
 import "server-only";
-import { projectCostSink } from "@/lib/model";
+import { projectCostSink, projectSpendGuard } from "@/lib/model";
 import { ClaudeModel, MeteredModel, PlanChange, partialStringField, type GenerateRequest } from "@vx/planning";
 import { z } from "zod";
 import { citation, searchKnowledge, type KnowledgeHit } from "./knowledge";
@@ -248,7 +248,7 @@ export async function answer(ctx: ProjectContext, question: string, onText?: (de
     return { ...o, citations: resolveCitations(ctx, o.citations), label: "Offline status summary (not AI)", offline: true };
   }
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("The assistant is not configured: set ANTHROPIC_API_KEY (or VX_LLM=offline).");
-  const model = new MeteredModel(new ClaudeModel({ effort: "medium", maxTokens: 8000, model: process.env.VX_ASSISTANT_MODEL }), projectCostSink(ctx.project.id));
+  const model = new MeteredModel(new ClaudeModel({ effort: "medium", maxTokens: 8000, model: process.env.VX_ASSISTANT_MODEL }), projectCostSink(ctx.project.id), projectSpendGuard(ctx.project.id));
   const { output, usage } = await model.generate({
     purpose: "workspace_chat",
     system: SYSTEM,

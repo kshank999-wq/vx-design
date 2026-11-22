@@ -1,5 +1,5 @@
 import "server-only";
-import { ClaudeModel, MeteredModel, OfflineModel, type AiCallSink, type LanguageModel } from "@vx/planning";
+import { ClaudeModel, MeteredModel, OfflineModel, type AiCallGuard, type AiCallSink, type LanguageModel } from "@vx/planning";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -23,12 +23,22 @@ export function projectCostSink(projectId: string): AiCallSink {
   };
 }
 
+/** Refuses an AI call when the project's account cannot pay for it (prepaid balance or monthly allowance used up). */
+export function projectSpendGuard(projectId: string): AiCallGuard {
+  return async () => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("ai_spend_problem", { p_project: projectId });
+    if (error) throw new Error(error.message);
+    return (data as string | null) ?? null;
+  };
+}
+
 /**
  * Claude when ANTHROPIC_API_KEY is set; the deterministic offline heuristic when VX_LLM=offline (local development and
  * end-to-end tests). With a project, every call is priced and recorded against it.
  */
 export function getModel(projectId?: string): ModelChoice {
-  const meter = (m: LanguageModel) => (projectId ? new MeteredModel(m, projectCostSink(projectId)) : m);
+  const meter = (m: LanguageModel) => (projectId ? new MeteredModel(m, projectCostSink(projectId), projectSpendGuard(projectId)) : m);
   if (process.env.VX_LLM === "offline") {
     return { model: meter(new OfflineModel()), label: "Offline heuristic (not AI)", offline: true };
   }
@@ -48,10 +58,10 @@ export const READING_MODELS: [string, string][] = [
 /** A given Claude model, metered for the project; purposes get a prefix (e.g. "compare:") to tell such calls apart. */
 export function modelFor(projectId: string, model: string, prefix = ""): ModelChoice {
   if (process.env.VX_LLM === "offline") {
-    return { model: new MeteredModel(new OfflineModel(), withPrefix(projectCostSink(projectId), prefix)), label: `Offline heuristic (stand-in for ${model})`, offline: true };
+    return { model: new MeteredModel(new OfflineModel(), withPrefix(projectCostSink(projectId), prefix), projectSpendGuard(projectId)), label: `Offline heuristic (stand-in for ${model})`, offline: true };
   }
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("No model configured: set ANTHROPIC_API_KEY, or VX_LLM=offline for the offline heuristic.");
-  return { model: new MeteredModel(new ClaudeModel({ model }), withPrefix(projectCostSink(projectId), prefix)), label: model, offline: false };
+  return { model: new MeteredModel(new ClaudeModel({ model }), withPrefix(projectCostSink(projectId), prefix), projectSpendGuard(projectId)), label: model, offline: false };
 }
 const withPrefix = (sink: AiCallSink, prefix: string): AiCallSink => (prefix ? (e) => sink({ ...e, purpose: `${prefix}${e.purpose}` }) : sink);
 

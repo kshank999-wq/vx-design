@@ -70,12 +70,23 @@ New project → import this repository:
 | `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET` | | Optional, server only. Parts from their datasheets are looked up here before the AI reads them. |
 | `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET` | | Optional, as above (the same keys as the workers'). |
 | `MOUSER_API_KEY` | | Optional, as above. Without any distributor key, parts are matched against the saved parts catalog, then read by AI. |
+| `STRIPE_SECRET_KEY` | `sk_live_…` (or `sk_test_…` to try it) | Optional, server only. Card top-ups on Account → Billing through Stripe Checkout. No webhook is needed: payments are confirmed on the return page, and any left open are checked again at the next Billing visit. Uses `VX_ASSISTANT_SIGNING_KEY` to sign the credit it records. Without it, staff add credit with `add_credit`. |
 
 Never set `SUPABASE_SERVICE_ROLE_KEY` on Vercel: the web app does not use it.
 
 Uploads never pass through Vercel's function body limit (4.5 MB). Files go from the browser to a staging folder in
 storage; the server action reads each one back as the signed-in user, checks it and stores it. The worker removes
 staged copies nobody collected after an hour.
+
+**Billing (staff, in the Supabase SQL editor).** Accounts stay on the unbilled `standard` plan until they choose a plan
+on Account → Billing. Staff can add credit (a bank transfer, a goodwill credit; a negative amount takes it back) and
+change plans or prices:
+
+```sql
+select public.add_credit('<user id>', 100, 'Bank transfer 2026-11-30');
+select public.set_account_plan('<user id>', 'unlimited');            -- staff/internal: not billed, cannot be changed by the user
+update public.account_plans set monthly_fee_usd = 40, ai_markup_pct = 0 where id = 'studio';
+```
 
 Add your domain, then make sure `VX_SITE_URL` and the Supabase site URL (`deploy-db.sh`) both use it.
 

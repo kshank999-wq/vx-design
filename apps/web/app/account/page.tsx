@@ -49,6 +49,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <p className="crumbs"><Link href="/projects">Projects</Link> /</p>
       <h1>Account</h1>
       <Banner error={error ?? e?.message} notice={notice} />
+      <p data-testid="billing-link"><Link href="/account/billing">Billing</Link>: balance, plan, add credit and monthly statements.</p>
       {plan && usage && (
         <>
           <p data-testid="plan"><strong>{plan.name} plan.</strong> {plan.description}</p>

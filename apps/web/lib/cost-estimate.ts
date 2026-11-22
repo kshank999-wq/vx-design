@@ -5,7 +5,8 @@ import { PRICES, ruleExtract, usageCost, type ParsedDocument, type Usage } from 
 /**
  * What an AI action is likely to cost, before it runs: from this project's own recorded calls when it has some, else
  * from the account's other projects, else a typical figure. Shown next to the button that starts the action, with the
- * basis ("from your last 4", "typical"), so nobody is surprised by a charge.
+ * basis ("from your last 4", "typical"), so nobody is surprised by a charge. On a billed plan the figure is what will be
+ * charged (our cost plus the plan's markup).
  */
 export interface Estimate { usd: number; basis: string; upTo?: boolean }
 
@@ -23,7 +24,7 @@ const TYPICAL: Record<Kind, number> = { planUpdate: 0.75, planFull: 2.6, partRea
 /** Typical cost of reading one block of a specification with AI, at Opus 5.5 prices. */
 const TYPICAL_PER_AI_BLOCK = 0.004;
 
-export interface CostHistory { project: Map<Kind, { ops: number; usd: number }>; account: Map<Kind, { ops: number; usd: number }>; perAiBlock: { usd: number; blocks: number } }
+export interface CostHistory { /** What a dollar of our cost is charged at (1 + plan markup). */ rate: number; project: Map<Kind, { ops: number; usd: number }>; account: Map<Kind, { ops: number; usd: number }>; perAiBlock: { usd: number; blocks: number } }
 
 /** Per operation (first call plus its repair rounds), from recorded AI calls. */
 function tally(rows: { purpose: string | null; cost_usd: number }[]) {
@@ -38,9 +39,10 @@ function tally(rows: { purpose: string | null; cost_usd: number }[]) {
 
 export async function costHistory(supabase: SupabaseClient, projectId: string): Promise<CostHistory> {
   const since = new Date(Date.now() - 90 * 86400e3).toISOString();
-  const [{ data: rows }, { data: docs }] = await Promise.all([
+  const [{ data: rows }, { data: docs }, { data: rate }] = await Promise.all([
     supabase.from("cost_events").select("project_id, purpose, cost_usd").eq("kind", "ai_tokens").gt("cost_usd", 0).gte("created_at", since).limit(5000),
     supabase.from("documents").select("extraction_report").eq("project_id", projectId).eq("extraction_status", "done"),
+    supabase.rpc("project_billing_rate", { p_project: projectId }),
   ]);
   const all = (rows ?? []) as { project_id: string; purpose: string | null; cost_usd: number }[];
   let usd = 0, blocks = 0;
@@ -50,23 +52,23 @@ export async function costHistory(supabase: SupabaseClient, projectId: string): 
     usd += r.usage.reduce((n, u) => n + usageCost(u), 0);
     blocks += r.sources.aiBlocks;
   }
-  return { project: tally(all.filter((r) => r.project_id === projectId)), account: tally(all), perAiBlock: { usd, blocks } };
+  return { rate: Number(rate ?? 1) || 1, project: tally(all.filter((r) => r.project_id === projectId)), account: tally(all), perAiBlock: { usd, blocks } };
 }
 
 const round = (n: number) => (n < 0.1 ? Math.round(n * 100) / 100 : n < 1 ? Math.round(n * 20) / 20 : Math.round(n * 10) / 10);
 
 export function estimate(h: CostHistory, kind: Kind, opts: { scale?: number } = {}): Estimate {
-  const p = h.project.get(kind), a = h.account.get(kind);
-  if (p && p.ops >= 1) return { usd: round(p.usd / p.ops), basis: `from this project's last ${p.ops}` };
-  if (a && a.ops >= 1) return { usd: round(a.usd / a.ops), basis: `from your other projects (${a.ops})` };
-  return { usd: round(TYPICAL[kind] * (opts.scale ?? 1)), basis: "typical" };
+  const p = h.project.get(kind), a = h.account.get(kind), r = h.rate;
+  if (p && p.ops >= 1) return { usd: round((p.usd / p.ops) * r), basis: `from this project's last ${p.ops}` };
+  if (a && a.ops >= 1) return { usd: round((a.usd / a.ops) * r), basis: `from your other projects (${a.ops})` };
+  return { usd: round(TYPICAL[kind] * (opts.scale ?? 1) * r), basis: "typical" };
 }
 
 /** Cost of reading these specifications: the blocks rules cannot take go to the model. */
 export function extractionEstimate(h: CostHistory, docs: ParsedDocument[], model?: string | null): Estimate {
   const blocks = docs.reduce((n, d) => n + ruleExtract(d).aiBlocks.length, 0);
   if (!blocks) return { usd: 0, basis: "the rules can read it all" };
-  const ratio = modelRatio(model);
+  const ratio = modelRatio(model) * h.rate;
   if (h.perAiBlock.blocks >= 20) return { usd: round((h.perAiBlock.usd / h.perAiBlock.blocks) * blocks * ratio), basis: `${blocks} block(s) for AI, at this project's rate` };
   return { usd: round(TYPICAL_PER_AI_BLOCK * blocks * ratio), basis: `${blocks} block(s) for AI, typical rate` };
 }

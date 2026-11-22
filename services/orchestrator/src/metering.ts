@@ -1,7 +1,8 @@
-/** AI calls made by worker jobs outside a run (plans, Flux history, the earlier-work register, concept briefs), recorded under their project. */
+/** AI calls made by worker jobs outside a run (plans, Flux history, the earlier-work register, concept briefs), recorded under their project and
+ * refused before the call when the project's account cannot pay (its balance or allowance is used up). */
 import { MeteredModel, type LanguageModel } from "@vx/planning";
 import type { WorkerDb } from "./db.ts";
 
 export function meteredFor(db: WorkerDb, model: LanguageModel, projectId: string): LanguageModel {
-  return new MeteredModel(model, async (e) => { await db.recordAiCall(projectId, null, e); });
+  return new MeteredModel(model, async (e) => { await db.recordAiCall(projectId, null, e); }, () => db.aiSpendProblem(projectId));
 }

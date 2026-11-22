@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { MeteredModel, ModelOutputError, usageCost, type AiCallEvent, type LanguageModel } from "../src/index.ts";
+import { MeteredModel, ModelOutputError, SpendStoppedError, usageCost, type AiCallEvent, type LanguageModel } from "../src/index.ts";
 
 const usage = { model: "claude-opus-5-5", inputTokens: 100_000, outputTokens: 50_000, cacheReadTokens: 200_000, cacheWriteTokens: 4_000 };
 
@@ -42,4 +42,18 @@ test("cache breakpoints only where a follow-up is expected: the opening message,
   assert.equal(three[1], msgs[1], "earlier assistant turns are left exactly as returned");
   const own = [{ role: "user" as const, content: [{ type: "text" as const, text: "ctx", cache_control: { type: "ephemeral" as const } }, { type: "text" as const, text: "q" }] }];
   assert.deepEqual(cacheBreakpoints(own, "follow-up"), own, "a caller's own breakpoint is kept as it is");
+});
+
+test("a guard stops a call before it is made; a guard that cannot run lets it through", async () => {
+  let calls = 0;
+  const inner: LanguageModel = { async generate() { calls++; return { output: { ok: true } as never, assistantMessage: { role: "assistant", content: "" }, usage }; } };
+  const events: AiCallEvent[] = [];
+  const req = { purpose: "chat", system: "", messages: [], schema: z.object({ ok: z.boolean() }) };
+  const stopped = new MeteredModel(inner, (e) => { events.push(e); }, () => "the prepaid balance is used up ($0.00)");
+  await assert.rejects(stopped.generate(req), (e: unknown) => e instanceof SpendStoppedError && /balance is used up/.test((e as Error).message));
+  assert.equal(calls, 0);
+  assert.equal(events.length, 0);
+  await new MeteredModel(inner, () => {}, () => null).generate(req);
+  await new MeteredModel(inner, () => {}, () => { throw new Error("database down"); }).generate(req);
+  assert.equal(calls, 2);
 });

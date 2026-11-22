@@ -445,6 +445,11 @@ export class WorkerDb {
     });
   }
 
+  /** Why the project's account may not spend on AI now (balance or allowance used up), or null. */
+  async aiSpendProblem(projectId: string): Promise<string | null> {
+    return this.rpc("ai_spend_problem", { p_project: projectId });
+  }
+
   /** A cost outside a run (concept generation is asked for directly, not by a plan task). */
   async recordProjectCost(projectId: string, kind: "ai_tokens" | "api_call", provider: string, resource: string,
                           quantity: number, unit: string, costUsd = 0): Promise<void> {

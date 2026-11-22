@@ -127,6 +127,14 @@ sit beside the steps.
   and recorded with its purpose, tokens, cache use, time and who asked (`record_ai_call`); calls that fail after the
   model ran are billed and marked. Each project has an **AI usage** page (menu): this month, all time, cost per minute
   of AI time, by activity, and every call. The Account page totals AI spend by month, project and activity.
+- **Billing (groundwork):** Account → **Billing** shows the prepaid balance, the plan, card top-ups (Stripe Checkout)
+  and a statement per month (page and CSV) listing every charge with the AI call behind it: project, activity, model,
+  tokens, our cost and the amount charged. Plans on offer (placeholder prices in `account_plans`): **Pay as you go**
+  (no fee, cost + 25%), **Studio** ($50/month, AI at exact cost), **Team** ($150/month including $100 of AI at cost).
+  Every cost event in a billed account's projects is charged as it is recorded (`billing_ledger`); the plan fee once a
+  calendar month. When the balance reaches zero, AI work pauses (running runs stop at their next checkpoint, plan
+  builds and AI actions are refused before any call is made) until credit is added. The internal plans (`standard`,
+  `unlimited`) are not billed and keep their monthly allowances. Estimates on billed plans include the markup.
 - **Cost before you click:** each button that starts AI work shows its likely cost and where the figure comes from:
   plan update and rebuild, plan from requirements, reading specifications (only the blocks rules cannot read are
   counted; "no AI cost" when rules read it all), reading datasheets, chat questions and model comparisons. Figures come
