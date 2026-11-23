@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { deriveIntake } from "@/lib/intake-derive";
 import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
@@ -33,7 +34,19 @@ export default async function RisksPage({ params, searchParams }: {
   const shown = show === "all" ? [...live, ...settled] : live;
   const counts = live.reduce<Record<string, number>>((a, r) => ({ ...a, [r.level]: (a[r.level] ?? 0) + 1 }), {});
   const gaps = (intake?.feasibility_gaps ?? []) as string[];
-  const i = intake ?? {} as Record<string, never>;
+  // Empty intake fields are filled from what the project already says (answers, requirements, freeze), labelled.
+  const saved = (intake ?? {}) as { intended_use?: string | null; regions?: string[] | null; target_standards?: string[] | null; max_dimensions?: string | null;
+    power_source?: string | null; radios?: string[] | null; quantity?: number | null; target_unit_cost?: number | null; currency?: string | null; notes?: string | null };
+  const d = await deriveIntake(supabase, projectId);
+  const filled: string[] = [];
+  const fillList = (have: string[] | null | undefined, got: string[], f: string) => (have?.length ? have : got.length ? (filled.push(f), got) : have ?? []);
+  const fillText = (have: string | null | undefined, got: string | null, f: string) => (have ? have : got ? (filled.push(f), got) : have ?? "");
+  const i = { ...saved,
+    regions: fillList(saved.regions, d.regions, "regions"), radios: fillList(saved.radios, d.radios, "radios"),
+    target_standards: fillList(saved.target_standards, d.standards, "standards"),
+    power_source: fillText(saved.power_source, d.power.length ? d.power.join(" + ") : null, "power"),
+    max_dimensions: fillText(saved.max_dimensions, d.max_dimensions, "max_dimensions"), intended_use: fillText(saved.intended_use, d.intended_use, "intended_use") };
+  const fromWhere = [...new Set(filled.map((f) => d.sources[f]).filter(Boolean))];
 
   return (
     <main>
@@ -48,6 +61,7 @@ export default async function RisksPage({ params, searchParams }: {
         { key: "intake", label: "Intake", content: (<>
       <section>
         <form action={saveIntake.bind(null, projectId)} className="card stack" data-testid="intake">
+          {filled.length > 0 && <p className="banner" data-testid="intake-prefilled">Filled in from {fromWhere.join(", ")} ({filled.map((f) => f.replace("_", " ")).join(", ")}). Check it and press Save intake to keep it.</p>}
           <fieldset disabled={!canEdit} className="stack">
             <label>Intended use<input name="intended_use" defaultValue={i.intended_use ?? ""} placeholder="Who uses it, where, for what" /></label>
             <div className="grid2">

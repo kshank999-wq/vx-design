@@ -199,6 +199,14 @@ sit beside the steps.
   Options (every button uses the run's own budget). Older runs say so and link to the latest. When a worker is stopped
   (an update or restart), it hands its steps straight back to the queue instead of letting them count as
   interruptions; steps already blocked by interruptions are put back when the run continues.
+- **DigiKey through the website.** When DigiKey's firewall blocks a worker's own connection, set `VX_PARTS_RELAY_URL`
+  (the website's `/api/sourcing/digikey`) and `VX_PARTS_RELAY_TOKEN` on the worker, and the same token plus
+  `DIGIKEY_CLIENT_ID`/`DIGIKEY_CLIENT_SECRET` on the website: the worker's DigiKey lookups then go through the website.
+  Opening `/api/sourcing/digikey` in a browser shows whether DigiKey answers the website and whether its keys and token
+  are set (no secrets shown).
+- **Intake reflects the project.** Empty intake fields (markets, radios, power, standards, size, use) are filled from the
+  owner's answers, the requirements, the design freeze and the description, with a note saying where they came from;
+  saving keeps them.
 - **Moving on past a step.** A step that could not finish can be **put on hold and moved on**: it counts as done
   without its result (recorded as a warning, audited), the steps after it run, and it is listed under "On hold" with
   **Do it now**. The parts lookup puts itself on hold when every parts service refuses (keys, approvals, plan limits),

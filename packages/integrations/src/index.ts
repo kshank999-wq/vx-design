@@ -55,6 +55,7 @@ export * from "./sourcing/nexar.ts";
 export * from "./sourcing/digikey.ts";
 export * from "./sourcing/mouser.ts";
 export * from "./sourcing/providers.ts";
+export * from "./sourcing/relay.ts";
 export * from "./imaging/types.ts";
 export * from "./imaging/gemini.ts";
 export * from "./imaging/openai.ts";

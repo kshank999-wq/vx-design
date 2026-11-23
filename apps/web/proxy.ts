@@ -21,7 +21,8 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims?.sub);
   const path = request.nextUrl.pathname;
-  if (!signedIn && !path.startsWith("/login") && !path.startsWith("/auth/")) {
+  // /api/sourcing/ is called by workers with their own token (checked in the route), not by signed-in people.
+  if (!signedIn && !path.startsWith("/login") && !path.startsWith("/auth/") && !path.startsWith("/api/sourcing/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";

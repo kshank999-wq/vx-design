@@ -5,6 +5,7 @@
  */
 import { FixtureProvider } from "./fixture.ts";
 import { DigiKeyProvider } from "./digikey.ts";
+import { DigiKeyRelayProvider } from "./relay.ts";
 import { MouserProvider } from "./mouser.ts";
 import { NexarProvider } from "./nexar.ts";
 import type { SourcingProvider } from "./types.ts";
@@ -16,11 +17,14 @@ export function cleanKey(v: string | undefined): string | undefined {
 }
 
 export function sourcingProvidersFromEnv(raw: Record<string, string | undefined> = process.env): SourcingProvider[] {
-  const env = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, /KEY|SECRET|CLIENT_ID/.test(k) ? cleanKey(v) : v]));
+  const env = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, /KEY|SECRET|CLIENT_ID|TOKEN/.test(k) ? cleanKey(v) : v]));
   if (env.VX_SOURCING === "fixture") return [new FixtureProvider()];
   if (env.VX_SOURCING === "off") return [];
   return [
-    new DigiKeyProvider(env.DIGIKEY_CLIENT_ID, env.DIGIKEY_CLIENT_SECRET, env.DIGIKEY_LOCALE_SITE, env.DIGIKEY_LOCALE_CURRENCY),
+    // DigiKey through the website when this machine's connection is blocked by DigiKey's firewall (VX_PARTS_RELAY_URL).
+    env.VX_PARTS_RELAY_URL
+      ? new DigiKeyRelayProvider(env.VX_PARTS_RELAY_URL, env.VX_PARTS_RELAY_TOKEN)
+      : new DigiKeyProvider(env.DIGIKEY_CLIENT_ID, env.DIGIKEY_CLIENT_SECRET, env.DIGIKEY_LOCALE_SITE, env.DIGIKEY_LOCALE_CURRENCY),
     new MouserProvider(env.MOUSER_API_KEY),
     new NexarProvider(env.NEXAR_CLIENT_ID, env.NEXAR_CLIENT_SECRET),
   ];

@@ -9,6 +9,7 @@ import { MARKETS, POWER, PRODUCT_CLASSES, RADIOS, SETUP_STEPS, setupState, STAND
 import { createPlan } from "../actions";
 import { runFeasibility } from "../risks/actions";
 import { saveProject, saveSetupIntake } from "./actions";
+import { deriveIntake } from "@/lib/intake-derive";
 
 /** A chip: a checkbox or radio that looks like a pill (the choice is visible at a glance). */
 function Chip({ name, value, label, checked, type = "checkbox" }: { name: string; value: string; label: string; checked: boolean; type?: "checkbox" | "radio" }) {
@@ -26,8 +27,25 @@ export default async function SetupPage({ params, searchParams }: {
   if (!st) notFound();
   const firstOpen = st.stepDone.findIndex((d) => !d);
   const step = Math.min(5, Math.max(1, Number(sp.step) || (firstOpen < 0 ? 5 : firstOpen + 1)));
-  const i = (st.intake ?? {}) as { intended_use?: string; regions?: string[]; quantity?: number; target_unit_cost?: number; currency?: string; max_dimensions?: string;
+  const saved = (st.intake ?? {}) as { intended_use?: string; regions?: string[]; quantity?: number; target_unit_cost?: number; currency?: string; max_dimensions?: string;
     power_source?: string; radios?: string[]; target_standards?: string[]; notes?: string };
+  // Empty intake fields are filled from what the project already says (answers, requirements, freeze), labelled.
+  const d = await deriveIntake(supabase, projectId);
+  const filled: string[] = [];
+  const pick = <T,>(have: T | undefined, derived: T | null, field: string, empty: (v: T) => boolean): T | undefined => {
+    if (have !== undefined && have !== null && !empty(have)) return have;
+    if (derived !== null && derived !== undefined && !empty(derived)) { filled.push(field); return derived; }
+    return have;
+  };
+  const i = { ...saved,
+    regions: pick(saved.regions, d.regions, "regions", (v) => !v.length),
+    radios: pick(saved.radios, d.radios, "radios", (v) => !v.length),
+    target_standards: pick(saved.target_standards, d.standards, "standards", (v) => !v.length),
+    power_source: pick(saved.power_source, d.power.length ? d.power.join(" + ") : null, "power", (v) => !v),
+    max_dimensions: pick(saved.max_dimensions, d.max_dimensions, "max_dimensions", (v) => !v),
+    intended_use: pick(saved.intended_use, d.intended_use, "intended_use", (v) => !v),
+  };
+  const fromWhere = filled.map((f) => d.sources[f]).filter(Boolean);
   const dims = /^(\d+(?:\.\d+)?) × (\d+(?:\.\d+)?) × (\d+(?:\.\d+)?) mm$/.exec(i.max_dimensions ?? "");
   const other = (all: string[], chosen: string[] = []) => chosen.filter((x) => !all.includes(x)).join(", ");
   const powerChosen = (i.power_source ?? "").split(" + ").map((x) => x.trim()).filter(Boolean);
@@ -99,6 +117,7 @@ export default async function SetupPage({ params, searchParams }: {
 
           {step === 3 && (
             <form action={saveSetupIntake.bind(null, projectId)} className="stack">
+              {filled.length > 0 && <p className="banner" data-testid="intake-prefilled">Filled in from {[...new Set(fromWhere)].join(", ")} ({filled.map((f) => f.replace("_", " ")).join(", ")}). Check it and press Save to keep it.</p>}
               <label>Intended use<input name="intended_use" defaultValue={i.intended_use ?? ""} aria-label="Intended use"
                 placeholder="Camera departments on film and TV sets: sync, slate and log takes." /></label>
               <fieldset className="chips"><legend>Target markets</legend>
