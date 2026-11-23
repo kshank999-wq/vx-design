@@ -231,13 +231,59 @@ export class WorkerDb {
    * The project's name and description, with the owner's answers to VX Design's questions appended, so every task
    * (each builds its context from this) works to them.
    */
+  /**
+   * The project as every task sees it: its description, the product's look (the design freeze: what it is, its
+   * envelope, CMF, the look in words, and the team's uploaded mock-ups), and the owner's answers to earlier questions.
+   */
   async project(projectId: string): Promise<{ name: string; description: string | null }> {
     const { data, error } = await this.client.from("projects").select("name, description").eq("id", projectId).single();
     if (error) throw new Error(`project: ${error.message}`);
-    const answers = await this.answeredQuestions(projectId);
-    if (!answers.length) return data;
-    return { name: data.name, description: `${data.description ?? ""}\n\nThe owner's answers to earlier questions (follow them):\n` +
-      answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n") };
+    const [answers, look] = await Promise.all([this.answeredQuestions(projectId), this.lookContext(projectId)]);
+    const parts = [data.description ?? ""];
+    if (look) parts.push(look);
+    if (answers.length) parts.push(`The owner's answers to earlier questions (follow them):\n${answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n")}`);
+    return { name: data.name, description: parts.filter(Boolean).join("\n\n") || null };
+  }
+
+  /** The current design freeze with its image, for describing the look. */
+  async currentFreeze(projectId: string): Promise<{ id: string; name: string; note: string | null; cmf: string | null;
+      envelope: { length_mm?: number; width_mm?: number; height_mm?: number } | null; image_path: string | null; mime_type: string | null } | null> {
+    const { data } = await this.client.from("current_design_freeze").select("id, envelope, cmf, note, concept_variants(name, image_path, mime_type)")
+      .eq("project_id", projectId).maybeSingle();
+    if (!data) return null;
+    const v = data.concept_variants as unknown as { name: string; image_path: string | null; mime_type: string | null } | null;
+    return { id: data.id, name: v?.name ?? "frozen design", note: data.note, cmf: ((data.cmf as { summary?: string } | null)?.summary) || null,
+             envelope: data.envelope as never, image_path: v?.image_path ?? null, mime_type: v?.mime_type ?? null };
+  }
+
+  async lookDescription(freezeId: string): Promise<string | null> {
+    const { data } = await this.client.from("design_looks").select("description").eq("freeze_id", freezeId).maybeSingle();
+    return data?.description ?? null;
+  }
+
+  async saveLook(freezeId: string, projectId: string, description: string, model: string): Promise<void> {
+    const { error } = await this.client.from("design_looks").upsert({ freeze_id: freezeId, project_id: projectId, description, model });
+    if (error) throw new Error(`design look: ${error.message}`);
+  }
+
+  /** "The product's look" block for task context, or null before anything is frozen or uploaded. */
+  async lookContext(projectId: string): Promise<string | null> {
+    const [freeze, { data: refs }] = await Promise.all([
+      this.currentFreeze(projectId),
+      this.client.from("project_references").select("ref_no, kind, title, note").eq("project_id", projectId)
+        .in("kind", ["mockup", "render", "sketch", "photo", "drawing"]).order("ref_no").limit(12),
+    ]);
+    if (!freeze && !refs?.length) return null;
+    const lines = ["The product's look (keep every design decision consistent with it):"];
+    if (freeze) {
+      const e = freeze.envelope;
+      lines.push(`- Design freeze: ${freeze.name}${e?.length_mm ? `; outside envelope ${e.length_mm} x ${e.width_mm} x ${e.height_mm} mm (L x W x H)` : ""}` +
+                 `${freeze.cmf ? `; CMF: ${freeze.cmf}` : ""}${freeze.note ? `; ${freeze.note}` : ""}`);
+      const look = await this.lookDescription(freeze.id);
+      if (look) lines.push(`- What it looks like: ${look}`);
+    }
+    for (const r of refs ?? []) lines.push(`- ${r.kind} REF-${r.ref_no}: ${r.title}${r.note ? ` (${r.note})` : ""}`);
+    return lines.join("\n");
   }
 
   async answeredQuestions(projectId: string): Promise<{ question: string; answer: string }[]> {

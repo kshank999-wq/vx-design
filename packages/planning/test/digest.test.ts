@@ -31,3 +31,10 @@ test("at most three questions", () => {
   assert.equal(TaskDigest.safeParse({ summary: "ok", questions: [q, q, q] }).success, true);
   assert.equal(TaskDigest.safeParse({ summary: "ok", questions: [q, q, q, q] }).success, false);
 });
+
+test("the look of the frozen design is described from its image (offline stand-in labelled)", async () => {
+  const { describeLook } = await import("../src/index.ts");
+  const { look } = await describeLook({ project: "Slate", name: "Mock-up REF-1", note: null, cmf: "matte black",
+    image: { bytes: new Uint8Array([137, 80, 78, 71]), mime: "image/png" } }, new OfflineModel());
+  assert.match(look.description, /^Offline stand-in, not AI/);
+});

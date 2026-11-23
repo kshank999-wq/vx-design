@@ -596,3 +596,13 @@ tr:target { outline: 3px solid #f79009; outline-offset: -3px; background: color-
 .run-chat select, .run-chat textarea { width: 100%; }
 .run-chat:target { outline: 3px solid #2e90fa; outline-offset: 2px; }
 .guide-link { font-weight: 600; white-space: nowrap; }
+
+/* Concepts: what we are building, and the mock-up gallery. */
+.goal-strip { display: flex; gap: 14px; align-items: center; margin: 8px 0 14px; border-left: 4px solid #2e90fa; }
+.goal-strip img { width: 140px; max-height: 110px; object-fit: contain; border-radius: 6px; background: var(--surface); }
+.goal-strip p { margin: 2px 0; }
+.mockup-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 10px 0 16px; }
+.mockup-card { margin: 0; padding: 10px; }
+.mockup-card img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 6px; background: color-mix(in srgb, var(--text, #000) 4%, transparent); }
+.mockup-card figcaption { margin-top: 6px; }
+@media (max-width: 600px) { .goal-strip { flex-direction: column; align-items: flex-start; } }

@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import type { LanguageModel, Usage } from "@vx/planning";
 import { LeaseLostError, type Checkpoint, type ExecutionRow, type RunRow, type TaskRow, type Validation, type WorkerDb } from "./db.ts";
-import { ClaudeModel, DIGEST_MODEL, digestTask, type TaskDigest } from "@vx/planning";
+import { ClaudeModel, DIGEST_MODEL, describeLook, digestTask, type TaskDigest } from "@vx/planning";
 import { usageCost } from "./pricing.ts";
 
 export class YieldRequested extends Error {}
@@ -248,6 +248,24 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
     }
     await db.updateExecution(exec.id, { tool_versions: { executor: executor.id, executor_version: executor.version } });
     handle.costCap = taskCostCap(task);
+
+    // The product's look in words, written once per design freeze from its image, so every step can keep to it.
+    try {
+      await handle.step("look", async () => {
+        const freeze = await db.currentFreeze(task.project_id);
+        if (!freeze?.image_path || await db.lookDescription(freeze.id)) return null;
+        const project = await db.project(task.project_id);
+        const model = deps.offline ? deps.model : new ClaudeModel({ model: DIGEST_MODEL, effort: "low", maxTokens: 4000 });
+        const r = await describeLook({ project: project.name, name: freeze.name, note: freeze.note, cmf: freeze.cmf,
+          image: { bytes: await db.downloadBytes(freeze.image_path), mime: freeze.mime_type ?? "image/png" } }, model);
+        await handle.chargeModelUsage([r.usage], "design_look");
+        await db.saveLook(freeze.id, task.project_id, r.look.description.slice(0, 4000), r.usage.model);
+        return null;
+      });
+    } catch (e) {
+      if (e instanceof TaskCostCapError || e instanceof YieldRequested || e instanceof LeaseLostError) throw e;
+      await handle.log(`could not describe the design's look: ${(e as Error).message}`, {}, "warn");
+    }
 
     const ctx: ExecutorContext = {
       exec, task, run, db, model: deps.model, modelLabel: deps.modelLabel, offline: deps.offline,

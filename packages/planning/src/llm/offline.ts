@@ -14,6 +14,7 @@ import { OFFLINE_SIMULATION } from "../simulation.ts";
 import { OFFLINE_REVIEW } from "../design-review.ts";
 import { OFFLINE_MODULE_SUGGESTIONS } from "../build-vs-buy.ts";
 import { offlineDigest } from "../digest.ts";
+import { offlineLook } from "../look.ts";
 import { OFFLINE_FIXTURE_CONCEPT } from "../concept.ts";
 import { offlineFluxHistory } from "../flux-history.ts";
 import { offlinePriorWork } from "../prior-work.ts";
@@ -41,6 +42,7 @@ export class OfflineModel implements LanguageModel {
       : req.purpose.startsWith("design_review") ? structuredClone(OFFLINE_REVIEW)
       : req.purpose.startsWith("module_suggest") ? structuredClone(OFFLINE_MODULE_SUGGESTIONS)
       : req.purpose.startsWith("task_digest") ? offlineDigest(prompt)
+      : req.purpose.startsWith("design_look") ? offlineLook()
       : req.purpose.startsWith("concept_brief") ? structuredClone(OFFLINE_FIXTURE_CONCEPT)
       : req.purpose.startsWith("flux_history") ? offlineFluxHistory(prompt)
       : req.purpose.startsWith("prior_work") ? offlinePriorWork(prompt)

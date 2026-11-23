@@ -303,6 +303,10 @@ try {
   await page.goto(`${P}/inputs?step=5`);
   assert.doesNotMatch(await page.getByTestId("plan-context").locator("pre").textContent(), /REF-2/);
   await page.goto(`${P}/concepts`);
+  // The mock-ups open first, as the reminder of what is being built.
+  await page.getByTestId("mockups").getByText("REF-1 Front view").waitFor();
+  await page.getByTestId("goal-strip").waitFor();
+  await page.getByRole("tab", { name: /Generated concepts/ }).click();
   await page.getByLabel("Use REF-1 Front view").check();
   await page.getByLabel("Direction").fill("Brushed aluminium, rubber grip");
   await page.getByRole("button", { name: "Generate concepts" }).click();

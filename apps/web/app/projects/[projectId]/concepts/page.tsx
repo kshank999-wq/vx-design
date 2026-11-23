@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
+import { SectionTabs } from "@/components/SectionTabs";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
 import { cancelConcepts, freezeDesign, freezeMockup, requestConcepts } from "./actions";
@@ -49,6 +50,14 @@ export default async function ConceptsPage({ params, searchParams }: {
     const { data } = await supabase.storage.from("project-files").createSignedUrls(paths, 3600);
     for (const s of data ?? []) if (s.path && s.signedUrl) urls.set(s.path, s.signedUrl);
   }
+  const refUrls = new Map<string, string>();
+  const refImgs = (ownMockups ?? []).filter((m) => (m.mime_type ?? "").startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(m.filename ?? ""));
+  const refAll = (ownMockups ?? []).map((m) => m.storage_path).filter(Boolean) as string[];
+  if (refAll.length) {
+    const { data } = await supabase.storage.from("project-files").createSignedUrls(refAll, 3600);
+    for (const s of data ?? []) if (s.path && s.signedUrl) refUrls.set(s.path, s.signedUrl);
+  }
+  const { data: look } = freeze ? await supabase.from("design_looks").select("description").eq("freeze_id", freeze.id).maybeSingle() : { data: null };
   const byRound = (id: string) => (variants ?? []).filter((v) => v.round_id === id);
   const variantName = new Map((variants ?? []).map((v) => [v.id, v.name]));
   const frozen = freeze ? (variants ?? []).find((v) => v.id === freeze.variant_id) : null;
@@ -56,6 +65,8 @@ export default async function ConceptsPage({ params, searchParams }: {
   const hidden = embed ? <input type="hidden" name="embed" value="1" /> : null;
   const fenv = freeze?.envelope as { length_mm: number; width_mm: number; height_mm: number; basis?: string } | undefined;
 
+  const heroFrozen = frozen?.image_path ? urls.get(frozen.image_path) : null;
+  const heroRef = refImgs[0]?.storage_path ? refUrls.get(refImgs[0].storage_path) : null;
   return (
     <main className={embed ? "embed" : undefined}>
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
@@ -64,6 +75,30 @@ export default async function ConceptsPage({ params, searchParams }: {
         Nothing in them is a dimension or a part. Engineering works to the frozen envelope and requirements; later mock-ups come from the CAD model.</p>
       <Banner error={error} notice={notice} />
 
+      {(heroFrozen || heroRef) && (
+        <div className="card goal-strip" data-testid="goal-strip">
+          <img src={(heroFrozen ?? heroRef)!} alt="What we are building" />
+          <div><strong>What we are building</strong>
+            <p className="small">{freeze && frozen ? <>Frozen design: {frozen.name}{fenv ? ` · ${fenv.length_mm} × ${fenv.width_mm} × ${fenv.height_mm} mm` : ""}</> : <>Your mock-up REF-{refImgs[0]!.ref_no}: {refImgs[0]!.title}</>}</p>
+            <p className="small muted">Every design step is given this look in words, with the envelope and finish, and keeps to it.</p></div>
+        </div>
+      )}
+      <SectionTabs id="concepts" initial={(ownMockups ?? []).length ? "mockups" : freeze ? "freeze" : "concepts"} sections={[
+        { key: "mockups", label: "Mock-ups", badge: (ownMockups ?? []).length || null, content: (<>
+        <section data-testid="mockups">
+          {(ownMockups ?? []).length ? (
+            <div className="mockup-gallery">
+              {(ownMockups ?? []).map((m) => (
+                <figure key={m.id} className="card mockup-card">
+                  {refImgs.includes(m) && m.storage_path && refUrls.get(m.storage_path)
+                    ? <a href={refUrls.get(m.storage_path)} target="_blank" rel="noreferrer"><img src={refUrls.get(m.storage_path)} alt={`REF-${m.ref_no} ${m.title}`} /></a>
+                    : <p className="small">{m.storage_path && refUrls.get(m.storage_path) ? <a href={refUrls.get(m.storage_path)} target="_blank" rel="noreferrer">Open {m.filename}</a> : m.filename}</p>}
+                  <figcaption><strong>REF-{m.ref_no} {m.title}</strong> <span className="muted small">{m.kind}</span>{m.note ? <div className="small">{m.note}</div> : null}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : <p className="muted">No mock-ups yet. Add sketches, renders, photos or drawings on <Link href={`/projects/${projectId}/inputs`} target={embed ? "_top" : undefined}>Project inputs</Link>; they show here as a reminder of what you are building.</p>}
+        </section>
       {!freeze && canFreeze && (ownMockups ?? []).length > 0 && (
         <section className="card" data-testid="mockup-freeze">
           <h2>Use your mock-up as the concept</h2>
@@ -85,6 +120,8 @@ export default async function ConceptsPage({ params, searchParams }: {
         </section>
       )}
 
+        </>) },
+        { key: "freeze", label: "Design freeze", content: (<>
       {freeze && frozen && (
         <section className="card freeze" data-testid="freeze">
           <h2>Design freeze</h2>
@@ -101,6 +138,16 @@ export default async function ConceptsPage({ params, searchParams }: {
         </section>
       )}
 
+      {!freeze && <p className="muted">Nothing is frozen yet. Freeze one of your mock-ups (Mock-ups tab) or a generated concept: engineering then works to it.</p>}
+      {freeze && (
+        <section className="card" data-testid="design-look">
+          <h3>How every design step sees the look</h3>
+          {look?.description ? <p>{look.description}</p>
+            : <p className="small muted">The design worker writes this from the frozen image at the start of its next step, and gives it, with the envelope and finish, to every step after.</p>}
+        </section>
+      )}
+        </>) },
+        { key: "concepts", label: "Generated concepts", badge: (rounds ?? []).length || null, content: (<>
       {canRequest && (
         <form action={requestConcepts.bind(null, projectId, null)} className="card stack" data-testid="request-form">
           {hidden}
@@ -207,6 +254,8 @@ export default async function ConceptsPage({ params, searchParams }: {
         );
       })}
       {!rounds?.length && <p className="muted">No concepts yet.{canRequest ? " Describe a direction above to get the first round." : ""}</p>}
+        </>) },
+      ]} />
     </main>
   );
 }

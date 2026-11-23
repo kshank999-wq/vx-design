@@ -171,6 +171,11 @@ sit beside the steps.
   oscillator without the compensation the design uses). A scenario counts as information only when a requirement
   check on the same requirement sits beside it, and a stretch check on a must requirement is a requirement, so a
   real shortfall still fails the step.
+- **The look, always in view.** Concepts opens on a **Mock-ups** tab (the team's sketches, renders and photos, large)
+  under a "What we are building" strip with the frozen design or first mock-up; **Design freeze** and **Generated
+  concepts** are tabs beside it. Once a design is frozen, the worker describes its image in words once (a small
+  model looking at it) and every later step's context carries the look: that description, the envelope, the finish
+  and the list of mock-ups.
 - **Run chat.** Beside "What you need to do" on a stopped run is a chat with the design agent. Each step listed
   there has **Give guidance**, which opens the chat on that step: what you write is saved with the step (audited) and
   its next attempt reads it as it reads a reviewer's notes. Questions without a step go to the agent as in the

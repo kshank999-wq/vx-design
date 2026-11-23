@@ -37,3 +37,4 @@ export * from "./simulation.ts";
 export * from "./design-review.ts";
 export * from "./build-vs-buy.ts";
 export * from "./digest.ts";
+export * from "./look.ts";

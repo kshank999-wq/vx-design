@@ -146,12 +146,14 @@ try {
 
   // 6. The owner changes the freeze: a reason is required (change control).
   await opage.goto(`${BASE}/projects/${project.id}/concepts`);
+  await opage.getByRole("tab", { name: /Generated concepts/ }).click();
   const r2 = opage.getByTestId("round-2").getByTestId("variant").first();
   const r2name = await r2.getAttribute("data-name");
   await r2.locator("summary", { hasText: "Freeze this design" }).click();
   await r2.getByLabel("Reason for the change").fill("Thinner variant fits the 1S cell better");
   await r2.getByRole("button", { name: "Change the freeze to this" }).click();
   await opage.getByText(/Design frozen/).waitFor();
+  await opage.getByRole("tab", { name: /Design freeze/ }).click();
   assert.match(await opage.getByTestId("freeze").innerText(), new RegExp(`${r2name}.*changed because: Thinner variant`, "s"));
   const { data: d2 } = await admin.from("current_decisions").select("title").eq("project_id", project.id);
   assert.deepEqual(d2.map((d) => d.title), [`Design freeze: ${r2name}`], "the old freeze decision is superseded");

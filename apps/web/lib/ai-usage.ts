@@ -19,6 +19,7 @@ export const ACTIVITY: [RegExp, string][] = [
   [/^design_review/, "Design reviews"],
   [/^module_suggest/, "Module suggestions (build vs buy)"],
   [/^task_digest/, "Plain-language summaries"],
+  [/^design_look/, "Describing the frozen design's look"],
 ];
 export const activityOf = (purpose: string | null) => ACTIVITY.find(([re]) => re.test(purpose ?? ""))?.[1] ?? (purpose ? purpose.replace(/_/g, " ") : "Before tracking (unpriced)");
 
