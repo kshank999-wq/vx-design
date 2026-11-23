@@ -166,6 +166,11 @@ sit beside the steps.
   many questions are open; **Questions** (project menu) lists them one card per question, grouped by the step that
   raised them, with the recommendation highlighted and "Accept all recommendations". Each question can be read aloud (🔊) and answered by
   dictation (🎤), using the browser's own speech features (dictation in Chrome, Edge and recent Safari). Cost: part of "Plain-language summaries" on the AI usage page.
+- **Calculation checks have roles.** Each check in a calculation is a requirement (must pass), a stretch target
+  (reported, does not block) or an information-only scenario (an alternative the design does not rely on, such as an
+  oscillator without the compensation the design uses). A scenario counts as information only when a requirement
+  check on the same requirement sits beside it, and a stretch check on a must requirement is a requirement, so a
+  real shortfall still fails the step.
 - **What you need to do.** A stopped run says in plain words what stopped it: steps that could not finish (and why),
   critical-risk steps outside the run (only the owner can include them), results waiting, open questions, and steps
   waiting on hardware. **Fix these and continue the run** retries the failed steps with a fresh retry allowance,

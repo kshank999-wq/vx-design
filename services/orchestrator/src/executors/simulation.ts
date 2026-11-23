@@ -9,7 +9,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateSimulation, renderSimulationMarkdown, SIMULATION_PROMPT_VERSION, SimulationError, type SimulationInput, type SimulationResult } from "@vx/planning";
+import { generateSimulation, judgeChecks, renderSimulationMarkdown, SIMULATION_PROMPT_VERSION, SimulationError, type SimulationInput, type SimulationResult } from "@vx/planning";
 import type { Validation } from "../db.ts";
 import { runSpice, type EngineeringTools } from "../engineering.ts";
 import type { Executor, ExecutorContext, ExecutorResult } from "../execution.ts";
@@ -83,16 +83,23 @@ export function simulationExecutor(tools: EngineeringTools): Executor {
           return out;
         });
 
-        const failed = result.checks.filter((c) => !c.passed);
+        // Requirements must pass; stretch targets and information-only scenarios are reported without failing the task.
+        const judged = new Map(judgeChecks(result.checks, input.requirements).map((j) => [j.id, j]));
+        const failed = result.checks.filter((c) => judged.get(c.id)!.verdict === "fail");
         const fmt = (v: number) => Number(v.toPrecision(4));
-        const validations: Validation[] = result.checks.map((c) => ({
-          kind: "simulation", result: c.passed ? "pass" : "fail",
-          evidence_category: result.spice && c.expression.includes("spice_") ? "simulation" : "deterministic_calculation",
-          summary: `${c.id} ${c.passed ? "passes" : "FAILS"}: ${c.description} (${c.expression})${c.requirement_ref ? ` · ${c.requirement_ref}` : ""}`,
-          details: { expression: c.expression, values: Object.fromEntries(Object.entries(result.values).map(([k, v]) => [k, fmt(v)])) },
-          artifact_version_id: stored.analysis, tool_name: result.spice ? "ngspice" : "vx-calc",
-          tool_version: result.spice?.ngspice ?? SIMULATION_PROMPT_VERSION,
-        }));
+        const validations: Validation[] = result.checks.map((c) => {
+          const j = judged.get(c.id)!;
+          const outcome = j.verdict === "pass" ? "passes" : j.verdict === "fail" ? "FAILS"
+            : j.verdict === "short_of_stretch" ? "is short of the stretch target" : "does not hold (scenario shown for information; the design does not rely on it)";
+          return {
+            kind: "simulation", result: j.verdict === "pass" ? "pass" : j.verdict === "fail" ? "fail" : "warning",
+            evidence_category: result.spice && c.expression.includes("spice_") ? "simulation" : "deterministic_calculation",
+            summary: `${c.id} ${outcome}: ${c.description} (${c.expression})${c.requirement_ref ? ` · ${c.requirement_ref}` : ""}`,
+            details: { expression: c.expression, role: j.role, values: Object.fromEntries(Object.entries(result.values).map(([k, v]) => [k, fmt(v)])) },
+            artifact_version_id: stored.analysis, tool_name: result.spice ? "ngspice" : "vx-calc",
+            tool_version: result.spice?.ngspice ?? SIMULATION_PROMPT_VERSION,
+          };
+        });
         if (result.spice) validations.push({ kind: "simulation", result: "pass", evidence_category: "simulation",
           summary: `ngspice ${result.spice.ngspice}: ${Object.entries(result.spice.measures).map(([k, v]) => `${k} = ${fmt(v)}`).join(", ")}`,
           artifact_version_id: stored.log ?? stored.analysis, tool_name: "ngspice", tool_version: result.spice.ngspice ?? "unknown" });
@@ -104,7 +111,8 @@ export function simulationExecutor(tools: EngineeringTools): Executor {
         const humanTests = input.acceptanceTests.filter((t) => t.method === "human_review").map((t) => t.id);
         return {
           status: "passed", validations,
-          summary: `${result.output.title}: ${result.checks.length} check(s) pass` + (result.spice ? ", circuit simulated with ngspice" : "") + `, after ${result.rounds} round(s)`,
+          summary: `${result.output.title}: ${result.checks.filter((c) => judged.get(c.id)!.role === "requirement").length} requirement check(s) pass` +
+            (result.checks.some((c) => judged.get(c.id)!.verdict !== "pass") ? `; ${result.checks.filter((c) => judged.get(c.id)!.verdict !== "pass").length} stretch or scenario check(s) noted` : "") + (result.spice ? ", circuit simulated with ngspice" : "") + `, after ${result.rounds} round(s)`,
           reviewReason: ctx.offline ? "Offline stand-in: the fixture analysis is not derived from your requirements; review it"
             : ctx.run.mode !== "autonomous" && humanTests.length ? `Acceptance test(s) ${humanTests.join(", ")} need human review` : null,
         };

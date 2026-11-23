@@ -11,7 +11,7 @@ import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 import { evaluate, evaluateAll } from "./calc.ts";
 
-export const SIMULATION_PROMPT_VERSION = "simulation-v1";
+export const SIMULATION_PROMPT_VERSION = "simulation-v2";
 export const MAX_SIMULATION_REPAIRS = 2;
 
 export const SimulationOutput = z.object({
@@ -34,6 +34,9 @@ export const SimulationOutput = z.object({
     description: z.string(),
     expression: z.string().describe("A comparison over quantity names, e.g. 'drift_ms <= 0.5'"),
     requirement_ref: z.string().nullable(),
+    role: z.enum(["requirement", "stretch", "scenario"]).describe(
+      "requirement: the design must meet this (a must requirement or acceptance criterion). stretch: a should/stretch target, reported but not blocking. " +
+      "scenario: an information-only comparison of an alternative or baseline the design does not rely on (e.g. 'oscillator alone, uncompensated'), shown for context."),
   })),
   findings: z.array(z.string()).describe("Design consequences: what downstream tasks must use or change (values, parts, margins)."),
   assumptions: z.array(z.string()),
@@ -58,7 +61,7 @@ export interface SimulationResult {
   promptVersion: string;
   output: SimulationOutput;
   values: Record<string, number>;
-  checks: { id: string; description: string; expression: string; requirement_ref: string | null; passed: boolean; value: number }[];
+  checks: { id: string; description: string; expression: string; requirement_ref: string | null; role?: "requirement" | "stretch" | "scenario"; passed: boolean; value: number }[];
   spice: SpiceRun | null;
   rounds: number;
   usage: Usage[];
@@ -75,7 +78,7 @@ export class SimulationError extends Error {
 const SYSTEM = `You are a senior hardware engineer doing a calculation or simulation task for a product team. Your numbers are recomputed by software, so write them as data:
 
 - quantities: every input as a number with its source (requirement, datasheet, upstream task, or an explicit assumption with the reason), then every derived value as an expression over earlier names. Use SI-consistent units and say them. Do not write results you did not compute through an expression.
-- checks: one comparison per acceptance criterion or requirement limit, over quantity names (e.g. 'drift_ms <= 0.5'). A check that fails is a valid result: report it, do not bend the inputs to pass it.
+- checks: one comparison per acceptance criterion or requirement limit, over quantity names (e.g. 'drift_ms <= 0.5'). A check that fails is a valid result: report it, do not bend the inputs to pass it. Give each a role: "requirement" for what the chosen design must meet (every must requirement and acceptance criterion you check needs one), "stretch" for should/stretch targets, "scenario" for information-only comparisons of alternatives the design does not rely on (a baseline without a technique the design uses, for example). A scenario never replaces the requirement check for the design itself.
 - spice: when the behaviour depends on a circuit (filters, level shifting, input protection, timing edges, regulators), write a self-contained ngspice deck with .meas statements and use the results as spice_<name> in quantities and checks. Otherwise null.
 - findings: what downstream design tasks must use (component values, part requirements, margins, firmware constants).
 
@@ -90,6 +93,28 @@ export function renderSimulationPrompt(input: SimulationInput): string {
     `Requirements:\n${reqs}\n\nAcceptance tests:\n${tests}\n\nUpstream outputs:\n${upstream}${notes}\n\n` +
     (input.spiceAvailable ? "ngspice is available for circuit simulation." : "No circuit simulator is available here: set spice to null and calculate.") +
     "\n\nDo the analysis.";
+}
+
+export type CheckVerdict = "pass" | "fail" | "short_of_stretch" | "scenario";
+
+/**
+ * What a check's outcome means for the task. The model's role is honoured only where it cannot hide a failure:
+ *  - a "scenario" counts as information only when another check on the same requirement or acceptance test is a
+ *    "requirement" (so the design itself is still checked against it); otherwise it is treated as a requirement;
+ *  - a "stretch" check on a must requirement is treated as a requirement.
+ */
+export function judgeChecks(checks: SimulationResult["checks"], requirements: { refCode: string; priority: string }[]):
+    { id: string; role: "requirement" | "stretch" | "scenario"; verdict: CheckVerdict }[] {
+  const priority = new Map(requirements.map((r) => [r.refCode, r.priority]));
+  const refOf = (c: SimulationResult["checks"][number]) => (c.requirement_ref ?? "").trim();
+  const hasRequirementCheck = new Set(checks.filter((c) => (c.role ?? "requirement") === "requirement" && refOf(c)).map(refOf));
+  return checks.map((c) => {
+    let role = c.role ?? "requirement";
+    if (role === "scenario" && !(refOf(c) && hasRequirementCheck.has(refOf(c)))) role = "requirement";
+    if (role === "stretch" && priority.get(refOf(c)) === "must") role = "requirement";
+    const verdict: CheckVerdict = c.passed ? "pass" : role === "requirement" ? "fail" : role === "stretch" ? "short_of_stretch" : "scenario";
+    return { id: c.id, role, verdict };
+  });
 }
 
 /** Problems that make the analysis not compute (sent back to the model); failing checks are not problems. */
@@ -146,7 +171,7 @@ export function renderSimulationMarkdown(r: SimulationResult): string {
   return [
     `# ${o.title}`, "", o.summary, "", "## Approach", "", o.approach, "",
     "## Quantities (computed by VX Design, not by the model)", "", "| Name | Expression | Value | Unit | Meaning | Source |", "|---|---|---|---|---|---|", ...rows, "",
-    "## Checks", "", ...r.checks.map((c) => `- **${c.id} ${c.passed ? "PASS" : "FAIL"}**: ${c.description} (\`${c.expression}\`)${c.requirement_ref ? ` · ${c.requirement_ref}` : ""}`), "",
+    "## Checks", "", ...r.checks.map((c) => `- **${c.id} ${c.passed ? "PASS" : c.role === "scenario" ? "does not hold (scenario, for information)" : c.role === "stretch" ? "short of stretch target" : "FAIL"}**: ${c.description} (\`${c.expression}\`)${c.requirement_ref ? ` · ${c.requirement_ref}` : ""}${c.role && c.role !== "requirement" ? ` · ${c.role}` : ""}`), "",
     ...(r.spice ? ["## Circuit simulation (ngspice " + (r.spice.ngspice ?? "") + ")", "", o.spice!.purpose, "", "```spice", o.spice!.deck, "```", "",
                    ...Object.entries(r.spice.measures).map(([k, v]) => `- ${k} = ${fmt(v)}`), ""] : []),
     "## Findings for downstream tasks", "", ...o.findings.map((f) => `- ${f}`), "",
@@ -166,6 +191,6 @@ export const OFFLINE_SIMULATION: SimulationOutput = {
     { name: "tau_ms", expression: "r_ohm * c_f * 1000", unit: "ms", meaning: "time constant", source: "computed" },
   ],
   spice: null,
-  checks: [{ id: "C1", description: "time constant under 2 ms", expression: "tau_ms <= 2", requirement_ref: null }],
+  checks: [{ id: "C1", description: "time constant under 2 ms", expression: "tau_ms <= 2", requirement_ref: null, role: "requirement" }],
   findings: ["Fixture: no design consequences."], assumptions: ["Offline stand-in."], open_questions: [],
 };

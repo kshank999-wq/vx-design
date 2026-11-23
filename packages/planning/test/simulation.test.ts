@@ -17,7 +17,7 @@ const holdover = (expr: string): SimulationOutput => ({ ...OFFLINE_SIMULATION, t
   { name: "tcxo_ppm", expression: "0.5", unit: "ppm", meaning: "TCXO stability", source: "datasheet" },
   { name: "holdover_s", expression: "8 * 3600", unit: "s", meaning: "holdover", source: "REQ-TC-1" },
   { name: "drift_ms", expression: expr, unit: "ms", meaning: "drift", source: "computed" },
-], spice: null, checks: [{ id: "C1", description: "half a frame at 24 fps", expression: "drift_ms <= 1000 / 24 / 2", requirement_ref: "REQ-TC-1" }] });
+], spice: null, checks: [{ id: "C1", description: "half a frame at 24 fps", expression: "drift_ms <= 1000 / 24 / 2", requirement_ref: "REQ-TC-1", role: "requirement" }] });
 
 test("numbers are computed in code; a broken expression is repaired; a failing check is a result", async () => {
   const replies = [holdover("tcxo_ppm * 1e-6 * holdover_ms"), holdover("tcxo_ppm * 1e-6 * holdover_s * 1000")];
@@ -38,7 +38,7 @@ test("numbers are computed in code; a broken expression is repaired; a failing c
 test("spice results feed the checks", async () => {
   const out: SimulationOutput = { ...OFFLINE_SIMULATION, spice: { purpose: "RC", deck: "R1 a b 1k\n.tran 1u 1m\n.meas tran tau WHEN v(b)=0.6" },
     quantities: [{ name: "tau_ms", expression: "spice_tau * 1000", unit: "ms", meaning: "measured", source: "computed" }],
-    checks: [{ id: "C1", description: "under 2 ms", expression: "tau_ms < 2", requirement_ref: null }] };
+    checks: [{ id: "C1", description: "under 2 ms", expression: "tau_ms < 2", requirement_ref: null, role: "requirement" }] };
   const model: LanguageModel = { async generate() { return { output: out as never, assistantMessage: { role: "assistant", content: "" }, usage: { model: "m", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } }; } };
   const r = await generateSimulation({ projectContext: "x", task: { key: "k", title: "t", description: null }, requirements: [], acceptanceTests: [], upstream: [], reviewNotes: [], spiceAvailable: true },
     model, async () => ({ ok: true, stage: "done", problems: [], measures: { tau: 0.001 }, ngspice: "42" }));
@@ -68,4 +68,21 @@ test("a repair loop stops as soon as it stops making progress", async () => {
     fixed, async () => { throw new Error("no"); }), /stopped early: round 2 returned the same output as round 1/);
   assert.equal(calls, 2);
   void model;
+});
+
+test("check roles: scenarios and stretch targets do not fail the task, but cannot hide a must", async () => {
+  const { judgeChecks } = await import("../src/simulation.ts");
+  const c = (id: string, ref: string | null, role: "requirement" | "stretch" | "scenario", passed: boolean) =>
+    ({ id, description: id, expression: "x", requirement_ref: ref, role, passed, value: passed ? 1 : 0 });
+  const reqs = [{ refCode: "REQ-MUST", priority: "must" }, { refCode: "REQ-SHOULD", priority: "should" }];
+  const v = (checks: ReturnType<typeof c>[]) => Object.fromEntries(judgeChecks(checks, reqs).map((j) => [j.id, j.verdict]));
+  // The holdover case: uncompensated baseline fails, compensated design passes the must, the should stretch is missed.
+  assert.deepEqual(v([c("base", "REQ-MUST", "scenario", false), c("design", "REQ-MUST", "requirement", true), c("stretch", "REQ-SHOULD", "stretch", false)]),
+    { base: "scenario", design: "pass", stretch: "short_of_stretch" });
+  // A scenario with no requirement check beside it is the requirement check.
+  assert.deepEqual(v([c("only", "REQ-MUST", "scenario", false)]), { only: "fail" });
+  // "Stretch" on a must is a requirement.
+  assert.deepEqual(v([c("s", "REQ-MUST", "stretch", false)]), { s: "fail" });
+  // Older analyses without roles behave as before.
+  assert.deepEqual(v([{ ...c("old", null, "requirement", false), role: undefined } as never]), { old: "fail" });
 });
