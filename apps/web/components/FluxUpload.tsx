@@ -11,7 +11,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
  * Uploads Flux export files straight to the project's storage folder (large ZIPs and STEP files never pass through
  * the web server), then registers each with its revision and sha256.
  */
-export function FluxUpload({ projectId, auditId, revisions }: { projectId: string; auditId: string; revisions: string[] }) {
+export function FluxUpload({ projectId, auditId, revisions, hint }: { projectId: string; auditId: string; revisions: string[]; hint?: string }) {
   const router = useRouter();
   const [status, setStatus] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -58,10 +58,9 @@ export function FluxUpload({ projectId, auditId, revisions }: { projectId: strin
 
   return (
     <form onSubmit={onSubmit} className="card stack" data-testid="flux-upload">
-      <h3>Add exported files</h3>
-      <p className="small muted">From Flux: Export → Flux project data (JSON and asset files), Netlists (EDIF and IPC-D-356), Manufacturing files,
-        Bill of materials, Pick &amp; place, 3D (STEP); plus chat or notes exports, reports and screenshots. ZIPs are unpacked by the audit.
-        Upload each revision you have under its own name, oldest first or with dates. You can drop the whole export folder.</p>
+      <h3>Add files</h3>
+      <p className="small muted">{hint ?? "The design files and exports."} Add notes, reports and screenshots too. ZIPs are unpacked.
+        Upload each revision you have under its own name, oldest first or with dates. You can drop the whole folder.</p>
       <div className="grid2">
         <label>Revision<input name="revision" required list="flux-revisions" placeholder="Rev C" /></label>
         <label>Date of this revision (optional)<input name="revision_date" type="date" /></label>

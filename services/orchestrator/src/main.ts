@@ -33,6 +33,7 @@ import { processModelCheck } from "./models.ts";
 import { processConceptRound } from "./concepts.ts";
 import { processRfqPacket } from "./rfq.ts";
 import { processFluxAudit } from "./flux.ts";
+import { processImportConversion } from "./import-convert.ts";
 import { processPlanRequest } from "./plans.ts";
 import { processPriorWorkRegister } from "./prior-work.ts";
 import { processOcrJob } from "./ocr.ts";
@@ -84,6 +85,8 @@ if (engineering) {
   const db3d = new WorkerDb(url, key);
   const id = env("WORKER_ID", `${hostname()}-${process.pid}`);
   worker.addJob("3D model check", () => processModelCheck(db3d, engineering, id));
+  const dbi = new WorkerDb(url, key);
+  worker.addJob("design import conversions", () => processImportConversion(dbi, engineering, id));
 }
 
 // Concept images (M-CON): any worker with an image provider key (worker secret) takes concept rounds.

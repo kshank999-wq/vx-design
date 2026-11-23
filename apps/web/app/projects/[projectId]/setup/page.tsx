@@ -135,7 +135,7 @@ export default async function SetupPage({ params, searchParams }: {
             <div className="tiles">
               <Link className="tile" href={`/projects/${projectId}/inputs`}><strong>{c.specs}</strong> specification(s)<span className="muted small">{c.requirements} requirement(s) extracted</span></Link>
               <Link className="tile" href={`/projects/${projectId}/inputs`}><strong>{c.parts}</strong> part(s) already chosen<span className="muted small">datasheets and STEP models</span></Link>
-              <Link className="tile" href={`/projects/${projectId}/inputs`}><strong>{c.prior}</strong> Flux import(s)<span className="muted small">{c.registerReady ? "earlier-work list built" : "earlier-work list not built"}</span></Link>
+              <Link className="tile" href={`/projects/${projectId}/inputs`}><strong>{c.prior}</strong> imported design(s)<span className="muted small">{c.registerReady ? "earlier-work list built" : "earlier-work list not built"}</span></Link>
             </div>
             <h3>Add specifications</h3>
             <InputsUpload projectId={projectId} mode="specification" />

@@ -74,4 +74,19 @@ select pg_temp.act_as(null);
 select pg_temp.check((select array_agg(event_type order by id) = array['flux.created', 'flux.audit_requested', 'flux.audit_completed']
                       from public.audit_events where entity_id = pg_temp.id('a1')), 'audited');
 
+-- Import existing designs: the source tool is kept; native boards and 3D models are queued for conversion.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');   -- engineer
+insert into ids select 'a2', public.create_design_import('bbbbbbbb-0000-0000-0000-000000000001', 'Eagle rev B', 'eagle');
+select public.add_flux_file(pg_temp.id('a2'), 'Rev B', null, n, format('bbbbbbbb-0000-0000-0000-000000000001/flux/%s/%s', pg_temp.id('a2'), n), repeat(h, 64), 10)
+  from (values ('board.brd', 'c'), ('board.sch', 'd'), ('case.STEP', 'e'), ('bom.csv', 'f')) v(n, h);
+select pg_temp.check((select queue_import_conversions = 2 from public.queue_import_conversions(pg_temp.id('a2'))), 'board and model queued, not the schematic or BOM');
+select pg_temp.check((select queue_import_conversions = 0 from public.queue_import_conversions(pg_temp.id('a2'))), 'not queued twice');
+select pg_temp.check((select string_agg(kind, ',' order by kind) = 'mcad,pcb' from public.import_conversions where audit_id = pg_temp.id('a2')), 'kinds');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');   -- reviewer
+select pg_temp.expect_error($$select public.create_design_import('bbbbbbbb-0000-0000-0000-000000000001', 'x', 'kicad')$$, '%owners and engineers%');
+select pg_temp.act_as(null);
+select pg_temp.check((select source_tool = 'eagle' from public.flux_audits where id = pg_temp.id('a2')), 'source tool kept');
+select pg_temp.check(public.import_file_kind('main.PcbDoc', 'altium') = 'pcb' and public.import_file_kind('x.pcb', 'flux') is null
+                     and public.import_file_kind('a.json', 'easyeda') = 'pcb' and public.import_file_kind('a.json', 'flux') is null, 'file kinds');
+
 \echo 'All Flux audit tests passed.'

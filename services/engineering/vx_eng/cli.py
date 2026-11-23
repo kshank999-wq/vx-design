@@ -203,8 +203,25 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("spice", help="run a self-contained ngspice deck (from --spec JSON {deck}) and read its .meas results")
     sp.add_argument("--spec", required=True)
     sp.add_argument("--out", required=True)
+    ib = sub.add_parser("import-board", help="convert a board from another tool to KiCad, check it and describe it")
+    ib.add_argument("--input", required=True)
+    ib.add_argument("--tool", default="other", help="the tool it comes from (eagle, altium, pads, ...), a hint for ambiguous files")
+    ib.add_argument("--out", required=True)
+    mf = sub.add_parser("model-facts", help="size of a STEP/IGES/STL model")
+    mf.add_argument("--input", required=True)
     sub.add_parser("version")
     args = ap.parse_args(argv)
+    if args.cmd in ("import-board", "model-facts"):
+        from . import importing
+        try:
+            result = (importing.import_board(Path(args.input), Path(args.out), args.tool) if args.cmd == "import-board"
+                      else importing.model_facts(Path(args.input)))
+        except (ValueError, kicad.KicadError) as e:
+            result = {"ok": False, "error": str(e)}
+        except Exception as e:  # noqa: BLE001 - converters and OCCT raise many kinds
+            result = {"ok": False, "error": f"could not read the file: {type(e).__name__}: {e}"}
+        print(json.dumps(result))
+        return 0
     if args.cmd == "spice":
         from . import spice
         spec = json.load(sys.stdin if args.spec == "-" else open(args.spec))

@@ -878,6 +878,18 @@ export class WorkerDb {
     return data ?? [];
   }
 
+  async claimImportConversion(workerId: string): Promise<{ id: string; audit_id: string; project_id: string; kind: "pcb" | "mcad"; file_name: string;
+      storage_path: string; sha256: string; source_tool: string } | null> {
+    const { data, error } = await this.client.rpc("claim_import_conversion", { p_worker_id: workerId });
+    if (error) throw new Error(`claim import conversion: ${error.message}`);
+    return ((data ?? []) as never[])[0] ?? null;
+  }
+
+  async completeImportConversion(id: string, workerId: string, result: unknown, outputPath: string | null, err: string | null): Promise<void> {
+    const { error } = await this.client.rpc("complete_import_conversion", { p_id: id, p_worker_id: workerId, p_result: result ?? {}, p_output_path: outputPath, p_error: err });
+    if (error) throw new Error(`complete import conversion: ${error.message}`);
+  }
+
   async downloadBytes(path: string): Promise<Uint8Array> {
     const { data, error } = await this.client.storage.from(BUCKET).download(path);
     if (error) throw new Error(`download ${path}: ${error.message}`);

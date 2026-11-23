@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
+import { IMPORT_SOURCES } from "@/lib/import-sources";
 import { InputsUpload } from "@/components/InputsUpload";
 import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -102,7 +103,7 @@ export default async function InputsPage({ params, searchParams }: {
     { label: "Specifications", text: `${(docs ?? []).length} document(s) · ${active.length} requirement(s)`, done: stepDone[0]! },
     { label: "Mock-ups", text: `${visual.length} reference(s)`, done: stepDone[1]! },
     { label: "Parts chosen", text: `${(parts ?? []).length} part(s)`, done: stepDone[2]! },
-    { label: "Prior work", text: `${(audits ?? []).filter((a) => a.status === "ready").length} Flux import(s) · ${priorFiles.length} file(s)${ready ? ` · ${regItems.length} earlier-work item(s)` : ""}`, done: stepDone[3]! },
+    { label: "Prior work", text: `${(audits ?? []).filter((a) => a.status === "ready").length} imported design(s) · ${priorFiles.length} file(s)${ready ? ` · ${regItems.length} earlier-work item(s)` : ""}`, done: stepDone[3]! },
     { label: "Plan", text: plans?.length ? `v${plans[0]!.version} · ${plans[0]!.status}` : "not generated yet", done: stepDone[4]! },
   ];
 
@@ -303,7 +304,7 @@ export default async function InputsPage({ params, searchParams }: {
       {step === 4 && <>
       <section>
         <h2 className="setup-title">Prior work</h2>
-        <p className="small muted">Designs already started elsewhere. Add a Flux project's exported files here (or on the <Link href={`/projects/${projectId}/flux`}>Flux import</Link> page)
+        <p className="small muted">Designs already started elsewhere. Add the files of an earlier design here, from KiCad, Eagle, Altium, EasyEDA, PADS, Flux, SolidWorks or any other tool (or on the <Link href={`/projects/${projectId}/flux`}>Import existing designs</Link> page)
           and run the audit: its parts, board, design notes, earlier decisions and open problems become prior work the plan builds on.</p>
         <table className="small" data-testid="prior-work">
           <thead><tr><th>Audit</th><th>Status</th><th>Found</th><th>In the plan</th></tr></thead>
@@ -322,25 +323,26 @@ export default async function InputsPage({ params, searchParams }: {
         {canEdit && (() => {
           const open = (audits ?? []).filter((a) => a.status === "draft" || a.status === "failed").at(-1);
           const running = (audits ?? []).some((a) => a.status === "queued" || a.status === "running");
-          if (running) return <p className="small muted" data-testid="flux-running">A worker is reading a Flux import. This page updates by itself; the import appears above when the audit is ready.</p>;
+          if (running) return <p className="small muted" data-testid="flux-running">A worker is reading an import. This page updates by itself; the import appears above when the audit is ready.</p>;
           if (!open) return (
             <form action={createAudit.bind(null, projectId)} className="card row" data-testid="flux-start">
               <input type="hidden" name="from" value="inputs" />
-              <label className="inline">Import from Flux<input name="title" required defaultValue={project.name} aria-label="Flux import title" /></label>
-              <SubmitButton variant="secondary" pendingText="…">Start a Flux import</SubmitButton>
-              <span className="small muted">Then add every file Flux exports (ZIPs included) and run the audit.</span>
+              <label className="inline">Import an existing design<input name="title" required defaultValue={project.name} aria-label="Import title" /></label>
+              <label className="inline">from<select name="source_tool" defaultValue="kicad" aria-label="Comes from">{IMPORT_SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
+              <SubmitButton variant="secondary" pendingText="…">Start the import</SubmitButton>
+              <span className="small muted">Then add the design files and exports (ZIPs included) and run the import.</span>
             </form>
           );
           const n = Number((open.flux_audit_files as unknown as { count: number }[] | null)?.[0]?.count ?? 0);
           return (
             <div className="card stack" data-testid="flux-open">
-              <p className="small"><strong>Flux import #{open.audit_no}</strong> {open.title}: {n} file(s) added.
-                {open.status === "failed" && open.error && <span className="error-text"> The last audit failed: {open.error}</span>}{" "}
+              <p className="small"><strong>Import #{open.audit_no}</strong> {open.title}: {n} file(s) added.
+                {open.status === "failed" && open.error && <span className="error-text"> The last import failed: {open.error}</span>}{" "}
                 <Link href={`/projects/${projectId}/flux/${open.id}`}>See the files</Link></p>
               <FluxUpload projectId={projectId} auditId={open.id} revisions={[]} />
               {n > 0 && (
                 <form action={runAudit.bind(null, projectId, open.id, "inputs")} className="row">
-                  <SubmitButton pendingText="Requesting…">Run the audit</SubmitButton>
+                  <SubmitButton pendingText="Requesting…">Run the import</SubmitButton>
                   <span className="small muted">A worker reads every file; the import then appears above as prior work.</span>
                 </form>
               )}
@@ -356,7 +358,7 @@ export default async function InputsPage({ params, searchParams }: {
 
         <div className="card stack" data-testid="register">
           <h3>What was already done</h3>
-          <p className="small muted">A worker reads every earlier design document in full (the documents inside the Flux imports used for the plan, the files
+          <p className="small muted">A worker reads every earlier design document in full (the documents inside the imported designs used for the plan, the files
             above and the parts' datasheets) and lists each part and design decision with how far it got, quoting the document it came from. Correct
             anything it got wrong: your corrections are kept when the list is rebuilt. The plan must say for each selected, designed, laid-out or verified
             item whether it continues with it, adapts it or replaces it.</p>

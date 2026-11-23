@@ -489,10 +489,11 @@ def _inner_planes(board, layout: Layout, profile: FabProfile, plane_nets: list[s
 
 # --- DRC --------------------------------------------------------------------------------
 
-def drc(project_dir: Path, pcb: str, refill: bool = True) -> dict[str, Any]:
-    """KiCad DRC with schematic parity. Exit code ignored: violations are data. Excluded items are waivers."""
+def drc(project_dir: Path, pcb: str, refill: bool = True, parity: bool = True) -> dict[str, Any]:
+    """KiCad DRC, with schematic parity unless asked not to (an imported board has no KiCad schematic). Exit code
+    ignored: violations are data. Excluded items are waivers."""
     args = ["kicad-cli", "pcb", "drc", "--format", "json", "--severity-all", "--severity-exclusions",
-            "--schematic-parity", "--units", "mm", "-o", "drc.json"]
+            *(["--schematic-parity"] if parity else []), "--units", "mm", "-o", "drc.json"]
     if refill:
         args += ["--refill-zones", "--save-board"]
     subprocess.run(args + [pcb], cwd=project_dir, capture_output=True, text=True, timeout=600, env=_kicad_env())

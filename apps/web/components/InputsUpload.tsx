@@ -50,7 +50,7 @@ export function InputsUpload({ projectId, mode, kinds, partId, partLabel }: {
       }
       if (mode === "specification" && !/\.(docx|pdf|md|markdown|txt)$/i.test(f.name)) {
         set(i, /\.(zip|json|edif|d356|ipc2581c|step|stp|csv|cad)$/i.test(f.name)
-          ? `${f.name}: this looks like a Flux or CAD export, not a specification. Add it under 4. Prior work (Flux import).`
+          ? `${f.name}: this looks like a Flux or CAD export, not a specification. Add it under 4. Prior work (Import existing designs).`
           : `${f.name}: specifications must be Word (.docx), PDF, Markdown or text.`, false);
         continue;
       }

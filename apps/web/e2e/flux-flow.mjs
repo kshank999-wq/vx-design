@@ -56,8 +56,10 @@ try {
 
   // 1. Create the import and upload three revisions from the browser.
   await page.goto(`${BASE}/projects/${project.id}`);
-  await page.getByRole("link", { name: "Flux import" }).click();
+  await page.getByRole("link", { name: "Import existing designs" }).first().click();
+  await page.getByTestId("import-sources").getByText("Eagle / Fusion Electronics").waitFor({ state: "attached" });
   await page.getByLabel("Title").fill("Smart Slate timecode board in Flux");
+  await page.getByLabel("Comes from").selectOption("flux");
   await page.getByRole("button", { name: "New import" }).click();
   await page.getByText(/Import created/).waitFor();
   const upload = page.getByTestId("flux-upload");
@@ -74,7 +76,7 @@ try {
   console.log("✓ three revisions uploaded from the browser into the project's storage");
 
   // 2. Run the audit.
-  await page.getByRole("button", { name: "Run the audit" }).click();
+  await page.getByRole("button", { name: "Run the import" }).click();
   await page.getByTestId("audit-status").filter({ hasText: /^ready$/ }).waitFor({ timeout: 90_000 });
   assert.match(await page.getByTestId("statement").innerText(), /never assumed verified/);
   const findings = page.getByTestId("findings");

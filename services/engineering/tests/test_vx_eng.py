@@ -466,6 +466,51 @@ class FourLayerTests(unittest.TestCase):
 
 
 
+class ImportTests(unittest.TestCase):
+    """Import existing designs: a KiCad board read back, an Eagle board converted by KiCad's importer, a STEP model measured."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        from vx_eng.cli import cmd_layout_build
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        cls.built = cmd_layout_build(FIXTURE, LAYOUT, cls.root / "board")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_kicad_board_is_read_and_checked(self):
+        from vx_eng import importing
+        pcb_file = next((self.root / "board").glob("*.kicad_pcb"))
+        r = importing.import_board(pcb_file, self.root / "kicad-in", "kicad")
+        self.assertEqual((r["facts"]["footprints"], r["facts"]["copper_layers"], r["drc"]["errors"]), (10, 2, 0))
+
+    def test_eagle_board_is_converted(self):
+        from vx_eng import importing
+        r = importing.import_board(Path(__file__).parent.parent / "vx_eng/fixtures/tiny_eagle.brd", self.root / "eagle-in", "eagle")
+        self.assertEqual(r["converted_from"].lower(), "eagle")
+        self.assertEqual((r["facts"]["footprints"], r["facts"]["nets"], r["drc"]["errors"]), (2, 1, 0))
+        self.assertEqual(sorted(p["ref"] for p in r["facts"]["parts"]), ["R1", "R2"])
+        self.assertTrue((self.root / "eagle-in" / "board.kicad_pcb").exists())
+
+    def test_unknown_file_is_refused_plainly(self):
+        from vx_eng import importing, kicad
+        bad = self.root / "notes.txt"
+        bad.write_text("not a board")
+        with self.assertRaises(kicad.KicadError):
+            importing.import_board(bad, self.root / "bad-in", "other")
+
+    def test_step_model_is_measured(self):
+        from vx_eng import importing
+        step = next((self.root / "board").rglob("*.step"))
+        r = importing.model_facts(step)
+        self.assertEqual(r["format"], "STEP")
+        self.assertAlmostEqual(r["size_mm"][0], 34.0, delta=0.5)
+
+
 class ModelCheckTests(unittest.TestCase):
     """Manufacturer 3D model alignment: synthetic vendor-style models, plus a round trip through KiCad's STEP export."""
 

@@ -304,3 +304,20 @@ export async function runSpice(tools: EngineeringTools, deck: string, outDir: st
     Promise<{ ok: boolean; stage: string; problems: string[]; measures: Record<string, number>; ngspice: string | null; files?: { deck: string; log: string } }> {
   return call(tools, ["spice", "--spec", "-", "--out", outDir], JSON.stringify({ deck }), 300_000) as never;
 }
+
+// --- Import existing designs ---------------------------------------------------------------
+
+export interface ImportBoardResult {
+  ok: boolean; error?: string; converted_from?: string;
+  facts?: { width_mm: number; height_mm: number; copper_layers: number; footprints: number; nets: number; tracks: number; vias: number;
+            zones: number; unrouted_board: boolean; parts: { ref: string; value: string; footprint: string; side: string }[] };
+  drc?: { errors: number; warnings: number; unconnected: number }; drc_top?: { type: string; description: string }[];
+  files?: { board: string; drc: string };
+}
+export async function importBoard(tools: EngineeringTools, input: string, tool: string, outDir: string): Promise<ImportBoardResult> {
+  return call(tools, ["import-board", "--input", input, "--tool", tool, "--out", outDir], undefined, 1_200_000) as Promise<ImportBoardResult>;
+}
+export interface ModelFactsResult { ok: boolean; error?: string; format?: string; size_mm?: number[]; solids?: number | null; triangles?: number }
+export async function modelFacts(tools: EngineeringTools, input: string): Promise<ModelFactsResult> {
+  return call(tools, ["model-facts", "--input", input], undefined, 600_000) as Promise<ModelFactsResult>;
+}

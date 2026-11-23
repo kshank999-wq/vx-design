@@ -322,17 +322,18 @@ try {
   await page.getByRole("button", { name: "Upload specifications" }).click();
   await page.getByTestId("upload-specification-status").getByText(/this looks like a Flux or CAD export, not a specification\. Add it under 4\. Prior work/).waitFor();
   await page.goto(`${P}/inputs?step=4`);
-  await page.getByTestId("flux-start").getByLabel("Flux import title").fill("Timecode board");
-  await page.getByRole("button", { name: "Start a Flux import" }).click();
-  await page.getByText("Flux import started.").waitFor();
+  await page.getByTestId("flux-start").getByLabel("Import title").fill("Timecode board");
+  await page.getByTestId("flux-start").getByLabel("Comes from").selectOption("flux");
+  await page.getByRole("button", { name: "Start the import" }).click();
+  await page.getByText("Import started.").waitFor();
   const fu = page.getByTestId("flux-open").getByTestId("flux-upload");
   await fu.getByLabel("Revision", { exact: true }).fill("2026-11-20");
   await fu.getByLabel("Files", { exact: true }).setInputFiles([{ name: "board.d356", mimeType: "text/plain", buffer: Buffer.from("P  JOB   x\n327GND              U1    -1         A01X-030947Y-010857X0291Y1098R090 S2\n999\n") }]);
   await fu.getByRole("button", { name: "Upload" }).click();
   await fu.getByTestId("upload-status").getByText("board.d356: added").waitFor();
   await page.getByTestId("flux-open").getByText(/1 file\(s\) added/).waitFor();
-  await page.getByRole("button", { name: "Run the audit" }).click();
-  await page.getByText(/Audit requested/).waitFor();
+  await page.getByRole("button", { name: "Run the import" }).click();
+  await page.getByText(/Import requested/).waitFor();
   await page.getByTestId("flux-running").waitFor();
   await page.locator(".live-dot").waitFor();   // the page refreshes itself while the audit runs
   await shot(page, "04-flux-import");

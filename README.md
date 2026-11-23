@@ -176,6 +176,15 @@ sit beside the steps.
   concepts** are tabs beside it. Once a design is frozen, the worker describes its image in words once (a small
   model looking at it) and every later step's context carries the look: that description, the envelope, the finish
   and the list of mock-ups.
+- **Import existing designs** (project menu: Design → Import existing designs; was "Flux import"). Each import records
+  where the work comes from (KiCad, Eagle/Fusion, Altium, EasyEDA, PADS, CADSTAR, Allegro/OrCAD, Flux, SolidWorks,
+  Fusion 360/Onshape/Creo/Inventor, or any other tool), and the page says what to export from each. Running it audits
+  the exports as before (BOM, placement, netlists, Gerbers, revisions, earlier decisions) and also sends every native
+  board file to the KiCad worker (`import_conversions`): KiCad's own importers convert Eagle, Altium, EasyEDA, PADS,
+  CADSTAR, Allegro, P-CAD, Fabmaster and SolidWorks PCB boards to KiCad (`vx_eng import-board`), the design-rule check
+  runs, and the board's size, layers, parts and nets are reported with the converted board to download. STEP, IGES and
+  STL models are measured (`vx_eng model-facts`). Schematics stay in their original tool (KiCad converts boards only);
+  IPC-2581 and ODB++ go through the manufacturing-export audit. SolidWorks' native files need a STEP export.
 - **Prices and earnings.** Customers see one price per AI call (our cost times their plan's rate). Plans describe their
   price per million tokens, never the markup; statements, the CSV, the billing summary and the AI usage page carry no
   "our cost", and the database withholds the ledger's cost column and the plans' markup from customers. VX Design

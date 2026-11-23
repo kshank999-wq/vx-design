@@ -5,6 +5,7 @@ import { KIND_LABEL, type AuditReport, type FileKind } from "@vx/flux";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Banner } from "@/components/Banner";
 import { FluxUpload } from "@/components/FluxUpload";
+import { sourceOf } from "@/lib/import-sources";
 import { ScanBadge } from "@/components/ScanBadge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
@@ -31,6 +32,15 @@ export default async function FluxAuditPage({ params, searchParams }: {
   const { data: scans } = await supabase.from("file_scans").select("path, status, signature").eq("bucket", "project-files")
     .in("path", (files ?? []).map((f) => f.storage_path));
   const scanOf = new Map((scans ?? []).map((x) => [x.path, x]));
+  const { data: conversions } = await supabase.from("import_conversions").select("id, file_id, kind, status, result, output_path, error").eq("audit_id", auditId);
+  const fileName = new Map((files ?? []).map((f) => [f.id, f.name]));
+  const outUrls = new Map<string, string>();
+  const outs = (conversions ?? []).map((c) => c.output_path).filter(Boolean) as string[];
+  if (outs.length) {
+    const { data: su } = await supabase.storage.from("project-files").createSignedUrls(outs, 600);
+    for (const x of su ?? []) if (x.path && x.signedUrl) outUrls.set(x.path, x.signedUrl);
+  }
+  const converting = (conversions ?? []).some((c) => c.status === "queued" || c.status === "running");
   const running = audit.status === "queued" || audit.status === "running";
   let report: AuditReport | null = null;
   const links: { md?: string; json?: string } = {};
@@ -58,10 +68,10 @@ export default async function FluxAuditPage({ params, searchParams }: {
             {!files?.length && <tr><td colSpan={6} className="muted">Nothing uploaded yet.</td></tr>}
           </tbody>
         </table>
-        {canEdit && !running && <FluxUpload projectId={projectId} auditId={auditId} revisions={revs} />}
+        {canEdit && !running && <FluxUpload projectId={projectId} auditId={auditId} revisions={revs} hint={`From ${sourceOf(audit.source_tool).label}: ${sourceOf(audit.source_tool).files}`} />}
         {canEdit && !running && !!files?.length && (
           <form action={runAudit.bind(null, projectId, auditId, "flux")} className="row">
-            <SubmitButton pendingText="Requesting…">{audit.status === "ready" || audit.status === "failed" ? "Run the audit again" : "Run the audit"}</SubmitButton>
+            <SubmitButton pendingText="Requesting…">{audit.status === "ready" || audit.status === "failed" ? "Run the import again" : "Run the import"}</SubmitButton>
             <span className="small muted">Reads every file, checks the exports against each other and across revisions, and extracts earlier decisions and test claims.</span>
           </form>
         )}
@@ -71,12 +81,37 @@ export default async function FluxAuditPage({ params, searchParams }: {
 
   return (
     <main>
-      <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> / <Link href={`/projects/${projectId}/flux`}>Flux imports</Link> /</p>
-      <div className="row spread"><h1>#{audit.audit_no} {audit.title}</h1>{running && <AutoRefresh intervalMs={2500} />}</div>
+      <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> / <Link href={`/projects/${projectId}/flux`}>Imported designs</Link> /</p>
+      <div className="row spread"><h1>#{audit.audit_no} {audit.title} <span className="muted small">from {sourceOf(audit.source_tool).label}</span></h1>{(running || converting) && <AutoRefresh intervalMs={2500} />}</div>
       <p><span className={`pill big pill-${audit.status === "ready" ? "complete" : audit.status === "failed" ? "failed" : "awaiting_approval"}`} data-testid="audit-status">{audit.status}</span></p>
       <Banner error={error} notice={notice} />
-      {audit.error && <p className="banner banner-error">The audit failed: {audit.error}</p>}
+      {audit.error && <p className="banner banner-error">The import failed: {audit.error}</p>}
 
+      {!!conversions?.length && (
+        <section className="card" data-testid="conversions">
+          <h2>Boards and 3D models</h2>
+          <p className="small muted">Boards from other tools are converted to KiCad by KiCad&apos;s own importers and checked with its design-rule check. Schematics stay in
+            the original tool (KiCad converts boards, not other tools&apos; schematics); the board&apos;s connections are read from the board itself.</p>
+          <table className="small">
+            <thead><tr><th>File</th><th>Status</th><th>What was found</th><th>Design-rule check</th><th></th></tr></thead>
+            <tbody>{(conversions ?? []).map((c) => {
+              const r = c.result as { converted_from?: string; facts?: { width_mm: number; height_mm: number; copper_layers: number; footprints: number; nets: number; tracks: number; unrouted_board: boolean };
+                drc?: { errors: number; warnings: number; unconnected: number }; format?: string; size_mm?: number[]; solids?: number | null };
+              return (
+                <tr key={c.id} data-kind={c.kind}>
+                  <td>{fileName.get(c.file_id)}</td>
+                  <td><span className={`pill pill-${c.status === "ready" ? "complete" : c.status === "failed" ? "failed" : "awaiting_approval"}`}>{c.status === "ready" ? (c.kind === "pcb" ? "converted" : "measured") : c.status}</span></td>
+                  <td>{c.error ? <span className="error-text">{c.error}</span>
+                    : c.kind === "pcb" && r.facts ? <>{r.converted_from} board, {r.facts.width_mm} × {r.facts.height_mm} mm, {r.facts.copper_layers} layers, {r.facts.footprints} parts, {r.facts.nets} nets{r.facts.unrouted_board ? " (not routed)" : ""}</>
+                    : c.kind === "mcad" && r.size_mm ? <>{r.format} model, {r.size_mm.join(" × ")} mm{r.solids != null ? `, ${r.solids} solid(s)` : ""}</> : "—"}</td>
+                  <td>{r.drc ? `${r.drc.errors} error(s), ${r.drc.warnings} warning(s), ${r.drc.unconnected} unconnected` : "—"}</td>
+                  <td>{c.output_path && outUrls.get(c.output_path) && <a href={outUrls.get(c.output_path)}>KiCad board</a>}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </section>
+      )}
       {!report && files_section}
       {report && <SectionTabs id="flux" sections={[
         { key: "summary", label: "Summary and findings", badge: report.findings.length, content: (<>
