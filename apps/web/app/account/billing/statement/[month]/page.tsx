@@ -19,14 +19,14 @@ export default async function StatementPage({ params }: { params: Promise<{ mont
           <tr><td>Opening balance</td><td className="num">{money(s.opening)}</td></tr>
           <tr><td>Credit added</td><td className="num">{money(s.totals.credit)}</td></tr>
           {s.totals.fees > 0 && <tr><td>Plan fees</td><td className="num">{money(-s.totals.fees)}</td></tr>}
-          <tr><td>Usage: {s.totals.calls} charge(s), costing us {money(s.totals.cost, 4)}</td><td className="num">{money(-s.totals.usage, 4)}</td></tr>
+          <tr><td>Usage: {s.totals.calls} charge(s){s.admin ? ` (admin: our cost ${money(s.totals.cost, 4)})` : ""}</td><td className="num">{money(-s.totals.usage, 4)}</td></tr>
           {s.totals.adjustments !== 0 && <tr><td>Adjustments</td><td className="num">{money(s.totals.adjustments)}</td></tr>}
           <tr><td><strong>Closing balance</strong></td><td className="num" data-testid="closing"><strong>{money(s.closing)}</strong></td></tr>
         </tbody></table>
       </section>
       <section className="card">
         <table className="small statement" data-testid="statement-lines">
-          <thead><tr><th>When</th><th>Item</th><th>Project</th><th>Activity</th><th className="num">Tokens in / out</th><th className="num">Our cost</th><th className="num">Amount</th></tr></thead>
+          <thead><tr><th>When</th><th>Item</th><th>Project</th><th>Activity</th><th className="num">Tokens in / out</th>{s.admin && <th className="num">Our cost</th>}<th className="num">Amount</th></tr></thead>
           <tbody>
             {s.lines.map((l, i) => (
               <tr key={i}>
@@ -35,11 +35,11 @@ export default async function StatementPage({ params }: { params: Promise<{ mont
                 <td>{l.project ?? ""}</td>
                 <td>{l.activity ?? ""}</td>
                 <td className="num">{l.input_tokens != null ? `${tokens(Number(l.input_tokens) + Number(l.cache_read_tokens ?? 0) + Number(l.cache_write_tokens ?? 0))} / ${tokens(Number(l.output_tokens ?? 0))}` : ""}</td>
-                <td className="num">{l.cost_usd != null ? money(l.cost_usd, 4) : ""}</td>
+                {s.admin && <td className="num">{l.cost_usd != null ? money(l.cost_usd, 4) : ""}</td>}
                 <td className="num">{money(l.amount_usd, l.kind === "usage" ? 4 : 2)}</td>
               </tr>
             ))}
-            {!s.lines.length && <tr><td colSpan={7} className="muted">Nothing this month.</td></tr>}
+            {!s.lines.length && <tr><td colSpan={s.admin ? 7 : 6} className="muted">Nothing this month.</td></tr>}
           </tbody>
         </table>
       </section>

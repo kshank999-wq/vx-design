@@ -97,16 +97,35 @@ try {
     p_input: 40000, p_output: 60000, p_cache_read: 0, p_cache_write: 0, p_cost_usd: 1.36, p_duration_ms: 240000, p_failed: false })).error);
   await page.goto(`${BASE}/account/billing`);
   assert.equal(await page.getByTestId("balance-amount").innerText(), "$68.64");
-  assert.match(await page.getByTestId("month-summary").innerText(), /cost us \$1\.36; you were charged \$1\.36 plus \$50\.00 in plan fees/);
+  // Customers see what they were charged, never our cost or the markup.
+  assert.match(await page.getByTestId("month-summary").innerText(), /usage \$1\.36 plus \$50\.00 in plan fees/);
+  assert.doesNotMatch(await page.locator("main").innerText(), /our cost|markup/i);
   const month = new Date().toISOString().slice(0, 7);
   await page.getByTestId("statements").getByRole("link").first().click();
   await page.waitForURL(new RegExp(`/statement/${month}$`));
   const lines = await page.getByTestId("statement-lines").innerText();
-  assert.match(lines, /Credit: Card payment[\s\S]*Plan fee: Studio plan[\s\S]*Usage: AI · claude-opus-5-5\tBilling \d+\tPlanning: full plan\t40\.0K \/ 60\.0K\t\$1\.3600\t−\$1\.3600/);
+  assert.match(lines, /Credit: Card payment[\s\S]*Plan fee: Studio plan[\s\S]*Usage: AI · claude-opus-5-5\tBilling \d+\tPlanning: full plan\t40\.0K \/ 60\.0K\t−\$1\.3600/);
   assert.equal(await page.getByTestId("closing").innerText(), "$68.64");
   const csv = await (await page.request.get(`${BASE}/account/billing/statement/${month}/csv`)).text();
   assert.match(csv, /^time_utc,kind,description,project,activity,model,input_tokens,output_tokens/);
-  assert.match(csv, /,Usage,AI · claude-opus-5-5,Billing \d+,Planning: full plan,claude-opus-5-5,40000,60000,0,0,1\.36,-1\.36\n/);
+  assert.match(csv, /,Usage,AI · claude-opus-5-5,Billing \d+,Planning: full plan,claude-opus-5-5,40000,60000,0,0,-1\.36\n/);
+  assert.doesNotMatch(csv, /our_cost/);
+
+  // An administrator (VX Design staff) sees our cost beside the charge, and the earnings page.
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const svc = createClient(URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+    const { data: me } = await api.auth.getUser();
+    assert.ifError((await svc.from("platform_admins").insert({ user_id: me.user.id, note: "e2e" })).error);
+    await page.goto(`${BASE}/account/billing`);
+    assert.match(await page.getByTestId("month-summary").innerText(), /admin: our cost \$1\.36/);
+    await page.goto(`${BASE}/admin/earnings`);
+    assert.match(await page.getByTestId("earnings-customers").innerText(), new RegExp(`${owner.email.replace(/[.+]/g, "\\$&")}\\tStudio\\t1\\t\\$1\\.36\\t\\$1\\.36\\t\\$0\\.00`));
+    await page.getByTestId("earnings-in-house").waitFor();
+    assert.ifError((await svc.from("platform_admins").delete().eq("user_id", me.user.id)).error);
+    await page.goto(`${BASE}/admin/earnings`);
+    await page.getByText(/This page could not be found|404/).first().waitFor();
+    console.log("✓ administrators see our cost and the earnings page; customers do not");
+  }
   assert.match(csv, /closing_balance,68\.64/);
 
   // Spending past the balance pauses AI work: the next AI action is refused before any call is made.

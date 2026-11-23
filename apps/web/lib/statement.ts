@@ -8,6 +8,8 @@ export interface StatementLine {
   cache_write_tokens: number | null; cost_usd: number | null; amount_usd: number; opening_balance: number;
 }
 export interface Statement { month: string; label: string; lines: StatementLine[]; opening: number; closing: number;
+  /** True when the reader is a VX Design administrator: only then do lines carry our cost. */
+  admin: boolean;
   totals: { credit: number; usage: number; cost: number; fees: number; adjustments: number; calls: number } }
 
 export async function loadStatement(supabase: SupabaseClient, month: string): Promise<Statement> {
@@ -28,7 +30,8 @@ export async function loadStatement(supabase: SupabaseClient, month: string): Pr
     calls: lines.filter((l) => l.kind === "usage").length,
   };
   const label = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-  return { month, label, lines, opening, closing: opening + lines.reduce((n, l) => n + Number(l.amount_usd), 0), totals };
+  const { data: admin } = await supabase.rpc("is_platform_admin");
+  return { month, label, lines, admin: !!admin, opening, closing: opening + lines.reduce((n, l) => n + Number(l.amount_usd), 0), totals };
 }
 
 export const KIND_LABEL: Record<StatementLine["kind"], string> = { credit: "Credit", usage: "Usage", plan_fee: "Plan fee", adjustment: "Adjustment" };

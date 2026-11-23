@@ -18,14 +18,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data } = await supabase.auth.getClaims();
   const email = data?.claims?.email as string | undefined;
   // Owners/engineers see the supplier directory; anyone with RFQs addressed to their confirmed email sees the portal.
-  const [{ data: directory }, { data: invites }] = email
-    ? await Promise.all([supabase.rpc("is_directory_user"), supabase.rpc("supplier_rfqs").select("recipient_id").limit(1)])
-    : [{ data: false }, { data: [] }];
+  const [{ data: directory }, { data: invites }, { data: admin }] = email
+    ? await Promise.all([supabase.rpc("is_directory_user"), supabase.rpc("supplier_rfqs").select("recipient_id").limit(1), supabase.rpc("is_platform_admin")])
+    : [{ data: false }, { data: [] }, { data: false }];
   const links = [
     ...(email ? [{ href: "/projects", label: "Projects" }, { href: "/knowledge", label: "Knowledge" }] : []),
     ...(directory ? [{ href: "/suppliers", label: "Suppliers" }] : []),
     ...((invites as unknown[] | null)?.length ? [{ href: "/supplier", label: "Supplier portal" }] : []),
     ...(email ? [{ href: "/account", label: "Account" }] : []),
+    ...(admin ? [{ href: "/admin/earnings", label: "Admin" }] : []),
   ];
   const initials = (email ?? "").split("@")[0]!.split(/[._-]+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join("") || "?";
   return (

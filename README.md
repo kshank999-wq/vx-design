@@ -176,6 +176,12 @@ sit beside the steps.
   concepts** are tabs beside it. Once a design is frozen, the worker describes its image in words once (a small
   model looking at it) and every later step's context carries the look: that description, the envelope, the finish
   and the list of mock-ups.
+- **Prices and earnings.** Customers see one price per AI call (our cost times their plan's rate). Plans describe their
+  price per million tokens, never the markup; statements, the CSV, the billing summary and the AI usage page carry no
+  "our cost", and the database withholds the ledger's cost column and the plans' markup from customers. VX Design
+  administrators (`platform_admins`, added by SQL) see our cost, price and markup everywhere, and **Admin → Earnings**:
+  markup earned from customers per month, and what in-house (unbilled) projects would have earned at a reference
+  markup they set there.
 - **Run chat.** Beside "What you need to do" on a stopped run is a chat with the design agent. Each step listed
   there has **Give guidance**, which opens the chat on that step: what you write is saved with the step (audited) and
   its next attempt reads it as it reads a reviewer's notes. Questions without a step go to the agent as in the

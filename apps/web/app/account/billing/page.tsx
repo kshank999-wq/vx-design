@@ -3,17 +3,22 @@ import { Banner } from "@/components/Banner";
 import { requireUser } from "@/lib/auth";
 import { getCheckout, money, MAX_TOP_UP, MIN_TOP_UP, recordPaidCheckout, settleOpenCheckouts, stripeConfigured, TOP_UPS } from "@/lib/billing";
 import { addCredit, choosePlan } from "./actions";
+import { PRICES } from "@vx/planning";
 
 interface Plan {
   id: string; name: string; description: string | null; billing: "internal" | "prepaid"; monthly_fee_usd: number;
-  included_ai_usd: number; ai_markup_pct: number; locked: boolean; max_projects: number | null; max_concurrent_tasks: number | null;
+  included_ai_usd: number; ai_markup_pct?: number; price_rate: number; locked: boolean; max_projects: number | null; max_concurrent_tasks: number | null;
 }
-interface Billing { plan: Plan; balance: number; month_cost: number; month_charged: number; month_fees: number; offers: Plan[]; months: string[] }
+interface Billing { plan: Plan; admin?: boolean; balance: number; month_cost: number | null; month_charged: number; month_fees: number; offers: Plan[]; months: string[] }
 
-const terms = (p: Plan) => [
+/** A plan's terms as customers read them: the fee and the AI price per million tokens, not how the price is made up. */
+const OPUS = PRICES["claude-opus-5-5"]!;
+const perM = (v: number) => `$${v.toFixed(v < 1 ? 3 : 2)}`;
+const terms = (p: Plan, admin = false) => [
   Number(p.monthly_fee_usd) ? `${money(p.monthly_fee_usd)} a month` : "No monthly fee",
-  Number(p.included_ai_usd) ? `includes ${money(p.included_ai_usd)} of AI and compute at cost` : null,
-  Number(p.ai_markup_pct) ? `AI at our cost + ${Number(p.ai_markup_pct)}%` : "AI at our exact cost",
+  Number(p.included_ai_usd) ? `includes ${money(p.included_ai_usd)} of usage` : null,
+  `design AI ${perM(OPUS.input * p.price_rate)} per million tokens read, ${perM(OPUS.output * p.price_rate)} per million written`,
+  admin ? `(admin: markup ${Number(p.ai_markup_pct ?? 0)}%)` : null,
 ].filter(Boolean).join(" · ");
 
 /** Prepaid balance, plan, card top-ups and monthly statements for the signed-in account. */
@@ -46,9 +51,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             <div className="row spread">
               <div><p className="small muted">Prepaid balance</p><p className="big-number" data-testid="balance-amount">{money(b.balance)}</p></div>
               <div><p className="small muted">Plan</p><p data-testid="current-plan"><strong>{b.plan.name}</strong></p>
-                <p className="small">{billed ? terms(b.plan) : "Not billed (internal use); monthly allowances apply."}</p></div>
+                <p className="small">{billed ? terms(b.plan, b.admin) : "Not billed (internal use); monthly allowances apply."}</p></div>
             </div>
-            {billed && <p className="small" data-testid="month-summary">This month: AI and compute cost us {money(b.month_cost)}; you were charged {money(b.month_charged)}
+            {billed && <p className="small" data-testid="month-summary">This month: usage {money(b.month_charged)}{b.admin && b.month_cost != null ? ` (admin: our cost ${money(b.month_cost)})` : ""}
               {Number(b.month_fees) > 0 && <> plus {money(b.month_fees)} in plan fees</>}.</p>}
             {billed && Number(b.balance) <= 0 && <p className="banner banner-error" role="alert">The balance is used up: AI work is paused until credit is added. Nothing is lost.</p>}
           </section>
@@ -62,7 +67,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {b.offers.map((p) => (
                 <div key={p.id} className={`option-card${p.id === b.plan.id ? " selected" : ""}`} data-testid={`offer-${p.id}`}>
                   <h3>{p.name}</h3>
-                  <p className="small">{terms(p)}</p>
+                  <p className="small">{terms(p, b.admin)}</p>
                   <p className="small muted">{p.description}</p>
                   <p className="small muted">{p.max_projects ?? "Unlimited"} projects · {p.max_concurrent_tasks ?? "unlimited"} tasks at once</p>
                   {p.id === b.plan.id ? <p className="small"><strong>Current plan</strong></p> : !b.plan.locked && (
@@ -88,7 +93,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
           <section className="card" data-testid="statements">
             <h2>Statements</h2>
-            <p className="small muted">Each statement lists every charge with the AI call behind it: project, activity, model, tokens, our cost and what you were charged.</p>
+            <p className="small muted">Each statement lists every charge with the AI call behind it: project, activity, model, tokens and what you were charged.</p>
             <ul>{months.map((m) => <li key={m}><Link href={`/account/billing/statement/${m}`}>{new Date(`${m}-01T00:00:00Z`).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" })}</Link>
               {" "}· <a href={`/account/billing/statement/${m}/csv`}>CSV</a></li>)}</ul>
           </section>
