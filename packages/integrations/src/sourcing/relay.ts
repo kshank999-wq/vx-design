@@ -12,7 +12,12 @@ export class DigiKeyRelayProvider implements SourcingProvider {
   readonly label = "DigiKey (via the VX Design website)";
   readonly role = "primary" as const;
   readonly terms = "DigiKey Product Information API v4 terms; looked up by the VX Design website for this worker.";
-  constructor(private readonly url: string | undefined, private readonly token: string | undefined, private readonly fetchFn: Fetch = fetch) {}
+  private readonly url: string | undefined;
+  private readonly token: string | undefined;
+  private readonly fetchFn: Fetch;
+  constructor(url: string | undefined, token: string | undefined, fetchFn: Fetch = fetch) {
+    this.url = url; this.token = token; this.fetchFn = fetchFn;
+  }
 
   configured(): boolean { return !!(this.url && this.token); }
 
