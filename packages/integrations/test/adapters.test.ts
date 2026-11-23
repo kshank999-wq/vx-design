@@ -110,3 +110,12 @@ test("provider chain from the environment: order, configuration and the fixture 
   assert.deepEqual(sourcingProvidersFromEnv({ VX_SOURCING: "fixture" }).map((p) => p.id), ["fixture"]);
   assert.deepEqual(sourcingProvidersFromEnv({ VX_SOURCING: "off" }), []);
 });
+
+test("keys pasted with quotes, spaces or a Windows line ending still work", async () => {
+  const { cleanKey } = await import("../src/sourcing/providers.ts");
+  assert.equal(cleanKey(' "abc-123"\r'), "abc-123");
+  assert.equal(cleanKey("'k'"), "k");
+  assert.equal(cleanKey("  \r"), undefined);
+  const [, mouser] = sourcingProvidersFromEnv({ MOUSER_API_KEY: "  \r" });
+  assert.equal(mouser!.configured(), false);
+});

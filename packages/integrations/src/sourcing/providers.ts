@@ -9,7 +9,14 @@ import { MouserProvider } from "./mouser.ts";
 import { NexarProvider } from "./nexar.ts";
 import type { SourcingProvider } from "./types.ts";
 
-export function sourcingProvidersFromEnv(env: Record<string, string | undefined> = process.env): SourcingProvider[] {
+/** A key as pasted into an env file: without surrounding spaces, quotes or a Windows line ending. */
+export function cleanKey(v: string | undefined): string | undefined {
+  const t = v?.replace(/\r/g, "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  return t ? t : undefined;
+}
+
+export function sourcingProvidersFromEnv(raw: Record<string, string | undefined> = process.env): SourcingProvider[] {
+  const env = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, /KEY|SECRET|CLIENT_ID/.test(k) ? cleanKey(v) : v]));
   if (env.VX_SOURCING === "fixture") return [new FixtureProvider()];
   if (env.VX_SOURCING === "off") return [];
   return [
