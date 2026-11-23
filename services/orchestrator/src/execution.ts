@@ -171,7 +171,7 @@ export class ExecutionHandle {
     }
     if (over) this.requestYield("AI budget reached");
     if (this.costCap != null) {
-      const spent = await this.db.taskRunSpend(this.exec.task_id, this.exec.run_id);
+      const spent = await this.db.taskRunSpend(this.exec.task_id, this.exec.run_id, this.retryBase);
       if (spent >= this.costCap) {
         throw new TaskCostCapError(`This task's AI cost cap was reached: $${spent.toFixed(2)} of $${this.costCap.toFixed(2)} in this run. ` +
           "It stopped instead of spending more; read its log, then continue the run (or raise the task's cap) to try again.");
@@ -181,6 +181,8 @@ export class ExecutionHandle {
 
   /** Per-task spend cap for this run (USD), checked after every charge. */
   costCap: number | null = null;
+  /** Attempts before the task's last manual retry: their spend does not count against the cap. */
+  retryBase = 0;
   /** Text outputs stored in this attempt (for the plain-language digest). */
   textOutputs: { name: string; text: string }[] = [];
 
@@ -248,6 +250,7 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
     }
     await db.updateExecution(exec.id, { tool_versions: { executor: executor.id, executor_version: executor.version } });
     handle.costCap = taskCostCap(task);
+    handle.retryBase = task.retry_base ?? 0;
 
     // The product's look in words, written once per design freeze from its image, so every step can keep to it.
     try {

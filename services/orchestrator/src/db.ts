@@ -54,6 +54,7 @@ export interface TaskRow {
   key: string;
   title: string;
   discipline: string;
+  retry_base?: number;
   description: string | null;
   required_tools: string[];
   acceptance_tests: { id: string; description: string; method: string; validationKind?: string }[];
@@ -656,8 +657,10 @@ export class WorkerDb {
   }
 
   /** AI spend recorded for a task within one run. */
-  async taskRunSpend(taskId: string, runId: string | null): Promise<number> {
-    let q = this.client.from("cost_events").select("cost_usd").eq("task_id", taskId).eq("kind", "ai_tokens");
+  /** AI spend on a task in a run, counting only attempts after the last manual retry (a retry gets a fresh cap). */
+  async taskRunSpend(taskId: string, runId: string | null, afterAttempt = 0): Promise<number> {
+    let q = this.client.from("cost_events").select("cost_usd, executions!inner(attempt)").eq("task_id", taskId).eq("kind", "ai_tokens")
+      .gt("executions.attempt", afterAttempt);
     if (runId) q = q.eq("run_id", runId);
     const { data, error } = await q.limit(10000);
     if (error) throw new Error(`task spend: ${error.message}`);
