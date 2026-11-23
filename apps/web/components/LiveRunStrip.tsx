@@ -29,7 +29,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
       try { const r = await fetch(`/api/projects/${projectId}/live`, { cache: "no-store" }); if (r.ok && !stop) setLive(await r.json()); } catch { /* next tick */ }
     };
     load();
-    const poll = setInterval(load, 5000), tick = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(load, 20000), tick = setInterval(() => setNow(Date.now()), 1000);
     return () => { stop = true; clearInterval(poll); clearInterval(tick); };
   }, [projectId]);
   const run = live?.run;

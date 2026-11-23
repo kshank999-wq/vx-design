@@ -24,8 +24,9 @@ export const TASK_COST_CAP: Record<string, number> = {
   schematic: 15, pcb_layout: 20, enclosure: 12, simulation: 6, verification: 8, power: 6,
   architecture: 4, components: 4, thermal: 4, mechanical: 4, documentation: 4, sourcing: 2, manufacturing: 2,
 };
-export const taskCostCap = (t: { discipline: string; cost_budget_usd?: number | null }) =>
-  t.cost_budget_usd != null ? Number(t.cost_budget_usd) : TASK_COST_CAP[t.discipline] ?? 5;
+/** A step's AI spending limit: the plan's budget (or the discipline default), raised by an override set on the run page. */
+export const taskCostCap = (t: { discipline: string; cost_budget_usd?: number | null; budget_override_usd?: number | null }) =>
+  Math.max(t.cost_budget_usd != null ? Number(t.cost_budget_usd) : TASK_COST_CAP[t.discipline] ?? 5, Number(t.budget_override_usd ?? 0));
 
 export interface StoredFile {
   versionId: string;
@@ -52,7 +53,9 @@ export interface ExecutorContext {
 }
 
 export type ExecutorResult =
-  | { status: "passed"; validations: Validation[]; summary: string; reviewReason: string | null }
+  | { status: "passed"; validations: Validation[]; summary: string; reviewReason: string | null;
+      /** Done without its real result, so the steps after it can run: shown "on hold" with a way to do it later. */
+      onHold?: string }
   | { status: "failed"; error: string; retryable: boolean; validations?: Validation[] }
   | { status: "blocked"; reason: string };
 
@@ -306,7 +309,12 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
       await handle.log(`plain-language summary skipped: ${(e as Error).message}`, {}, "warn");
     }
     await db.beginValidation(exec.id, opts.workerId);
-    const status = await db.complete(exec.id, opts.workerId, result.validations, result.summary, result.reviewReason);
+    // A step put on hold completes without approval: there is nothing to approve, and the steps after it must not wait.
+    const status = await db.complete(exec.id, opts.workerId, result.validations, result.summary, result.onHold ? null : result.reviewReason);
+    if (result.onHold) {
+      try { await db.markOnHold(task.id, result.onHold); await handle.log(`on hold: ${result.onHold}`, {}, "warn"); }
+      catch (e) { await handle.log(`could not mark the step on hold: ${(e as Error).message}`, {}, "warn"); }
+    }
     if (digest) {
       try { await db.saveDigest(exec.id, task.project_id, task.id, digest); }
       catch (e) { await handle.log(`could not save the plain-language summary: ${(e as Error).message}`, {}, "warn"); }

@@ -158,3 +158,28 @@ export async function undeferStep(projectId: string, runId: string, taskId: stri
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent("Brought back: it is in the list again.")}`);
 }
+
+/** "Skip this step": done without its result, so the steps after it can run. Undone by "Try again". */
+export async function skipStep(projectId: string, runId: string, taskId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("skip_step", { p_task: taskId, p_note: String(form.get("note") ?? "") });
+  if (error) fail(path, error);
+  const { data: run } = await supabase.from("runs").select("stop_conditions, status").eq("id", runId).single();
+  if (run && !["pending", "running", "paused"].includes(run.status)) {
+    await supabase.rpc("continue_run", { p_run: runId, p_ai: 0, p_auto_approve: !!(run.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
+      p_retry_failed: false, p_include_critical: false, p_compute: null });
+  }
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent("On hold: the steps after it carry on without its result. Press “Do it now” under On hold when it can be done.")}`);
+}
+
+/** A step that ran out of its own AI limit: raise just that step's limit and try it again. */
+export async function raiseStepBudget(projectId: string, runId: string, taskId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const usd = Number(form.get("usd"));
+  const { error } = await supabase.rpc("set_step_budget", { p_task: taskId, p_usd: usd });
+  if (error) fail(path, error);
+  await retryStepAndContinue(projectId, runId, taskId);
+}

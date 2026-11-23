@@ -133,5 +133,22 @@ select pg_temp.expect_error($$select public.add_task_guidance((select id from pu
 select pg_temp.act_as(null);
 select pg_temp.check((select count(*) = 1 from public.audit_events where event_type = 'task.guidance'), 'guidance audited');
 
+-- Moving past a step: put on hold (done without its result), brought back with retry_step; a step's own AI limit.
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a1');
+select public.skip_step((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'sch'), 'no parts service');
+select public.set_step_budget((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 45);
+select pg_temp.expect_error($$select public.set_step_budget((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 0)$$, '%between%');
+select pg_temp.act_as(null);
+select pg_temp.check((select status = 'complete' and skipped_at is not null and skipped_note = 'no parts service' from public.tasks where plan_id = pg_temp.id('v4') and key = 'sch'), 'on hold = complete without its result');
+select pg_temp.check((select count(*) = 1 from public.validations v join public.tasks t on t.id = v.task_id where t.plan_id = pg_temp.id('v4') and t.key = 'sch' and v.result = 'warning' and v.summary like 'Skipped%'), 'recorded as a warning');
+select pg_temp.check((select budget_override_usd = 45 from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 'step limit');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a1');
+select public.retry_step((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'sch'));
+select pg_temp.expect_error($$select public.retry_step((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'arch'))$$, '%could not finish%');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a2');
+select pg_temp.expect_error($$select public.skip_step((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 'x')$$, '%not permitted%');
+select pg_temp.act_as(null);
+select pg_temp.check((select status = 'ready' and skipped_at is null from public.tasks where plan_id = pg_temp.id('v4') and key = 'sch'), 'brought back');
+
 \o
 select 'reuse ok';

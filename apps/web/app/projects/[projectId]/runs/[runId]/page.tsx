@@ -7,7 +7,7 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PlainSummary } from "@/components/PlainSummary";
 import { requireUser } from "@/lib/auth";
-import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideStep, raiseBudget, retryStepAndContinue, sendRunGuidance, setAutoApprove, undeferStep } from "./actions";
+import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideStep, raiseBudget, raiseStepBudget, retryStepAndContinue, sendRunGuidance, setAutoApprove, skipStep, undeferStep } from "./actions";
 import { DictateButton } from "@/components/VoiceTools";
 import { RunChat } from "@/components/RunChat";
 
@@ -57,7 +57,7 @@ export default async function RunPage({ params, searchParams }: {
   if (!run) notFound();
 
   const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }, { data: workers }] = await Promise.all([
-    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary, deferred_at, deferred_note")
+    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary, deferred_at, deferred_note, budget_override_usd, skipped_at, skipped_note")
       .eq("plan_id", run.plan_id).order("position"),
     supabase.from("executions").select("id, task_id, attempt, status, worker_id, checkpoint_seq, resumed_from_id, started_at, finished_at, heartbeat_at, error, summary, compute_seconds")
       .eq("run_id", runId).order("created_at"),
@@ -104,6 +104,7 @@ export default async function RunPage({ params, searchParams }: {
   // Steps that could not finish: failed, or blocked only because their worker kept being stopped mid-step.
   const interrupted = (t: { status: string; blocker_reason: string | null }) => t.status === "blocked" && /^interrupted /.test(t.blocker_reason ?? "");
   const deferred = (tasks ?? []).filter((t) => t.deferred_at);
+  const skipped = (tasks ?? []).filter((t) => t.skipped_at);
   const failed = (tasks ?? []).filter((t) => !t.deferred_at && (t.status === "failed" || interrupted(t)));
   const outOfScope = (tasks ?? []).filter((t) => t.status === "ready" && !inScope(t));
   const critical = outOfScope.filter((t) => t.risk_level === "critical" && !t.deferred_at);
@@ -111,8 +112,11 @@ export default async function RunPage({ params, searchParams }: {
   // Guidance already given for the steps listed, and whether a newer run of this plan exists.
   const listedIds = [...new Set([...failed, ...critical, ...heldBlocked].map((t) => t.id))];
   const { data: guidance } = listedIds.length ? await supabase.from("task_guidance").select("task_id, note, created_at").in("task_id", listedIds).order("created_at") : { data: [] };
-  const { data: latestRun } = await supabase.from("runs").select("id, name").eq("plan_id", run.plan_id).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  const superseded = latestRun && latestRun.id !== runId ? latestRun : null;
+  // When another run of this plan is the one working, or is newer, this page points there instead of offering work.
+  const { data: planRuns } = await supabase.from("runs").select("id, name, status, created_at").eq("plan_id", run.plan_id).order("created_at", { ascending: false }).limit(10);
+  const activeHere = ["pending", "running", "paused"].includes(run.status);
+  const workingElsewhere = activeHere ? null : (planRuns ?? []).find((r) => r.id !== runId && ["pending", "running", "paused"].includes(r.status)) ?? null;
+  const superseded = workingElsewhere ?? (!activeHere && planRuns?.[0] && planRuns[0].id !== runId ? planRuns[0] : null);
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
   const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
   const chatSteps = [
@@ -145,7 +149,7 @@ export default async function RunPage({ params, searchParams }: {
       <div className="row spread">
         <h1>{run.name || "Run"}</h1>
         <div className="row">
-          {live && <AutoRefresh quiet={active} />}
+          {live && <AutoRefresh quiet={active} intervalMs={20000} />}
           <span className={`pill pill-${run.status} big`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
         </div>
       </div>
@@ -161,7 +165,7 @@ export default async function RunPage({ params, searchParams }: {
               <span className="live-beacon" aria-hidden="true" />
               <div>
                 <p className="live-title">{run.status === "paused" ? "Paused" : liveExecs.length ? `Working on ${liveExecs.length} task${liveExecs.length > 1 ? "s" : ""}` : run.status === "pending" ? "Starting" : "Running: between tasks"}</p>
-                <p className="live-sub">{done} of {total} tasks done · {waiting.length ? <a href="#approvals"><strong>{waiting.length} waiting for your approval</strong></a> : "nothing waiting for you"} · {(workers ?? []).length} worker(s) online · updates every 3 s</p>
+                <p className="live-sub">{done} of {total} tasks done · {waiting.length ? <a href="#approvals"><strong>{waiting.length} waiting for your approval</strong></a> : "nothing waiting for you"} · {(workers ?? []).length} worker(s) online · updates every 20 s</p>
               </div>
             </div>
             {liveExecs.length > 0 && (
@@ -202,10 +206,11 @@ export default async function RunPage({ params, searchParams }: {
         <input type="hidden" name="compute" value={Number(run.max_compute_spend_usd)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
       {superseded && (
-        <p className="banner banner-warn" data-testid="older-run">This is an earlier run. Work continues in the latest one. <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>Open the latest run →</Link></p>
+        <p className="banner banner-warn" data-testid="older-run">{workingElsewhere ? <>The work is running in another run{workingElsewhere.name ? ` (${workingElsewhere.name})` : ""} right now. </> : <>This is an earlier run. Work continues in the latest one. </>}
+          <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>{workingElsewhere ? "Open the run that is working →" : "Open the latest run →"}</Link></p>
       )}
-      {!active && !superseded && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || deferred.length > 0 || canContinue) && (() => {
-        const issue = (t: { id: string; key: string; title: string; blocker_reason: string | null }, kind: "failed" | "critical" | "waiting_outside", reason: string) => {
+      {!active && !superseded && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || deferred.length > 0 || skipped.length > 0 || canContinue) && (() => {
+        const issue = (t: { id: string; key: string; title: string; discipline: string; blocker_reason: string | null; budget_override_usd: number | null }, kind: "failed" | "critical" | "waiting_outside", reason: string) => {
           const open = guide === t.key;
           const notes = (guidance ?? []).filter((g) => g.task_id === t.id);
           const retryable = kind === "failed";
@@ -219,7 +224,16 @@ export default async function RunPage({ params, searchParams }: {
               {notes.length > 0 && <div className="issue-notes small"><strong>Your guidance so far:</strong><ul>{notes.map((g, i) => <li key={i}>{g.note} <span className="muted">({new Date(g.created_at).toLocaleString("en-US")})</span></li>)}</ul></div>}
               {canControl && (
                 <div className="issue-actions">
-                  {retryable && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton pendingText="Starting…">↻ Try again</SubmitButton></form>}
+                  {retryable && /cost cap was reached/.test(t.blocker_reason ?? "") ? (
+                    <form className="row tight" action={raiseStepBudget.bind(null, projectId, runId, t.id)}>
+                      <label className="inline small">Limit for this step $<input name="usd" type="number" min={1} max={1000} step="any"
+                        defaultValue={Math.max(Number(/of \$([\d.]+)/.exec(t.blocker_reason ?? "")?.[1] ?? 20) * 2, Number(t.budget_override_usd ?? 0))} style={{ width: "5em" }} /></label>
+                      <SubmitButton pendingText="Starting…">↻ Raise it and try again</SubmitButton></form>
+                  ) : retryable && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton pendingText="Starting…">↻ Try again</SubmitButton></form>}
+                  {kind === "failed" && (
+                    <form action={skipStep.bind(null, projectId, runId, t.id)} data-testid="skip-step"><input type="hidden" name="note" value="" />
+                      <SubmitButton variant="secondary" pendingText="Moving on…">⏭ Put on hold and move on</SubmitButton></form>
+                  )}
                   {kind === "critical" && role === "owner" && (
                     <form action={continueThisRun.bind(null, projectId, runId)}>
                       <input type="hidden" name="ai" value={Number(run.max_ai_spend_usd)} /><input type="hidden" name="include_critical" value="on" />
@@ -228,7 +242,7 @@ export default async function RunPage({ params, searchParams }: {
                   )}
                   {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <Link className="btn btn-secondary" href={`/projects/${projectId}/validation`}>Open Validation</Link>}
                   <Link className={`btn ${open ? "" : "btn-secondary"}`} href={open ? `?#issue-${t.key}` : `?guide=${t.key}#issue-${t.key}`} data-testid="give-guidance">✎ {open ? "Close guidance" : "Give guidance"}</Link>
-                  <form action={deferStep.bind(null, projectId, runId, t.id)}><input type="hidden" name="note" value="" /><SubmitButton variant="secondary" pendingText="Saving…">⏸ Save for later</SubmitButton></form>
+                  {kind !== "failed" && <form action={deferStep.bind(null, projectId, runId, t.id)}><input type="hidden" name="note" value="" /><SubmitButton variant="secondary" pendingText="Saving…">⏸ Save for later</SubmitButton></form>}
                 </div>
               )}
               {open && canControl && (
@@ -272,6 +286,13 @@ export default async function RunPage({ params, searchParams }: {
                 </article>
               )}
             </div>
+            {skipped.length > 0 && (
+              <details className="issue-deferred small" data-testid="skipped">
+                <summary>On hold ({skipped.length}): the steps after them carried on without their result</summary>
+                <ul>{skipped.map((t) => <li key={t.id} className="row tight"><span>{t.title}{t.skipped_note ? ` (${t.skipped_note})` : ""}</span>
+                  {canControl && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton variant="secondary" pendingText="…">Do it now</SubmitButton></form>}</li>)}</ul>
+              </details>
+            )}
             {deferred.length > 0 && (
               <details className="issue-deferred small" data-testid="deferred">
                 <summary>Saved for later ({deferred.length})</summary>

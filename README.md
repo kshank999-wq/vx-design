@@ -199,6 +199,12 @@ sit beside the steps.
   Options (every button uses the run's own budget). Older runs say so and link to the latest. When a worker is stopped
   (an update or restart), it hands its steps straight back to the queue instead of letting them count as
   interruptions; steps already blocked by interruptions are put back when the run continues.
+- **Moving on past a step.** A step that could not finish can be **put on hold and moved on**: it counts as done
+  without its result (recorded as a warning, audited), the steps after it run, and it is listed under "On hold" with
+  **Do it now**. The parts lookup puts itself on hold when every parts service refuses (keys, approvals, plan limits),
+  instead of retrying. A step that ran out of its own AI limit gets **Raise it and try again** (a per-step override; the
+  approved plan is unchanged). Run pages and the status bar follow the run that is working; a stopped run whose work is
+  running in another run says so and links to it. The run page refreshes every 20 seconds.
 - **Run chat.** Beside "What you need to do" on a stopped run is a chat with the design agent. Each step listed
   there has **Give guidance**, which opens the chat on that step: what you write is saved with the step (audited) and
   its next attempt reads it as it reads a reviewer's notes. Questions without a step go to the agent as in the

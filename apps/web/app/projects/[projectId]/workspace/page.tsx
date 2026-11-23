@@ -61,12 +61,14 @@ export default async function WorkspacePage({ params, searchParams }: {
   // The latest steps the workers logged (staff only; clients see the checklist).
   const { data: activity } = await supabase.from("execution_logs").select("id, level, message, created_at, executions(tasks(key, title))")
     .eq("project_id", projectId).neq("level", "debug").order("id", { ascending: false }).limit(15);
-  const [{ data: lastRun }, { data: plansAll }, { data: releases }, { data: reqStatus }] = await Promise.all([
-    supabase.from("runs").select("id, status").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  const [{ data: recentRuns }, { data: plansAll }, { data: releases }, { data: reqStatus }] = await Promise.all([
+    supabase.from("runs").select("id, status").eq("project_id", projectId).order("created_at", { ascending: false }).limit(10),
     supabase.from("plans").select("id, version, status").eq("project_id", projectId).order("version", { ascending: false }).limit(1),
     supabase.from("releases").select("id, status").eq("project_id", projectId).limit(5),
     supabase.from("requirements").select("status").eq("project_id", projectId),
   ]);
+  // The run that is working, if any; otherwise the newest.
+  const lastRun = (recentRuns ?? []).find((r) => ["pending", "running", "paused"].includes(r.status)) ?? recentRuns?.[0] ?? null;
   // VX Design's checks on each result waiting for approval (its latest attempt), shown in plain language.
   const waitIds = ctx.tasks.filter((t) => t.status === "awaiting_approval").map((t) => t.id);
   const { data: waitVals } = waitIds.length ? await supabase.from("validations").select("task_id, execution_id, kind, result, summary, created_at").in("task_id", waitIds).order("created_at", { ascending: false }) : { data: [] };

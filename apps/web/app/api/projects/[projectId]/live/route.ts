@@ -8,9 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const supabase = await createClient();
+  // The run that is working, if any; otherwise the newest.
   const { data: runs } = await supabase.from("runs").select("id, name, status, stop_reason, plan_id, max_ai_spend_usd, created_at")
-    .eq("project_id", projectId).order("created_at", { ascending: false }).limit(1);
-  const run = runs?.[0];
+    .eq("project_id", projectId).order("created_at", { ascending: false }).limit(10);
+  const run = (runs ?? []).find((r) => ["pending", "running", "paused"].includes(r.status)) ?? runs?.[0];
   const { count: questions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
   if (!run) return NextResponse.json({ run: null, questions: questions ?? 0 });
   const [{ data: execs }, { data: waiting }, { data: costs }] = await Promise.all([

@@ -55,6 +55,7 @@ export interface TaskRow {
   title: string;
   discipline: string;
   retry_base?: number;
+  budget_override_usd?: number | null;
   description: string | null;
   required_tools: string[];
   acceptance_tests: { id: string; description: string; method: string; validationKind?: string }[];
@@ -876,6 +877,12 @@ export class WorkerDb {
     const { data, error } = await this.client.from("requirements").select("ref_code, kind, priority, text").eq("project_id", projectId).neq("status", "rejected");
     if (error) throw new Error(`requirements: ${error.message}`);
     return data ?? [];
+  }
+
+  /** Marks a finished step as on hold (done without its real result), with the reason shown on the run page. */
+  async markOnHold(taskId: string, reason: string): Promise<void> {
+    const { error } = await this.client.from("tasks").update({ skipped_at: new Date().toISOString(), skipped_note: reason.slice(0, 500) }).eq("id", taskId);
+    if (error) throw new Error(`on hold: ${error.message}`);
   }
 
   async claimImportConversion(workerId: string): Promise<{ id: string; audit_id: string; project_id: string; kind: "pcb" | "mcad"; file_name: string;

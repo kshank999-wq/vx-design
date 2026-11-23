@@ -151,9 +151,25 @@ export function sourcingExecutor(providers: SourcingProvider[]): Executor {
         details: { counts: c, totals: resolution.totals, errors: errors.slice(0, 30), warnings: warnings.slice(0, 30) },
       };
       if (errors.length) {
-        const transient = resolution.lines.some((l) => l.attempts.some((a) => a.outcome === "error"));
+        // A retry helps only when a provider had a passing problem (network, rate limit). When every configured
+        // provider refused us (key, plan limit, firewall), retrying at once just repeats the refusal.
+        const errs = resolution.lines.flatMap((l) => l.attempts.filter((a) => a.outcome === "error").map((a) => a.error ?? ""));
+        const refusal = /skipped:|invalid|api key|identifier|exceeded your part limit|upgrade your plan|anti-bot|HTTP 40[13]/i;
+        const transient = errs.length > 0 && !errs.every((e) => refusal.test(e));
+        const allRefused = errs.length > 0 && errs.every((e) => refusal.test(e));
+        if (allRefused) {
+          // Nothing to retry: every parts service refused (keys, plan limits, firewall). Put the step on hold so the
+          // design carries on; the parts list from the schematics stays, without prices, stock or LCSC numbers.
+          const who = [...new Set(resolution.lines.flatMap((l) => l.attempts.filter((a) => a.outcome === "error").map((a) => a.provider)))];
+          return { status: "passed", validations: [{ ...check, result: "warning", summary: `On hold: no parts service answered (${who.join(", ")} refused the lookup). ` + check.summary }],
+                   summary: `On hold: parts lookup not done (${who.join(", ")} refused)`, reviewReason: null,
+                   onHold: `No parts service answered (${who.join(", ")} refused: keys, approvals or plan limits). The design carries on without prices, stock or LCSC numbers; do this step when a service works.` };
+        }
         return { status: "failed", retryable: transient, validations: [check],
-                 error: `${errors.length} line problem(s): ${errors.slice(0, 5).join("; ")}` };
+                 error: allRefused
+                   ? `Every parts service refused the lookup (${[...new Set(resolution.lines.flatMap((l) => l.attempts.filter((a) => a.outcome === "error").map((a) => a.provider)))].join(", ")}): ` +
+                     `fix the keys or approvals, or skip this step to carry on without prices. ${errors.slice(0, 2).join("; ")}`
+                   : `${errors.length} line problem(s): ${errors.slice(0, 5).join("; ")}` };
       }
       const ruleSelected = resolution.lines.filter((l) => l.selected?.identity === "rule_selected").flatMap((l) => l.refs);
       const reviewReason = resolution.dataStatus !== "live"
