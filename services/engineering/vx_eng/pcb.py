@@ -73,6 +73,8 @@ class Layout:
     corner_radius: float = 0.0
     fab_profile: str = DEFAULT_PROFILE
     ground_pour: str | None = "GND"
+    # 4-layer boards: the nets of the inner planes (In1, In2). Empty: ground on In1, the busiest supply on In2.
+    inner_planes: list[str] = field(default_factory=list)
 
     @staticmethod
     def from_json(d: dict[str, Any]) -> "Layout":
@@ -85,6 +87,7 @@ class Layout:
                                   str(p.get("side") or "top")) for p in d.get("placements") or []],
             fab_profile=str(d.get("fab_profile") or DEFAULT_PROFILE),
             ground_pour=d.get("ground_pour", "GND") or None,
+            inner_planes=[str(n) for n in (d.get("inner_planes") or []) if n][:2],
         )
 
 
@@ -436,6 +439,54 @@ def _ground_pour(board, layout: Layout, profile: FabProfile, net) -> list[str]:
     return layers
 
 
+def _plane_nets(layout: Layout, nets: dict[str, Any], power: list[str], pin_net_names: dict) -> list[str]:
+    """Full net names for In1 and In2: the layout's choice, else ground then the supply with the most pins."""
+    by_short = {short_net(n): n for n in nets}
+    chosen = [by_short[n] for n in layout.inner_planes if n in by_short]
+    if len(chosen) == 2:
+        return chosen
+    ground = by_short.get(layout.ground_pour or "GND") or next((n for n in nets if short_net(n).upper() in ("GND", "GNDD", "VSS")), None)
+    pins: dict[str, int] = {}
+    for n in pin_net_names.values():
+        pins[n] = pins.get(n, 0) + 1
+    supply = max((n for n in power if n != ground), key=lambda n: pins.get(n, 0), default=None)
+    out = chosen[:1] or ([ground] if ground else [])
+    for n in (ground, supply):
+        if n and n not in out and len(out) < 2:
+            out.append(n)
+    return out
+
+
+def _inner_planes(board, layout: Layout, profile: FabProfile, plane_nets: list[str], nets: dict[str, Any]) -> list[dict[str, str]]:
+    """Solid planes on the inner layers, added before routing: the router then reaches them with vias instead of
+    routing those nets, which frees the outer layers for signals."""
+    pcbnew = _pcbnew()
+    mm = pcbnew.FromMM
+    ox, oy = ORIGIN_MM
+    inset = profile.copper_edge_clearance_mm
+    out = []
+    for layer, lname, net in zip((pcbnew.In1_Cu, pcbnew.In2_Cu), ("In1.Cu", "In2.Cu"), plane_nets):
+        board.SetLayerType(layer, pcbnew.LT_POWER)
+        z = pcbnew.ZONE(board)
+        z.SetLayer(layer)
+        z.SetNet(nets[net])
+        z.SetIsRuleArea(False)
+        z.SetLocalClearance(mm(max(profile.clearance_mm, 0.25)))
+        z.SetMinThickness(mm(max(profile.min_track_mm, 0.2)))
+        z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
+        z.SetThermalReliefGap(mm(0.3))
+        z.SetThermalReliefSpokeWidth(mm(max(profile.track_mm, 0.3)))
+        z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
+        z.SetAssignedPriority(1)
+        outline = z.Outline()
+        outline.NewOutline()
+        for x, y in ((inset, inset), (layout.width - inset, inset), (layout.width - inset, layout.height - inset), (inset, layout.height - inset)):
+            outline.Append(mm(ox + x), mm(oy + y))
+        board.Add(z)
+        out.append({"layer": lname, "net": short_net(net)})
+    return out
+
+
 # --- DRC --------------------------------------------------------------------------------
 
 def drc(project_dir: Path, pcb: str, refill: bool = True) -> dict[str, Any]:
@@ -618,7 +669,12 @@ def build_board(circuit: Circuit, layout: Layout, project_dir: Path, name: str, 
     _write_project(project_dir / f"{name}.kicad_pro", profile, power)
     _assign_netclasses(board, profile, power)
 
+    planes: list[dict[str, str]] = []
+    if profile.layers == 4:
+        planes = _inner_planes(board, layout, profile, _plane_nets(layout, nets, power, pin_net_names), nets)
+        pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     routing = _route(board, project_dir) if route else {"router": None, "segments": 0, "vias": 0}
+    routing["planes"] = planes
     pour_layers: list[str] = []
     pour_net = next((n for n in nets if layout.ground_pour and short_net(n) == layout.ground_pour), None)
     if pour_net:

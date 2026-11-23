@@ -121,5 +121,17 @@ update public.requirements set status = 'rejected' where ref_code = 'REQ-1' and 
 select public.compute_plan_fingerprints(pg_temp.id('v4'));
 select pg_temp.check((select t.fingerprint <> f.fingerprint from public.tasks t join fp f using (key) where t.plan_id = pg_temp.id('v4') and t.key = 'arch'), 'rejecting does');
 
+-- Guidance for a step: members add it (audited), outsiders cannot; members read it.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000008a2', 'olga@reuse.test');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a1');
+select public.add_task_guidance((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 'Use the 4-layer profile.');
+select pg_temp.expect_error($$select public.add_task_guidance((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), ' ')$$, '%write the guidance%');
+select pg_temp.check((select count(*) = 1 from public.task_guidance), 'owner reads guidance');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000008a2');
+select pg_temp.check((select count(*) = 0 from public.task_guidance), 'outsider reads nothing');
+select pg_temp.expect_error($$select public.add_task_guidance((select id from public.tasks where plan_id = pg_temp.id('v4') and key = 'pcb'), 'x y')$$, '%not permitted%');
+select pg_temp.act_as(null);
+select pg_temp.check((select count(*) = 1 from public.audit_events where event_type = 'task.guidance'), 'guidance audited');
+
 \o
 select 'reuse ok';

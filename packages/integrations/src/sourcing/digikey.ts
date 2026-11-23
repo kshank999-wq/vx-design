@@ -75,7 +75,8 @@ export class DigiKeyProvider implements SourcingProvider {
   private async headers(): Promise<Record<string, string>> {
     return { authorization: `Bearer ${await this.tokens.get()}`, "X-DIGIKEY-Client-Id": this.clientId ?? "",
              "X-DIGIKEY-Locale-Site": this.site, "X-DIGIKEY-Locale-Language": "en", "X-DIGIKEY-Locale-Currency": this.currency,
-             "content-type": "application/json" };
+             "content-type": "application/json", "user-agent": "VX-Design/1.0 (electronics design; DigiKey Product Information API v4)",
+             accept: "application/json" };
   }
 
   private currencyOf(body: { SearchLocaleUsed?: { Currency?: string } }): string {

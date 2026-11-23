@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fail, requireUser } from "@/lib/auth";
+import { askAndPost } from "@/lib/chat";
 
 const ACTIONS = ["pause", "resume", "cancel"] as const;
 const DONE: Record<string, string> = { pause: "Paused: running steps finish, then work stops.", resume: "Resumed.", cancel: "Canceled. In-flight work stops at its next checkpoint." };
@@ -83,4 +84,27 @@ export async function setAutoApprove(projectId: string, runId: string, on: boole
   if (error) fail(path, error);
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(on ? "Running straight through: results whose checks pass are approved automatically." : "Stopping for approvals again.")}`);
+}
+
+/**
+ * The run page's chat: a message to the design agent, optionally about one step. Guidance about a step is saved
+ * with it (its next attempt reads it, as it reads a reviewer's notes), and the agent replies in the project chat.
+ */
+export async function sendRunGuidance(projectId: string, runId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase, userId } = await requireUser();
+  const message = String(form.get("message") ?? "").trim();
+  const taskId = String(form.get("task") ?? "") || null;
+  if (message.length < 2) fail(`${path}#run-chat`, "Write a message first.");
+  let about = "";
+  if (taskId) {
+    const { data: t } = await supabase.from("tasks").select("key, title").eq("id", taskId).maybeSingle();
+    if (!t) fail(path, "That step was not found.");
+    const { error } = await supabase.rpc("add_task_guidance", { p_task: taskId, p_note: message });
+    if (error) fail(path, error);
+    about = `Guidance for the step "${t.title}" (${t.key}), saved for its next attempt: `;
+  }
+  const err = await askAndPost(supabase, userId, projectId, `${about}${message}`.slice(0, 4000));
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(taskId ? "Saved: the step's next attempt will follow your guidance. Continue the run when you are ready." : "Sent.")}${err ? `&error=${encodeURIComponent(err)}` : ""}#run-chat`);
 }

@@ -171,6 +171,12 @@ sit beside the steps.
   oscillator without the compensation the design uses). A scenario counts as information only when a requirement
   check on the same requirement sits beside it, and a stretch check on a must requirement is a requirement, so a
   real shortfall still fails the step.
+- **Run chat.** Beside "What you need to do" on a stopped run is a chat with the design agent. Each step listed
+  there has **Give guidance**, which opens the chat on that step: what you write is saved with the step (audited) and
+  its next attempt reads it as it reads a reviewer's notes. Questions without a step go to the agent as in the
+  Workspace. Dictation and read-aloud work here too.
+- **Parts services that refuse.** A parts service that rejects the key, has used up its plan, or answers with an
+  anti-bot page is asked once per parts list and then skipped with the reason, instead of failing every line.
 - **What you need to do.** A stopped run says in plain words what stopped it: steps that could not finish (and why),
   critical-risk steps outside the run (only the owner can include them), results waiting, open questions, and steps
   waiting on hardware. **Fix these and continue the run** retries the failed steps with a fresh retry allowance,
@@ -409,8 +415,12 @@ upstream schematic task, so the schematic must be approved first.
 
 1. **Placement.** Claude proposes:
    - the outline, corner radius and mounting holes (M2, M2.5 or M3);
-   - a fab design-rule profile (`jlcpcb-2layer-standard` or `oshpark-2layer`);
-   - a ground pour net;
+   - a fab design-rule profile (`jlcpcb-2layer-standard`, `oshpark-2layer`, or `jlcpcb-4layer-standard` for dense
+     boards with modules, fine-pitch connectors or more than about 40 parts);
+   - a ground pour net, and on 4 layers the inner plane nets (In1 ground, In2 the main supply by default). The planes
+     go in before routing, so the router drops those nets to them with vias and routes only signals on the outer
+     layers. The fab package checks both inner layers are in the Gerbers and the fab notes give the stackup. When two
+     layers leave ten or more connections unrouted, the repair message tells the model to switch to four;
    - a position, rotation and side for every component.
    
    It is given each footprint's courtyard extents from the KiCad library.

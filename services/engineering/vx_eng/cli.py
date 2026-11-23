@@ -121,7 +121,10 @@ def cmd_layout_build(spec: dict, layout_spec: dict, out: Path, models: dict | No
         nets = sorted({i["description"] for v in report["unconnected_items"] for i in v["items"]})[:20]
         problems.append({"code": "routing_incomplete",
                          "message": f"the autorouter left {report['unconnected']} connection(s) unrouted. Give parts more room "
-                                    "(spread them out or enlarge the board) and keep connected parts close together",
+                                    "(spread them out or enlarge the board) and keep connected parts close together"
+                                    + (". With this many unrouted on two layers, switch fab_profile to jlcpcb-4layer-standard "
+                                       "(ground and power planes on the inner layers free the outer layers for signals)"
+                                       if built["profile"].layers == 2 and report["unconnected"] >= 10 else ""),
                          "items": nets})
     other = [v for v in report["violations"] if v["severity"] == "error" and not v["excluded"]]
     if other:

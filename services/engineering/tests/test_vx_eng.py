@@ -424,6 +424,48 @@ class FabPackageTests(unittest.TestCase):
             unzip_project(bad, Path(self.tmp.name) / "bad")
 
 
+class FourLayerTests(unittest.TestCase):
+    """The fixture board on the 4-layer profile: inner ground and power planes, routed, DRC-clean, and a fab package
+    whose Gerbers carry both inner layers and whose notes give the stackup."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        from vx_eng.cli import cmd_fab_package, cmd_layout_build
+        os.environ.setdefault("VX_3DMODEL_FETCH", "0")
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        cls.built = cmd_layout_build(FIXTURE, {**LAYOUT, "fab_profile": "jlcpcb-4layer-standard"}, root / "board")
+        cls.pkg = None
+        if cls.built["ok"]:
+            cls.pkg = cmd_fab_package(root / "board" / cls.built["files"]["project_zip"], root / "pkg", panel=False, profile=None)
+            cls.notes = (root / "pkg" / "FAB-NOTES.txt").read_text() if (root / "pkg" / "FAB-NOTES.txt").exists() else ""
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_board_has_planes_and_passes_drc(self):
+        r = self.built
+        self.assertTrue(r["ok"], r.get("problems"))
+        self.assertEqual((r["drc"]["errors"], r["drc"]["unconnected"], r["drc"]["parity"]), (0, 0, 0))
+        self.assertEqual(r["board"]["copper_layers"], 4)
+        self.assertEqual([p["layer"] for p in r["routing"]["planes"]], ["In1.Cu", "In2.Cu"])
+        self.assertEqual(r["routing"]["planes"][0]["net"], "GND")
+
+    def test_chosen_inner_planes_are_used(self):
+        from vx_eng import pcb
+        lay = pcb.Layout.from_json({**LAYOUT, "fab_profile": "jlcpcb-4layer-standard", "inner_planes": ["GND", "+3V3"]})
+        self.assertEqual(lay.inner_planes, ["GND", "+3V3"])
+
+    def test_fab_package_has_inner_layers_and_stackup(self):
+        self.assertIsNotNone(self.pkg)
+        self.assertTrue(self.pkg["ok"], self.pkg.get("problems"))
+        self.assertFalse([p for p in self.pkg.get("problems", []) if p.get("code") == "inner_layers"])
+        self.assertIn("In1.Cu ground plane", self.notes)
+
+
+
 class ModelCheckTests(unittest.TestCase):
     """Manufacturer 3D model alignment: synthetic vendor-style models, plus a round trip through KiCad's STEP export."""
 

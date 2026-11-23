@@ -125,6 +125,10 @@ def check_gerbers(gerber_zip: Path, facts: dict[str, Any], profile: FabProfile) 
     for side, use in need:
         if (side, use) not in stack.graphic_layers:
             problems.append(_problem("missing_layer", f"no {side} {use} Gerber in the package"))
+    inner = sorted(side for (side, use) in stack.graphic_layers if use == "copper" and side.startswith("inner"))
+    if len(inner) != max(profile.layers - 2, 0):
+        problems.append(_problem("inner_layers", f"the package has {len(inner)} inner copper layer(s); a {profile.layers}-layer board needs "
+                                                 f"{max(profile.layers - 2, 0)}"))
     if stack.outline is None:
         problems.append(_problem("missing_layer", "no board outline (Edge.Cuts) Gerber in the package"))
         return {"ok": False, "problems": problems, "warnings": warns, "layers": found}
@@ -270,7 +274,9 @@ def fab_notes(name: str, revision: str, profile: FabProfile, facts: dict[str, An
         f"  Dimensions ......... {w} x {h} mm",
         f"  Layers ............. {facts['copper_layers']}",
         f"  Material ........... FR-4, {profile.thickness_mm} mm",
-        f"  Copper ............. {profile.copper_oz:g} oz outer",
+        f"  Copper ............. {profile.copper_oz:g} oz outer" + (", 0.5 oz inner" if facts["copper_layers"] > 2 else ""),
+        *([f"  Stackup ............ F.Cu signal / In1.Cu ground plane / In2.Cu power plane / B.Cu signal "
+           f"(JLC04161H-7628 or the house's standard 4-layer stackup)"] if facts["copper_layers"] == 4 else []),
         f"  Surface finish ..... {profile.finish}",
         f"  Solder mask ........ {profile.mask}; silkscreen {profile.silkscreen}",
         f"  Min track / space .. {facts['min_track_mm']} mm / {profile.clearance_mm} mm (rules: {profile.min_track_mm} / {profile.min_clearance_mm} mm)",

@@ -323,11 +323,16 @@ export class WorkerDb {
     return { deg, why };
   }
 
+  /** A reviewer's return notes, then guidance the owner or team wrote for this step (oldest first). */
   async reviewNotes(taskId: string): Promise<string[]> {
-    const { data, error } = await this.client.from("approvals").select("response_note")
-      .eq("task_id", taskId).eq("status", "rejected").order("responded_at");
+    const [{ data, error }, { data: guide, error: ge }] = await Promise.all([
+      this.client.from("approvals").select("response_note").eq("task_id", taskId).eq("status", "rejected").order("responded_at"),
+      this.client.from("task_guidance").select("note").eq("task_id", taskId).order("created_at"),
+    ]);
     if (error) throw new Error(`review notes: ${error.message}`);
-    return (data ?? []).map((a) => a.response_note).filter((n): n is string => !!n);
+    if (ge) throw new Error(`guidance: ${ge.message}`);
+    return [...(data ?? []).map((a) => a.response_note).filter((n): n is string => !!n),
+            ...(guide ?? []).map((g) => `Guidance from the owner/team: ${g.note}`)];
   }
 
   async upload(path: string, body: Uint8Array, contentType: string): Promise<void> {

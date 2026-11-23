@@ -110,3 +110,17 @@ test("no provider configured: lines are unsourced with a plain error, never inve
   assert.equal(r.totals[0]!.total, null);
   assert.equal(r.dataStatus, "none");
 });
+
+test("a provider that refuses us is asked once per parts list, and an anti-bot page is named as such", async () => {
+  const { ProviderError } = await import("../src/index.ts");
+  let calls = 0;
+  class Refusing extends Scripted {
+    async searchMpn(): Promise<PartRecord[]> { calls++; throw new ProviderError("digikey", "auth", "HTTP 403: <!DOCTYPE html><html><head><title>Just a moment...</title>"); }
+  }
+  const two = { components: [FIXTURE_CIRCUIT.components[2]!, FIXTURE_CIRCUIT.components[1]!], nets: [] };
+  const r = await resolveBom(two, [new Refusing("digikey", "fallback_a", []), new Scripted("mouser", "fallback_b", [rec("mouser", "active", ["Mouser"])])]);
+  assert.equal(calls, 1, "the refusing provider is not asked again");
+  const errs = r.lines.flatMap((l) => l.attempts.filter((a) => a.provider === "digikey").map((a) => a.error ?? ""));
+  assert.ok(errs.some((e) => /anti-bot firewall/.test(e) && !e.startsWith("skipped")), errs.join(" | "));
+  assert.ok(errs.some((e) => e.startsWith("skipped: ")), errs.join(" | "));
+});

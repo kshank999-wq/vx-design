@@ -25,7 +25,8 @@ export const BoardLayout = z.object({
     })).describe("Plated mounting holes; their keep-out (pad plus courtyard) is about 2x the screw size in diameter"),
   }),
   fab_profile: z.string().describe("Design-rule profile, one of the listed fab profiles"),
-  ground_pour: z.string().nullable().describe("Net to pour on both copper layers (normally GND), or null"),
+  ground_pour: z.string().nullable().describe("Net to pour on the outer copper layers (normally GND), or null"),
+  inner_planes: z.array(z.string()).describe("4-layer profiles only: the nets of the inner planes [In1, In2], normally [\"GND\", the main supply]. Empty for 2-layer boards or to let VX Design choose (ground, then the supply with the most pins)."),
   placements: z.array(z.object({
     ref: z.string(),
     x_mm: z.number().describe("Footprint origin x from the board's top-left corner, mm"),
@@ -88,7 +89,9 @@ export interface LayoutResult {
   usage: Usage[];
 }
 
-const SYSTEM = `You are a senior PCB designer placing components for a small two-layer board that will be autorouted (Freerouting) and checked with KiCad DRC.
+const SYSTEM = `You are a senior PCB designer placing components for a board that will be autorouted (Freerouting) and checked with KiCad DRC.
+
+Choose the fab profile first. Two layers suit simple boards (roughly under 40 parts, no modules or fine-pitch connectors). Use the 4-layer profile for dense boards: compute or radio modules, board-to-board or fine-pitch connectors, display/camera/USB high-speed links, or more than about 40 parts. On 4 layers the inner layers are solid planes (In1 ground, In2 the main supply): every pin on those nets drops to its plane through a via, so only signals are routed on the outer layers. If a previous round left many connections unrouted on two layers, switch to the 4-layer profile.
 
 Coordinates are millimetres from the board's top-left corner; x grows right, y grows down. Each placement positions the footprint origin. You are given every footprint's courtyard extents relative to its origin at rotation 0 (left/top are negative offsets); rotating by 90 swaps width and height. Courtyards must lie fully inside the outline and must not overlap other courtyards on the same side. Through-hole parts and mounting holes occupy both sides.
 
@@ -174,6 +177,7 @@ export const OFFLINE_FIXTURE_LAYOUT: BoardLayout = {
   },
   fab_profile: "jlcpcb-2layer-standard",
   ground_pour: "GND",
+  inner_planes: [],
   placements: [
     { ref: "J1", x_mm: 4, y_mm: 9.7, rotation_deg: 0, side: "top" },
     { ref: "C1", x_mm: 10, y_mm: 11, rotation_deg: 90, side: "top" },

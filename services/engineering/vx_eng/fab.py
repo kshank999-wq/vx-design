@@ -55,6 +55,20 @@ PROFILES: dict[str, FabProfile] = {p.name: p for p in (
         min_board_mm=10.0, max_board_mm=400.0,
     ),
     FabProfile(
+        name="jlcpcb-4layer-standard",
+        description="JLCPCB standard 4-layer, 1.6 mm FR-4 (JLC04161H-7628), 1 oz outer / 0.5 oz inner: "
+                    "signals on top and bottom, a ground plane (In1) and a power plane (In2). For dense boards, "
+                    "modules and fine-pitch connectors",
+        layers=4,
+        min_track_mm=0.1, min_clearance_mm=0.1,
+        min_via_diameter_mm=0.45, min_via_drill_mm=0.2, min_hole_mm=0.2,
+        copper_edge_clearance_mm=0.3,
+        track_mm=0.15, clearance_mm=0.15, via_diameter_mm=0.5, via_drill_mm=0.25,
+        power_track_mm=0.4,
+        house="jlcpcb", assembly=True, finish="HASL (lead-free)", mask="green",
+        min_board_mm=10.0, max_board_mm=400.0,
+    ),
+    FabProfile(
         name="oshpark-2layer",
         description="OSH Park 2-layer, 1.6 mm FR-4, 1 oz copper",
         layers=2,

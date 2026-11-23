@@ -7,7 +7,8 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PlainSummary } from "@/components/PlainSummary";
 import { requireUser } from "@/lib/auth";
-import { continueRun, continueThisRun, controlRun, decideTask, raiseBudget, setAutoApprove } from "./actions";
+import { continueRun, continueThisRun, controlRun, decideTask, raiseBudget, sendRunGuidance, setAutoApprove } from "./actions";
+import { RunChat } from "@/components/RunChat";
 
 interface Report {
   headline: string;
@@ -43,10 +44,10 @@ function plainFailure(reason: string | null): string {
 
 export default async function RunPage({ params, searchParams }: {
   params: Promise<{ projectId: string; runId: string }>;
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; guide?: string }>;
 }) {
   const { projectId, runId } = await params;
-  const { error, notice } = await searchParams;
+  const { error, notice, guide } = await searchParams;
   const { supabase, userId } = await requireUser();
 
   const { data: run } = await supabase.from("runs").select("*, plans(version), projects(name)")
@@ -103,6 +104,14 @@ export default async function RunPage({ params, searchParams }: {
   const critical = outOfScope.filter((t) => t.risk_level === "critical");
   const heldBlocked = (tasks ?? []).filter((t) => t.status === "blocked");
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
+  const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
+  const chatSteps = [
+    ...failed.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "could not finish" })),
+    ...critical.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "critical risk" })),
+    ...waiting.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting for you" })),
+    ...heldBlocked.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting on something" })),
+  ];
+  const guideLink = (key: string) => <> <Link className="small guide-link" href={`?guide=${key}#run-chat`} data-testid="give-guidance">Give guidance</Link></>;
   const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0 || failed.length > 0 || critical.length > 0)
     && !["canceled", "failed"].includes(run.status);
   // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
@@ -184,18 +193,21 @@ export default async function RunPage({ params, searchParams }: {
         <input type="hidden" name="compute" value={Math.max(Number(run.max_compute_spend_usd), 20)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
       {!active && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || canContinue) && (
+        <div className="run-help">
+        <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
+          action={sendRunGuidance.bind(null, projectId, runId)} canWrite={role !== "viewer"} />
         <section className="card todo" data-testid="what-to-do">
           <h2>What you need to do</h2>
           <ol className="todo-list">
             {!failed.length && !outOfScope.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <li>Nothing needs fixing. Continue the run when you are ready.</li>}
             {failed.length > 0 && (
               <li><strong>{failed.length} step{failed.length > 1 ? "s" : ""} could not finish.</strong> Everything after {failed.length > 1 ? "them" : "it"} is waiting.
-                <ul className="small">{failed.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>: {plainFailure(t.blocker_reason)}</li>)}</ul>
+                <ul className="small">{failed.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>: {plainFailure(t.blocker_reason)}{guideLink(t.key)}</li>)}</ul>
                 {canControl && <a className="todo-go" href="#continue-run">Fix: the button below tries {failed.length > 1 ? "them" : "it"} again →</a>}</li>
             )}
             {critical.length > 0 && (
               <li><strong>{critical.length} critical-risk step{critical.length > 1 ? "s are" : " is"} outside this run.</strong> Runs leave out critical-risk work unless the owner includes it:
-                <ul className="small">{critical.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link></li>)}</ul>
+                <ul className="small">{critical.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{guideLink(t.key)}</li>)}</ul>
                 {role === "owner" ? <a className="todo-go" href="#continue-run">Fix: “include critical-risk steps” is ticked below →</a>
                   : <span className="small">Only the project owner can include {critical.length > 1 ? "them" : "it"}.</span>}
                 {" "}<Link className="small" href={`/projects/${projectId}/plans/${run.plan_id}`}>See them in the plan</Link></li>
@@ -206,7 +218,7 @@ export default async function RunPage({ params, searchParams }: {
             {waiting.length > 0 && <li><strong>{waiting.length} result{waiting.length > 1 ? "s wait" : " waits"} for your go-ahead</strong> “Run straight through” approves those whose checks passed. <a className="todo-go" href="#approvals">Go to the approvals →</a></li>}
             {(openQuestions ?? 0) > 0 && <li><strong>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you.</strong> The work does not wait for them, but your answers guide every later step. <Link className="todo-go" href={`/projects/${projectId}/questions`}>Answer the questions →</Link></li>}
             {heldBlocked.length > 0 && <li className="small">{heldBlocked.length} step(s) wait for something outside the design work:
-              <ul>{heldBlocked.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}
+              <ul>{heldBlocked.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{guideLink(t.key)}{t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}
                 {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <> · <Link href={`/projects/${projectId}/validation`}>Open Validation</Link></>}</li>)}</ul></li>}
           </ol>
           {canContinue ? (
@@ -223,6 +235,7 @@ export default async function RunPage({ params, searchParams }: {
             </form>
           ) : !canControl ? <p className="small muted">The project owner or an engineer continues the run.</p> : null}
         </section>
+        </div>
       )}
 
       {uncovered.length > 0 && (

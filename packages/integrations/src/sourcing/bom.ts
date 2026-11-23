@@ -9,7 +9,7 @@
  */
 import { matchIdentity, normalizeManufacturer, normalizeMpn, packageFromFootprint, parseValue, sameValue, valuesInText,
          type IdentityMatch } from "./normalize.ts";
-import type { DataStatus, Lifecycle, Offer, PartRecord, ProviderAttempt, ProviderId, SourcingProvider } from "./types.ts";
+import { ProviderError, type DataStatus, type Lifecycle, type Offer, type PartRecord, type ProviderAttempt, type ProviderId, type SourcingProvider } from "./types.ts";
 
 export const BOM_RESOLVER_VERSION = "bom-v1";
 export const DEFAULT_QUANTITIES = [1, 10, 100, 1000];
@@ -193,20 +193,42 @@ export function pricing(offers: Offer[], perBoard: number, quantities: number[],
   });
 }
 
+/**
+ * A provider that refuses us outright (bad key, plan limit used up, an anti-bot page) gives the same answer for every
+ * line: after the first such refusal it is skipped for the rest of the list, with the reason, instead of being asked
+ * again for each part.
+ */
+let refusals = new Map<SourcingProvider, string>();   // reset for each parts list
+
+/** The provider's error in plain words where we recognise it. */
+export function plainProviderError(message: string): string {
+  if (/<!DOCTYPE|<html|Just a moment|cf-chl|challenge/i.test(message)) return message.replace(/HTTP (\d+):[\s\S]*/, "HTTP $1: blocked by the provider's anti-bot firewall (a browser check page instead of the API answer)");
+  return message;
+}
+function isRefusal(e: unknown): boolean {
+  const m = (e as Error).message ?? "";
+  return (e instanceof ProviderError && e.kind === "auth") || /exceeded your part limit|upgrade your plan|invalid unique identifier|api key/i.test(m);
+}
+
 async function attempt<T>(p: SourcingProvider, fn: () => Promise<T[]>): Promise<{ attempt: ProviderAttempt; results: T[] }> {
   if (!p.configured()) return { attempt: { provider: p.id, outcome: "not_configured", results: 0, ms: 0 }, results: [] };
+  const refused = refusals.get(p);
+  if (refused) return { attempt: { provider: p.id, outcome: "error", results: 0, ms: 0, error: `skipped: ${refused}` }, results: [] };
   const t0 = Date.now();
   try {
     const results = await fn();
     return { attempt: { provider: p.id, outcome: results.length ? "ok" : "no_match", results: results.length, ms: Date.now() - t0 }, results };
   } catch (e) {
-    return { attempt: { provider: p.id, outcome: "error", results: 0, ms: Date.now() - t0, error: (e as Error).message.slice(0, 300) }, results: [] };
+    const error = plainProviderError((e as Error).message).slice(0, 300);
+    if (isRefusal(e)) refusals.set(p, error);
+    return { attempt: { provider: p.id, outcome: "error", results: 0, ms: Date.now() - t0, error }, results: [] };
   }
 }
 
 const RANK = { primary: 0, fallback_a: 1, fallback_b: 2, fixture: 3 } as const;
 
 export async function resolveBom(input: BomInput, providers: SourcingProvider[]): Promise<BomResolution> {
+  refusals = new Map();
   const quantities = input.quantities ?? DEFAULT_QUANTITIES;
   const currency = input.currency ?? "USD";
   const ordered = [...providers].sort((a, b) => RANK[a.role] - RANK[b.role]);

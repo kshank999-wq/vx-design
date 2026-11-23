@@ -8,6 +8,7 @@
   },
   "fab_profile": "jlcpcb-2layer-standard",
   "ground_pour": "GND",
+  "inner_planes": [],
   "placements": [
     {"ref": "J1", "x_mm": 4, "y_mm": 9.7, "rotation_deg": 0, "side": "top"},
     {"ref": "C1", "x_mm": 10, "y_mm": 11, "rotation_deg": 90, "side": "top"},

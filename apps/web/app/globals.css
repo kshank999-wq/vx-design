@@ -586,3 +586,13 @@ tr:target { outline: 3px solid #f79009; outline-offset: -3px; background: color-
 .q-allset { border: 2px solid #12b76a; }
 .msg-tools { margin-top: 4px; }
 .msg-tools .voice-btn { padding: 2px 8px; font-size: 12px; }
+
+/* Run page: chat on the left, what to do on the right. */
+.run-help { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; align-items: start; margin: 0 0 16px; }
+.run-help > .card { margin: 0; }
+@media (max-width: 900px) { .run-help { grid-template-columns: 1fr; } .run-help .run-chat { order: 2; } }
+.run-chat h2 { margin-top: 0; font-size: 17px; }
+.run-chat-log { max-height: 340px; overflow-y: auto; margin: 8px 0; display: flex; flex-direction: column-reverse; gap: 8px; }  /* newest at the bottom, in view */
+.run-chat select, .run-chat textarea { width: 100%; }
+.run-chat:target { outline: 3px solid #2e90fa; outline-offset: 2px; }
+.guide-link { font-weight: 600; white-space: nowrap; }

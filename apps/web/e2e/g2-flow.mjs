@@ -203,6 +203,13 @@ try {
   assert.ok(autoApproved.some((x) => x.status === "approved" && /every VX Design check passed/.test(x.response_note)), JSON.stringify(autoApproved));
   await page.getByText(/schematic needs a worker that can run schematic tasks \(the KiCad engineering worker\)/).waitFor();
   assert.match(await page.getByTestId("what-to-do").innerText(), /What you need to do/);
+  // The chat beside it: a question to the design agent, answered on the run page.
+  const chat = page.getByTestId("run-chat");
+  await chat.getByLabel("Message to the design agent").fill("Why did the run stop?");
+  await chat.getByRole("button", { name: "Send" }).click();
+  await page.getByText("Sent.").waitFor();
+  await page.getByTestId("run-chat").locator(".msg-assistant").last().waitFor();
+  assert.match(await page.getByTestId("run-chat").innerText(), /Why did the run stop\?/);
   await shot(page, "run-report-waiting-for-kicad");
   const tasks = await taskStatus(planId);
   assert.deepEqual(tasks, {
