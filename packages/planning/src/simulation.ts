@@ -99,8 +99,9 @@ export type CheckVerdict = "pass" | "fail" | "short_of_stretch" | "scenario";
 
 /**
  * What a check's outcome means for the task. The model's role is honoured only where it cannot hide a failure:
- *  - a "scenario" counts as information only when another check on the same requirement or acceptance test is a
- *    "requirement" (so the design itself is still checked against it); otherwise it is treated as a requirement;
+ *  - a "scenario" on a requirement or acceptance test counts as information only when another check on the same one is
+ *    a "requirement" (so the design itself is still checked against it); a scenario on none (a what-if) needs at least
+ *    one requirement check in the analysis; otherwise it is treated as a requirement;
  *  - a "stretch" check on a must requirement is treated as a requirement.
  */
 export function judgeChecks(checks: SimulationResult["checks"], requirements: { refCode: string; priority: string }[]):
@@ -108,9 +109,12 @@ export function judgeChecks(checks: SimulationResult["checks"], requirements: { 
   const priority = new Map(requirements.map((r) => [r.refCode, r.priority]));
   const refOf = (c: SimulationResult["checks"][number]) => (c.requirement_ref ?? "").trim();
   const hasRequirementCheck = new Set(checks.filter((c) => (c.role ?? "requirement") === "requirement" && refOf(c)).map(refOf));
+  const anyRequirementCheck = checks.some((c) => (c.role ?? "requirement") === "requirement");
   return checks.map((c) => {
     let role = c.role ?? "requirement";
-    if (role === "scenario" && !(refOf(c) && hasRequirementCheck.has(refOf(c)))) role = "requirement";
+    // A scenario tied to a requirement needs a requirement check on that requirement beside it; one tied to none
+    // (a what-if such as another frame rate) is information as long as the analysis checks the design at all.
+    if (role === "scenario" && (refOf(c) ? !hasRequirementCheck.has(refOf(c)) : !anyRequirementCheck)) role = "requirement";
     if (role === "stretch" && priority.get(refOf(c)) === "must") role = "requirement";
     const verdict: CheckVerdict = c.passed ? "pass" : role === "requirement" ? "fail" : role === "stretch" ? "short_of_stretch" : "scenario";
     return { id: c.id, role, verdict };

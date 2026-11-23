@@ -81,6 +81,9 @@ test("check roles: scenarios and stretch targets do not fail the task, but canno
     { base: "scenario", design: "pass", stretch: "short_of_stretch" });
   // A scenario with no requirement check beside it is the requirement check.
   assert.deepEqual(v([c("only", "REQ-MUST", "scenario", false)]), { only: "fail" });
+  // A what-if tied to no requirement is information beside a real requirement check, but not on its own.
+  assert.deepEqual(v([c("whatif", null, "scenario", false), c("design", "REQ-MUST", "requirement", true)]), { whatif: "scenario", design: "pass" });
+  assert.deepEqual(v([c("whatif", null, "scenario", false)]), { whatif: "fail" });
   // "Stretch" on a must is a requirement.
   assert.deepEqual(v([c("s", "REQ-MUST", "stretch", false)]), { s: "fail" });
   // Older analyses without roles behave as before.
