@@ -201,7 +201,8 @@ sit beside the steps.
   interruptions; steps already blocked by interruptions are put back when the run continues.
 - **DigiKey through the website.** When DigiKey's firewall blocks a worker's own connection, set `VX_PARTS_RELAY_URL`
   (the website's `/api/sourcing/digikey`) and `VX_PARTS_RELAY_TOKEN` on the worker, and the same token plus
-  `DIGIKEY_CLIENT_ID`/`DIGIKEY_CLIENT_SECRET` on the website: the worker's DigiKey lookups then go through the website.
+  `DIGIKEY_CLIENT_ID`/`DIGIKEY_CLIENT_SECRET` on the website: the worker's DigiKey lookups then go through the website. While the website is behind Vercel's own sign-in, also set
+  `VX_PARTS_RELAY_BYPASS` on the worker to the project's Protection Bypass for Automation secret.
   Opening `/api/sourcing/digikey` in a browser shows whether DigiKey answers the website and whether its keys and token
   are set (no secrets shown).
 - **Intake reflects the project.** Empty intake fields (markets, radios, power, standards, size, use) are filled from the

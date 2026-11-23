@@ -15,8 +15,10 @@ export class DigiKeyRelayProvider implements SourcingProvider {
   private readonly url: string | undefined;
   private readonly token: string | undefined;
   private readonly fetchFn: Fetch;
-  constructor(url: string | undefined, token: string | undefined, fetchFn: Fetch = fetch) {
-    this.url = url; this.token = token; this.fetchFn = fetchFn;
+  /** Vercel's "Protection Bypass for Automation" secret, when the website is behind Vercel's own sign-in. */
+  private readonly bypass: string | undefined;
+  constructor(url: string | undefined, token: string | undefined, fetchFn: Fetch = fetch, bypass?: string) {
+    this.url = url; this.token = token; this.fetchFn = fetchFn; this.bypass = bypass || undefined;
   }
 
   configured(): boolean { return !!(this.url && this.token); }
@@ -24,10 +26,14 @@ export class DigiKeyRelayProvider implements SourcingProvider {
   private async call(body: Record<string, unknown>): Promise<PartRecord[]> {
     let res: Response;
     try {
-      res = await this.fetchFn(this.url!, { method: "POST", headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+      res = await this.fetchFn(this.url!, { method: "POST", headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json",
+        ...(this.bypass ? { "x-vercel-protection-bypass": this.bypass } : {}) },
         body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
     } catch (e) {
       throw new ProviderError("digikey", "network", `the website relay could not be reached: ${(e as Error).message}`);
+    }
+    if (res.status === 401 && !this.bypass && /vercel/i.test(res.headers.get("server") ?? "") && !(res.headers.get("content-type") ?? "").includes("json")) {
+      throw new ProviderError("digikey", "auth", "website relay: the website is behind Vercel's sign-in; set VX_PARTS_RELAY_BYPASS to its Protection Bypass for Automation secret");
     }
     const data = await res.json().catch(() => null) as { records?: PartRecord[]; error?: string; kind?: string } | null;
     if (res.status === 401 || res.status === 403) throw new ProviderError("digikey", "auth", `website relay: ${data?.error ?? `HTTP ${res.status}`} (check VX_PARTS_RELAY_TOKEN)`);
