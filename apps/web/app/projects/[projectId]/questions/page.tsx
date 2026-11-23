@@ -92,15 +92,44 @@ export default async function QuestionsPage({ params, searchParams }: {
           {runs?.[0] && ["running", "pending"].includes(runs[0].status) && <p>The design run is working and will use your answers. <Link href={`/projects/${projectId}/runs/${runs[0].id}`}>Watch the run</Link></p>}
         </div>
       )}
-      {done.length > 0 && (
-        <section className="q-group" data-testid="answered-questions">
-          <h2>Your answers ({done.length})</h2>
-          <div className="card"><ul className="q-done">{done.map((q) => (
-            <li key={q.id}><span>{q.question}</span> <strong>{q.status === "dismissed" ? "Not relevant" : q.answer}</strong>
-              {q.tasks?.title && <span className="muted small"> · {q.tasks.title}</span>}</li>
-          ))}</ul></div>
-        </section>
-      )}
+      {done.length > 0 && (() => {
+        // Newest first, one folder per day; each answer in its own box with the time, whether it took the recommendation, and the step that asked.
+        const sorted = [...done].sort((x, y) => (y.answered_at ?? y.created_at).localeCompare(x.answered_at ?? x.created_at));
+        const day = (q: Q) => new Date(q.answered_at ?? q.created_at).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        const days = new Map<string, Q[]>();
+        for (const q of sorted) days.set(day(q), [...(days.get(day(q)) ?? []), q]);
+        const how = (q: Q) => q.status === "dismissed" ? { label: "Set aside as not relevant", cls: "q-how-dismissed" }
+          : q.answer?.trim() === q.recommendation.trim() ? { label: "Used the recommendation", cls: "q-how-rec" }
+          : (q.options ?? []).includes(q.answer ?? "") ? { label: "Chose an option", cls: "q-how-option" }
+          : { label: "Your own answer", cls: "q-how-own" };
+        return (
+          <section className="q-group" data-testid="answered-questions">
+            <h2>Your answers ({done.length})</h2>
+            {[...days].map(([d, list], i) => (
+              <details key={d} className="q-day" open={i === 0}>
+                <summary><strong>{d}</strong> <span className="muted small">{list.length} answer{list.length > 1 ? "s" : ""}</span></summary>
+                {list.map((q) => { const h = how(q); return (
+                  <details key={q.id} className="card q-answer" data-testid="answer">
+                    <summary>
+                      <span className="q-time">{new Date(q.answered_at ?? q.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                      <span className="q-answer-q">{q.question}</span>
+                      <span className={`q-how ${h.cls}`}>{h.label}</span>
+                    </summary>
+                    <dl className="q-answer-body">
+                      <dt>Question</dt><dd>{q.question}</dd>
+                      <dt>Your answer</dt><dd><strong>{q.status === "dismissed" ? "Not relevant" : q.answer}</strong></dd>
+                      <dt>VX Design recommended</dt><dd>{q.recommendation}</dd>
+                      {q.why && <><dt>Why it mattered</dt><dd>{q.why}</dd></>}
+                      {q.tasks?.title && <><dt>Asked by the step</dt><dd>{q.tasks.title}</dd></>}
+                      <dt>Answered</dt><dd>{new Date(q.answered_at ?? q.created_at).toLocaleString("en-US")}</dd>
+                    </dl>
+                  </details>
+                ); })}
+              </details>
+            ))}
+          </section>
+        );
+      })()}
     </main>
   );
 }

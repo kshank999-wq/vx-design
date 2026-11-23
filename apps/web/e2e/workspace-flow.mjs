@@ -115,7 +115,9 @@ try {
   await cpage.getByText("Saved: the next steps will follow your answer.").waitFor();
   const { data: answered } = await admin.from("project_questions").select("status, answer").eq("project_id", project.id).single();
   assert.deepEqual([answered.status, answered.answer], ["answered", "US and EU"]);
-  assert.match(await cpage.getByTestId("answered-questions").innerText(), /Your answers \(1\)[\s\S]*US and EU/);
+  assert.match(await cpage.getByTestId("answered-questions").innerText(), /Your answers \(1\)[\s\S]*Which markets will you sell in first\?[\s\S]*Chose an option/);
+  await cpage.getByTestId("answer").locator("summary").click();
+  assert.match(await cpage.getByTestId("answer").innerText(), /Your answer\s+US and EU[\s\S]*VX Design recommended\s+US only/);
   await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
   console.log("✓ plain summary on the approval, and the client answered a question");
   assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
