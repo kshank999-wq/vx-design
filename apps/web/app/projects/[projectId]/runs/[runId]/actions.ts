@@ -108,3 +108,53 @@ export async function sendRunGuidance(projectId: string, runId: string, form: Fo
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent(taskId ? "Saved: the step's next attempt will follow your guidance. Continue the run when you are ready." : "Sent.")}${err ? `&error=${encodeURIComponent(err)}` : ""}#run-chat`);
 }
+
+/** "Try again" on one step: it goes back to the queue with a fresh retry allowance, and the run continues. */
+export async function retryStepAndContinue(projectId: string, runId: string, taskId: string) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("retry_step", { p_task: taskId });
+  if (error) fail(path, error);
+  const { data: run } = await supabase.from("runs").select("stop_conditions").eq("id", runId).single();
+  const { error: e2 } = await supabase.rpc("continue_run", { p_run: runId, p_ai: 0, p_auto_approve: !!(run?.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
+    p_retry_failed: false, p_include_critical: false, p_compute: null });
+  if (e2 && !/another run of this plan is active/.test(e2.message)) fail(path, e2);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent("Trying that step again: the run is going.")}`);
+}
+
+/** Guidance written under a step's card: saved with the step, answered by the agent, and optionally tried again at once. */
+export async function guideStep(projectId: string, runId: string, taskId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase, userId } = await requireUser();
+  const note = String(form.get("note") ?? "").trim();
+  if (note.length < 2) fail(path, "Write the guidance first.");
+  const { data: t } = await supabase.from("tasks").select("key, title, status, blocker_reason").eq("id", taskId).maybeSingle();
+  if (!t) fail(path, "That step was not found.");
+  const { error } = await supabase.rpc("add_task_guidance", { p_task: taskId, p_note: note });
+  if (error) fail(path, error);
+  await askAndPost(supabase, userId, projectId, `Guidance for the step "${t.title}" (${t.key}), saved for its next attempt: ${note}`.slice(0, 4000));
+  if (form.get("then") === "retry" && (t.status === "failed" || (t.status === "blocked" && /^interrupted /.test(t.blocker_reason ?? "")))) {
+    await retryStepAndContinue(projectId, runId, taskId);
+  }
+  revalidatePath(path);
+  redirect(`${path}?guide=${t.key}&notice=${encodeURIComponent("Guidance saved: the step's next attempt follows it.")}#issue-${t.key}`);
+}
+
+export async function deferStep(projectId: string, runId: string, taskId: string, form: FormData) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("defer_step", { p_task: taskId, p_note: String(form.get("note") ?? "") });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent("Saved for later: continuing the run leaves it alone until you bring it back.")}`);
+}
+
+export async function undeferStep(projectId: string, runId: string, taskId: string) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("undefer_step", { p_task: taskId });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent("Brought back: it is in the list again.")}`);
+}

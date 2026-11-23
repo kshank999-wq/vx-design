@@ -628,3 +628,27 @@ tr:target { outline: 3px solid #f79009; outline-offset: -3px; background: color-
 .q-how-own { background: color-mix(in srgb, #7a5af8 15%, transparent); color: #5925dc; }
 .q-how-dismissed { background: color-mix(in srgb, #667085 15%, transparent); color: #475467; }
 @media (max-width: 600px) { .q-answer > summary { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Run page: one card per problem, with buttons. */
+.issues { display: grid; gap: 12px; margin: 8px 0 16px; }
+.issue { margin: 0; padding: 14px 16px; border-left: 5px solid #f79009; }
+.issue-failed { border-left-color: #d92d20; }
+.issue-critical { border-left-color: #7a5af8; }
+.issue-waiting_outside, .issue-waiting { border-left-color: #2e90fa; }
+.issue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.issue-head h3 { margin: 0; font-size: 16.5px; }
+.issue-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; color: #fff; white-space: nowrap; }
+.issue-badge-failed { background: #d92d20; }
+.issue-badge-critical { background: #7a5af8; }
+.issue-badge-waiting_outside, .issue-badge-waiting { background: #2e90fa; }
+.issue-reason { margin: 8px 0; }
+.issue-notes ul { margin: 4px 0 8px; }
+.issue-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.issue-actions form { margin: 0; }
+.issue-guide { margin-top: 12px; padding: 12px; border-radius: 8px; background: color-mix(in srgb, #2e90fa 7%, var(--surface)); border: 1px solid color-mix(in srgb, #2e90fa 40%, transparent); }
+.issue-guide textarea { width: 100%; }
+.issue:target { outline: 3px solid #2e90fa; outline-offset: 2px; }
+.issue-deferred { margin: 0 0 12px; }
+.issue-deferred li { justify-content: space-between; padding: 4px 0; }
+.continue-all { padding-top: 12px; border-top: 1px solid color-mix(in srgb, #f79009 40%, transparent); }
+.continue-all button[type=submit] { font-size: 16px; padding: 10px 18px; }

@@ -65,6 +65,14 @@ export class Worker {
   shutdown(reason = "worker shutting down"): void {
     this.stopping = true;
     for (const { handle } of this.inflight.values()) handle?.requestYield(reason);
+    // Hand every in-flight task back to the queue now, not only at its next checkpoint: a long step (a board layout
+    // can run 20 minutes between checkpoints) would otherwise be killed by the container stop and counted as an
+    // interruption (three of those block the task). A yield is not an interruption; the task resumes from its last
+    // checkpoint on the next worker.
+    for (const id of this.inflight.keys()) {
+      this.db.yieldExecution(id, this.cfg.workerId, `${reason} (handed back to the queue)`)
+        .catch((e) => console.error(`[${this.cfg.workerId}] could not hand ${id.slice(0, 8)} back: ${(e as Error).message}`));
+    }
     this.wake?.();
   }
 

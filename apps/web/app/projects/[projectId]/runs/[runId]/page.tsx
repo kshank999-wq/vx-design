@@ -7,7 +7,8 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PlainSummary } from "@/components/PlainSummary";
 import { requireUser } from "@/lib/auth";
-import { continueRun, continueThisRun, controlRun, decideTask, raiseBudget, sendRunGuidance, setAutoApprove } from "./actions";
+import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideStep, raiseBudget, retryStepAndContinue, sendRunGuidance, setAutoApprove, undeferStep } from "./actions";
+import { DictateButton } from "@/components/VoiceTools";
 import { RunChat } from "@/components/RunChat";
 
 interface Report {
@@ -37,6 +38,7 @@ function plainFailure(reason: string | null): string {
   if (/cut off at the \d+-token limit/.test(r)) return "the AI's answer ran too long to finish. VX Design now gives it more room and retries automatically.";
   if (/compiled grammar is too large|schema is too complex/i.test(r)) return "the answer format was too complex for the AI service. VX Design now handles this automatically.";
   if (/budget|cost cap/i.test(r)) return "it reached its spending limit.";
+  if (/^interrupted \d+ times/.test(r)) return "its worker was stopped part-way through several times (for example by an update). Nothing is wrong with the work; continuing starts it again.";
   if (/not making progress|no progress/i.test(r)) return "repeated attempts were not getting closer to passing its checks.";
   if (/overloaded|529|timeout|ECONNRESET|5\d\d /i.test(r)) return "the AI service was busy or unreachable.";
   return r ? `${r.slice(0, 160)}${r.length > 160 ? "…" : ""}` : "no reason was recorded.";
@@ -55,7 +57,7 @@ export default async function RunPage({ params, searchParams }: {
   if (!run) notFound();
 
   const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }, { data: workers }] = await Promise.all([
-    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary")
+    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary, deferred_at, deferred_note")
       .eq("plan_id", run.plan_id).order("position"),
     supabase.from("executions").select("id, task_id, attempt, status, worker_id, checkpoint_seq, resumed_from_id, started_at, finished_at, heartbeat_at, error, summary, compute_seconds")
       .eq("run_id", runId).order("created_at"),
@@ -99,10 +101,18 @@ export default async function RunPage({ params, searchParams }: {
   const runnable = (tasks ?? []).filter((t) => t.status === "ready" && inScope(t)
     && (depRows ?? []).filter((d) => d.task_id === t.id).every((d) => taskStatus.get(d.depends_on_task_id) === "complete"));
   // What stopped the run, in plain terms, and what continuing will do about each.
-  const failed = (tasks ?? []).filter((t) => t.status === "failed");
+  // Steps that could not finish: failed, or blocked only because their worker kept being stopped mid-step.
+  const interrupted = (t: { status: string; blocker_reason: string | null }) => t.status === "blocked" && /^interrupted /.test(t.blocker_reason ?? "");
+  const deferred = (tasks ?? []).filter((t) => t.deferred_at);
+  const failed = (tasks ?? []).filter((t) => !t.deferred_at && (t.status === "failed" || interrupted(t)));
   const outOfScope = (tasks ?? []).filter((t) => t.status === "ready" && !inScope(t));
-  const critical = outOfScope.filter((t) => t.risk_level === "critical");
-  const heldBlocked = (tasks ?? []).filter((t) => t.status === "blocked");
+  const critical = outOfScope.filter((t) => t.risk_level === "critical" && !t.deferred_at);
+  const heldBlocked = (tasks ?? []).filter((t) => t.status === "blocked" && !interrupted(t) && !t.deferred_at);
+  // Guidance already given for the steps listed, and whether a newer run of this plan exists.
+  const listedIds = [...new Set([...failed, ...critical, ...heldBlocked].map((t) => t.id))];
+  const { data: guidance } = listedIds.length ? await supabase.from("task_guidance").select("task_id, note, created_at").in("task_id", listedIds).order("created_at") : { data: [] };
+  const { data: latestRun } = await supabase.from("runs").select("id, name").eq("plan_id", run.plan_id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const superseded = latestRun && latestRun.id !== runId ? latestRun : null;
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
   const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
   const chatSteps = [
@@ -111,7 +121,6 @@ export default async function RunPage({ params, searchParams }: {
     ...waiting.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting for you" })),
     ...heldBlocked.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting on something" })),
   ];
-  const guideLink = (key: string) => <> <Link className="small guide-link" href={`?guide=${key}#run-chat`} data-testid="give-guidance">Give guidance</Link></>;
   const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0 || failed.length > 0 || critical.length > 0)
     && !["canceled", "failed"].includes(run.status);
   // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
@@ -169,8 +178,8 @@ export default async function RunPage({ params, searchParams }: {
               <span className="live-bar"><span style={{ width: `${share * 100}%`, background: share >= 0.8 ? "var(--danger, #b42318)" : undefined }} /></span>
               {canControl && (
                 <form className="row tight" action={raiseBudget.bind(null, projectId, runId)}>
-                  <label className="inline small">AI $<input name="ai" type="number" min={aiMax} step="any" defaultValue={Math.max(aiMax, 150)} style={{ width: "6em" }} /></label>
-                  <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_compute_spend_usd), 20)} style={{ width: "5em" }} /></label>
+                  <label className="inline small">AI $<input name="ai" type="number" min={aiMax} step="any" defaultValue={aiMax} style={{ width: "6em" }} /></label>
+                  <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Number(run.max_compute_spend_usd)} style={{ width: "5em" }} /></label>
                   <SubmitButton variant="secondary" pendingText="Raising…">Raise budget</SubmitButton>
                 </form>
               )}
@@ -189,54 +198,109 @@ export default async function RunPage({ params, searchParams }: {
         );
       })()}
       {run.stop_reason && <p className="banner banner-warn">Stopped: {run.stop_reason}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
-        <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Math.max(Number(run.max_ai_spend_usd) * 2, 150)} style={{ width: "6em" }} aria-label="New AI budget" />
-        <input type="hidden" name="compute" value={Math.max(Number(run.max_compute_spend_usd), 20)} />
+        <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Number(run.max_ai_spend_usd) * 2} style={{ width: "6em" }} aria-label="New AI budget" />
+        <input type="hidden" name="compute" value={Number(run.max_compute_spend_usd)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
-      {!active && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || canContinue) && (
-        <div className="run-help">
-        <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
-          action={sendRunGuidance.bind(null, projectId, runId)} canWrite={role !== "viewer"} />
-        <section className="card todo" data-testid="what-to-do">
-          <h2>What you need to do</h2>
-          <ol className="todo-list">
-            {!failed.length && !outOfScope.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <li>Nothing needs fixing. Continue the run when you are ready.</li>}
-            {failed.length > 0 && (
-              <li><strong>{failed.length} step{failed.length > 1 ? "s" : ""} could not finish.</strong> Everything after {failed.length > 1 ? "them" : "it"} is waiting.
-                <ul className="small">{failed.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>: {plainFailure(t.blocker_reason)}{guideLink(t.key)}</li>)}</ul>
-                {canControl && <a className="todo-go" href="#continue-run">Fix: the button below tries {failed.length > 1 ? "them" : "it"} again →</a>}</li>
-            )}
-            {critical.length > 0 && (
-              <li><strong>{critical.length} critical-risk step{critical.length > 1 ? "s are" : " is"} outside this run.</strong> Runs leave out critical-risk work unless the owner includes it:
-                <ul className="small">{critical.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{guideLink(t.key)}</li>)}</ul>
-                {role === "owner" ? <a className="todo-go" href="#continue-run">Fix: “include critical-risk steps” is ticked below →</a>
-                  : <span className="small">Only the project owner can include {critical.length > 1 ? "them" : "it"}.</span>}
-                {" "}<Link className="small" href={`/projects/${projectId}/plans/${run.plan_id}`}>See them in the plan</Link></li>
-            )}
-            {outOfScope.length > critical.length && (
-              <li className="small">{outOfScope.length - critical.length} other step(s) are outside this run&apos;s scope and will not run in it. <Link href="?tab=tasks">See the tasks</Link></li>
-            )}
-            {waiting.length > 0 && <li><strong>{waiting.length} result{waiting.length > 1 ? "s wait" : " waits"} for your go-ahead</strong> “Run straight through” approves those whose checks passed. <a className="todo-go" href="#approvals">Go to the approvals →</a></li>}
-            {(openQuestions ?? 0) > 0 && <li><strong>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you.</strong> The work does not wait for them, but your answers guide every later step. <Link className="todo-go" href={`/projects/${projectId}/questions`}>Answer the questions →</Link></li>}
-            {heldBlocked.length > 0 && <li className="small">{heldBlocked.length} step(s) wait for something outside the design work:
-              <ul>{heldBlocked.map((t) => <li key={t.id}><Link href={`?tab=tasks#task-${t.key}`}>{t.title}</Link>{guideLink(t.key)}{t.blocker_reason ? ` (${t.blocker_reason.slice(0, 120)})` : ""}
-                {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <> · <Link href={`/projects/${projectId}/validation`}>Open Validation</Link></>}</li>)}</ul></li>}
-          </ol>
-          {canContinue ? (
-            <form className="stack" id="continue-run" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
-              <div className="row tight wrap">
-                <label className="inline small">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_ai_spend_usd), 150)} style={{ width: "6em" }} /></label>
-                <label className="inline small">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Math.max(Number(run.max_compute_spend_usd), 20)} style={{ width: "5em" }} /></label>
-                <label className="inline small"><input type="checkbox" name="auto_approve" defaultChecked /> run straight through</label>
-                {failed.length > 0 && <label className="inline small"><input type="checkbox" name="retry_failed" value="off" /> don&apos;t retry the failed steps</label>}
-                {critical.length > 0 && role === "owner" && <label className="inline small"><input type="checkbox" name="include_critical" defaultChecked data-testid="include-critical" /> include critical-risk steps</label>}
-              </div>
-              <div><SubmitButton pendingText="Continuing…">{failed.length || critical.length ? "Fix these and continue the run" : waiting.length ? "Approve what passed and continue" : "Continue the run"}</SubmitButton></div>
-              {runnable.length > 0 && <p className="small muted">Next up: {runnable.map((t) => t.title).slice(0, 4).join(", ")}{runnable.length > 4 ? ` and ${runnable.length - 4} more` : ""}.</p>}
-            </form>
-          ) : !canControl ? <p className="small muted">The project owner or an engineer continues the run.</p> : null}
-        </section>
-        </div>
+      {superseded && (
+        <p className="banner banner-warn" data-testid="older-run">This is an earlier run. Work continues in the latest one. <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>Open the latest run →</Link></p>
       )}
+      {!active && !superseded && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || deferred.length > 0 || canContinue) && (() => {
+        const issue = (t: { id: string; key: string; title: string; blocker_reason: string | null }, kind: "failed" | "critical" | "waiting_outside", reason: string) => {
+          const open = guide === t.key;
+          const notes = (guidance ?? []).filter((g) => g.task_id === t.id);
+          const retryable = kind === "failed";
+          return (
+            <article key={`${kind}-${t.id}`} id={`issue-${t.key}`} className={`card issue issue-${kind}`} data-testid="issue" data-task={t.key}>
+              <div className="issue-head">
+                <span className={`issue-badge issue-badge-${kind}`}>{kind === "failed" ? "Could not finish" : kind === "critical" ? "Critical risk: not in this run" : "Waiting on something outside the design"}</span>
+                <h3>{t.title}</h3>
+              </div>
+              <p className="issue-reason"><strong>The problem:</strong> {reason}</p>
+              {notes.length > 0 && <div className="issue-notes small"><strong>Your guidance so far:</strong><ul>{notes.map((g, i) => <li key={i}>{g.note} <span className="muted">({new Date(g.created_at).toLocaleString("en-US")})</span></li>)}</ul></div>}
+              {canControl && (
+                <div className="issue-actions">
+                  {retryable && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton pendingText="Starting…">↻ Try again</SubmitButton></form>}
+                  {kind === "critical" && role === "owner" && (
+                    <form action={continueThisRun.bind(null, projectId, runId)}>
+                      <input type="hidden" name="ai" value={Number(run.max_ai_spend_usd)} /><input type="hidden" name="include_critical" value="on" />
+                      <input type="hidden" name="auto_approve" value={(run.stop_conditions as { auto_approve?: boolean })?.auto_approve ? "on" : ""} />
+                      <SubmitButton pendingText="Including…">✓ Include it and continue</SubmitButton></form>
+                  )}
+                  {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <Link className="btn btn-secondary" href={`/projects/${projectId}/validation`}>Open Validation</Link>}
+                  <Link className={`btn ${open ? "" : "btn-secondary"}`} href={open ? `?#issue-${t.key}` : `?guide=${t.key}#issue-${t.key}`} data-testid="give-guidance">✎ {open ? "Close guidance" : "Give guidance"}</Link>
+                  <form action={deferStep.bind(null, projectId, runId, t.id)}><input type="hidden" name="note" value="" /><SubmitButton variant="secondary" pendingText="Saving…">⏸ Save for later</SubmitButton></form>
+                </div>
+              )}
+              {open && canControl && (
+                <form className="issue-guide stack" action={guideStep.bind(null, projectId, runId, t.id)} data-testid="guide-form">
+                  <label className="small"><strong>Your guidance for this step</strong> (what to do differently, what to use, what to leave out)
+                    <textarea id={`guide-${t.key}`} name="note" rows={3} required maxLength={4000} placeholder="e.g. Use the 4-layer board profile and keep the SoM in the middle" /></label>
+                  <div className="row tight wrap">
+                    {retryable && <SubmitButton name="then" value="retry" pendingText="Saving…">Save guidance and try again</SubmitButton>}
+                    <SubmitButton variant={retryable ? "secondary" : "primary"} name="then" value="save" pendingText="Saving…">Save guidance only</SubmitButton>
+                    <DictateButton target={`guide-${t.key}`} />
+                  </div>
+                  <p className="small muted">The design agent also answers in the chat on the left.</p>
+                </form>
+              )}
+            </article>
+          );
+        };
+        return (
+          <div className="run-help">
+          <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
+            action={sendRunGuidance.bind(null, projectId, runId)} canWrite={role !== "viewer"} />
+          <section className="card todo" data-testid="what-to-do">
+            <h2>What you need to do</h2>
+            {!failed.length && !critical.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <p>Nothing needs fixing. Continue the run when you are ready.</p>}
+            <div className="issues">
+              {failed.map((t) => issue(t, "failed", plainFailure(t.blocker_reason)))}
+              {critical.map((t) => issue(t, "critical", "Runs leave out critical-risk work unless the project owner includes it. Including it lets the run do this step." + (role === "owner" ? "" : " Only the owner can include it.")))}
+              {heldBlocked.map((t) => issue(t, "waiting_outside", t.blocker_reason ? t.blocker_reason.slice(0, 300) : "It waits for something outside the design work."))}
+              {waiting.length > 0 && (
+                <article className="card issue issue-waiting">
+                  <div className="issue-head"><span className="issue-badge issue-badge-waiting">Waiting for you</span><h3>{waiting.length} result{waiting.length > 1 ? "s" : ""} to approve</h3></div>
+                  <p className="issue-reason">VX Design checked {waiting.length > 1 ? "them" : "it"}; approving lets the work move on.</p>
+                  <div className="issue-actions"><a className="btn" href="#approvals">Go to the approvals</a></div>
+                </article>
+              )}
+              {(openQuestions ?? 0) > 0 && (
+                <article className="card issue issue-waiting">
+                  <div className="issue-head"><span className="issue-badge issue-badge-waiting">Questions</span><h3>{openQuestions} question{openQuestions! > 1 ? "s" : ""} for you</h3></div>
+                  <p className="issue-reason">The work does not wait for them, but your answers guide every later step.</p>
+                  <div className="issue-actions"><Link className="btn" href={`/projects/${projectId}/questions`}>Answer the questions</Link></div>
+                </article>
+              )}
+            </div>
+            {deferred.length > 0 && (
+              <details className="issue-deferred small" data-testid="deferred">
+                <summary>Saved for later ({deferred.length})</summary>
+                <ul>{deferred.map((t) => <li key={t.id} className="row tight"><span>{t.title}</span>
+                  {canControl && <form action={undeferStep.bind(null, projectId, runId, t.id)}><SubmitButton variant="secondary" pendingText="…">Bring back</SubmitButton></form>}</li>)}</ul>
+              </details>
+            )}
+            {canContinue ? (
+              <form className="stack continue-all" id="continue-run" action={continueThisRun.bind(null, projectId, runId)} data-testid="continue-run">
+                <SubmitButton pendingText="Continuing…">{failed.length || critical.length ? "▶ Fix everything above and continue the run" : waiting.length ? "▶ Approve what passed and continue" : "▶ Continue the run"}</SubmitButton>
+                <p className="small muted">This {[failed.length ? `tries the ${failed.length} step(s) that could not finish again` : null, critical.length && role === "owner" ? "includes the critical-risk steps" : null,
+                  "carries on with everything else"].filter(Boolean).join(", ")}.{deferred.length ? ` Steps saved for later are left alone.` : ""}</p>
+                <p className="small" data-testid="run-budget">Budget for this run: AI ${Number(run.max_ai_spend_usd).toFixed(0)}, compute ${Number(run.max_compute_spend_usd).toFixed(0)} (change it under Options; the same budget is used by every button on this page).</p>
+                <details className="small"><summary>Options</summary>
+                  <div className="row tight wrap" style={{ marginTop: 8 }}>
+                    <label className="inline">AI budget $<input name="ai" type="number" min={Number(run.max_ai_spend_usd)} step="any" defaultValue={Number(run.max_ai_spend_usd)} style={{ width: "6em" }} /></label>
+                    <label className="inline">compute $<input name="compute" type="number" min={Number(run.max_compute_spend_usd)} step="any" defaultValue={Number(run.max_compute_spend_usd)} style={{ width: "5em" }} /></label>
+                    <label className="inline"><input type="checkbox" name="auto_approve" defaultChecked /> run straight through</label>
+                    {failed.length > 0 && <label className="inline"><input type="checkbox" name="retry_failed" value="off" /> don&apos;t retry the failed steps</label>}
+                    {critical.length > 0 && role === "owner" && <label className="inline"><input type="checkbox" name="include_critical" defaultChecked data-testid="include-critical" /> include critical-risk steps</label>}
+                  </div>
+                </details>
+                {runnable.length > 0 && <p className="small muted">Next up: {runnable.map((t) => t.title).slice(0, 4).join(", ")}{runnable.length > 4 ? ` and ${runnable.length - 4} more` : ""}.</p>}
+              </form>
+            ) : !canControl ? <p className="small muted">The project owner or an engineer continues the run.</p> : null}
+          </section>
+          </div>
+        );
+      })()}
 
       {uncovered.length > 0 && (
         <p className="banner banner-warn" data-testid="uncovered">

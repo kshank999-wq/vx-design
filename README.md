@@ -191,6 +191,14 @@ sit beside the steps.
   administrators (`platform_admins`, added by SQL) see our cost, price and markup everywhere, and **Admin → Earnings**:
   markup earned from customers per month, and what in-house (unbilled) projects would have earned at a reference
   markup they set there.
+- **Resolving a stopped run.** "What you need to do" shows one card per problem: what went wrong in plain words and
+  buttons to **Try again** (that step, and the run continues), **Give guidance** (a box opens under the card; "Save
+  guidance and try again" or "Save guidance only"; earlier guidance is listed on the card), **Save for later** (the run
+  leaves it alone; **Bring back** under "Saved for later"), and for critical-risk steps **Include it and continue**.
+  One **Fix everything above and continue the run** button sits below, with the run's budget shown and changeable under
+  Options (every button uses the run's own budget). Older runs say so and link to the latest. When a worker is stopped
+  (an update or restart), it hands its steps straight back to the queue instead of letting them count as
+  interruptions; steps already blocked by interruptions are put back when the run continues.
 - **Run chat.** Beside "What you need to do" on a stopped run is a chat with the design agent. Each step listed
   there has **Give guidance**, which opens the chat on that step: what you write is saved with the step (audited) and
   its next attempt reads it as it reads a reviewer's notes. Questions without a step go to the agent as in the

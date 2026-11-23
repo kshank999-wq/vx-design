@@ -186,7 +186,7 @@ try {
   // --- Continue the same run: power budget and envelope run; schematic has no executor yet --------
   const continueRun = async (auto) => {
     const cont = page.getByTestId("continue-run");
-    if (!auto) await cont.getByLabel("run straight through").uncheck();
+    if (!auto) { await cont.locator("summary", { hasText: "Options" }).click(); await cont.getByLabel("run straight through").uncheck(); }
     await cont.getByRole("button", { name: /continue/i }).click();
     await page.getByText(/^The run continues/).waitFor();
     assert.equal(page.url().split("?")[0], run1Url, "the same run continues; no new run");
