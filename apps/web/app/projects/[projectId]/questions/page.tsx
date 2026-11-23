@@ -93,40 +93,38 @@ export default async function QuestionsPage({ params, searchParams }: {
         </div>
       )}
       {done.length > 0 && (() => {
-        // Newest first, one folder per day; each answer in its own box with the time, whether it took the recommendation, and the step that asked.
+        // Newest first, one collapsible box per question: answered, when, and the answer in its own coloured box.
         const sorted = [...done].sort((x, y) => (y.answered_at ?? y.created_at).localeCompare(x.answered_at ?? x.created_at));
-        const day = (q: Q) => new Date(q.answered_at ?? q.created_at).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-        const days = new Map<string, Q[]>();
-        for (const q of sorted) days.set(day(q), [...(days.get(day(q)) ?? []), q]);
         const how = (q: Q) => q.status === "dismissed" ? { label: "Set aside as not relevant", cls: "q-how-dismissed" }
           : q.answer?.trim() === q.recommendation.trim() ? { label: "Used the recommendation", cls: "q-how-rec" }
           : (q.options ?? []).includes(q.answer ?? "") ? { label: "Chose an option", cls: "q-how-option" }
           : { label: "Your own answer", cls: "q-how-own" };
+        const when = (q: Q) => new Date(q.answered_at ?? q.created_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
         return (
           <section className="q-group" data-testid="answered-questions">
             <h2>Your answers ({done.length})</h2>
-            {[...days].map(([d, list], i) => (
-              <details key={d} className="q-day" open={i === 0}>
-                <summary><strong>{d}</strong> <span className="muted small">{list.length} answer{list.length > 1 ? "s" : ""}</span></summary>
-                {list.map((q) => { const h = how(q); return (
-                  <details key={q.id} className="card q-answer" data-testid="answer">
-                    <summary>
-                      <span className="q-time">{new Date(q.answered_at ?? q.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
-                      <span className="q-answer-q">{q.question}</span>
-                      <span className={`q-how ${h.cls}`}>{h.label}</span>
-                    </summary>
-                    <dl className="q-answer-body">
-                      <dt>Question</dt><dd>{q.question}</dd>
-                      <dt>Your answer</dt><dd><strong>{q.status === "dismissed" ? "Not relevant" : q.answer}</strong></dd>
-                      <dt>VX Design recommended</dt><dd>{q.recommendation}</dd>
-                      {q.why && <><dt>Why it mattered</dt><dd>{q.why}</dd></>}
-                      {q.tasks?.title && <><dt>Asked by the step</dt><dd>{q.tasks.title}</dd></>}
-                      <dt>Answered</dt><dd>{new Date(q.answered_at ?? q.created_at).toLocaleString("en-US")}</dd>
-                    </dl>
-                  </details>
-                ); })}
-              </details>
-            ))}
+            <p className="small muted">Newest first. Open any question to see your answer and when you gave it.</p>
+            <div className="q-answers">
+              {sorted.map((q) => { const h = how(q); return (
+                <details key={q.id} className="card q-answer" data-testid="answer">
+                  <summary>
+                    <span className="q-check" aria-label="Answered">✓ Answered</span>
+                    <span className="q-answer-q">{q.question}</span>
+                    <span className="q-time">{when(q)}</span>
+                  </summary>
+                  <div className="q-answer-body">
+                    <div className="q-answer-box">
+                      <span className="q-answer-label">Answer</span>
+                      <p>{q.status === "dismissed" ? "Not relevant (set aside)" : q.answer}</p>
+                      <p className="small q-answer-meta">Answered {new Date(q.answered_at ?? q.created_at).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} · <span className={`q-how ${h.cls}`}>{h.label}</span></p>
+                    </div>
+                    {q.status !== "dismissed" && q.answer?.trim() !== q.recommendation.trim() && <p className="small"><strong>VX Design had recommended:</strong> {q.recommendation}</p>}
+                    {q.why && <p className="small"><strong>Why it mattered:</strong> {q.why}</p>}
+                    {q.tasks?.title && <p className="small muted">Asked by the step: {q.tasks.title}</p>}
+                  </div>
+                </details>
+              ); })}
+            </div>
           </section>
         );
       })()}
