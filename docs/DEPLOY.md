@@ -21,7 +21,7 @@ These are yours to make before deployment:
   `scripts/backup-drill.sh` shows a restore works.
 - **Worker host** and which workers run: the plain worker (always), the engineering worker (KiCad design tasks, 3D
   model checks; 8 GB RAM), ClamAV (virus scanning; 2–3 GB RAM).
-- **Keys:** Anthropic, at least one distributor (Nexar, DigiKey or Mouser), and one image provider (Gemini or OpenAI).
+- **Keys:** Anthropic, at least one distributor (DigiKey and Mouser have free APIs; Nexar/Octopart is optional and billed per part), and one image provider (Gemini or OpenAI).
 
 ## 1. Supabase project
 

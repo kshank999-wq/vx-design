@@ -106,7 +106,7 @@ test("mouser: key in the query string, string fields parsed, HTTP 200 errors rai
 test("provider chain from the environment: order, configuration and the fixture switch", () => {
   const all = sourcingProvidersFromEnv({ NEXAR_CLIENT_ID: "a", NEXAR_CLIENT_SECRET: "b", MOUSER_API_KEY: "k" });
   assert.deepEqual(all.map((p) => [p.id, p.role, p.configured()]),
-                   [["nexar", "primary", true], ["digikey", "fallback_a", false], ["mouser", "fallback_b", true]]);
+                   [["digikey", "primary", false], ["mouser", "fallback_a", true], ["nexar", "fallback_b", true]]);
   assert.deepEqual(sourcingProvidersFromEnv({ VX_SOURCING: "fixture" }).map((p) => p.id), ["fixture"]);
   assert.deepEqual(sourcingProvidersFromEnv({ VX_SOURCING: "off" }), []);
 });

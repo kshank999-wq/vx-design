@@ -574,9 +574,10 @@ They run on any worker that has at least one distributor configured. A worker wi
 and the run page names the keys that are missing.
 
 - **Providers** (`packages/integrations/src/sourcing/`), in fallback order:
-  - Nexar/Octopart (primary; its offers include LCSC, which gives the JLCPCB part numbers);
-  - DigiKey v4 (fallback A);
-  - Mouser v1 (fallback B).
+  - DigiKey v4 (primary; free API);
+  - Mouser v1 (fallback A; free API);
+  - Nexar/Octopart (fallback B; billed per part, so asked only for lines the free distributors did not find. Its
+    offers include LCSC, which gives the JLCPCB part numbers; without it, lines are flagged "no LCSC" for assembly).
   
   Every configured provider is asked; a failing one is recorded and does not stop the line. Request and
   response field names come from the vendors' own Swagger specs and live GraphQL schema. Contract tests use

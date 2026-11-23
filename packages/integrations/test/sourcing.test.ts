@@ -124,3 +124,13 @@ test("a provider that refuses us is asked once per parts list, and an anti-bot p
   assert.ok(errs.some((e) => /anti-bot firewall/.test(e) && !e.startsWith("skipped")), errs.join(" | "));
   assert.ok(errs.some((e) => e.startsWith("skipped: ")), errs.join(" | "));
 });
+
+test("the paid provider (Nexar) is asked only for parts the free distributors did not find", async () => {
+  let nexarCalls = 0;
+  class CountingNexar extends Scripted { async searchMpn(): Promise<PartRecord[]> { nexarCalls++; return [rec("nexar", "active", ["Octopart"])]; } }
+  const one = { components: [FIXTURE_CIRCUIT.components[2]!], nets: [] };
+  await resolveBom(one, [new Scripted("digikey", "primary", [rec("digikey", "active", ["DigiKey"])]), new CountingNexar("nexar", "fallback_b", [])]);
+  assert.equal(nexarCalls, 0, "found by DigiKey: Nexar not asked");
+  await resolveBom(one, [new Scripted("digikey", "primary", []), new CountingNexar("nexar", "fallback_b", [])]);
+  assert.equal(nexarCalls, 1, "not found by the free ones: Nexar asked");
+});

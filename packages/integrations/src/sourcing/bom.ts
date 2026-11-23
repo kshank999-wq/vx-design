@@ -225,6 +225,9 @@ async function attempt<T>(p: SourcingProvider, fn: () => Promise<T[]>): Promise<
   }
 }
 
+/** Providers billed per part looked up: asked only when the free ones found nothing for a line. */
+const PAID = new Set<string>(["nexar"]);
+
 const RANK = { primary: 0, fallback_a: 1, fallback_b: 2, fixture: 3 } as const;
 
 export async function resolveBom(input: BomInput, providers: SourcingProvider[]): Promise<BomResolution> {
@@ -256,6 +259,7 @@ export async function resolveBom(input: BomInput, providers: SourcingProvider[])
     if (c.mpn) {
       const found: { rec: PartRecord; id: IdentityMatch }[] = [];
       for (const p of ordered) {
+        if (PAID.has(p.id) && found.length) continue;   // the free distributors already found it
         const r = await attempt(p, () => p.searchMpn(c.mpn!, c.manufacturer));
         attempts.push(r.attempt);
         for (const rec of r.results) {
@@ -298,6 +302,7 @@ export async function resolveBom(input: BomInput, providers: SourcingProvider[])
       const query = keywordQuery(c, cls, pkg, minV);
       const pool: PartRecord[] = [];
       for (const p of ordered) {
+        if (PAID.has(p.id) && pool.length) continue;
         const r = await attempt(p, () => p.searchKeyword(query, 25));
         attempts.push(r.attempt);
         pool.push(...r.results);

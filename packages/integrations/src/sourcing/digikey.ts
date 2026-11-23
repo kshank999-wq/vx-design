@@ -50,7 +50,7 @@ export function mapDigikeyProduct(p: DkProduct, currency: string, observedAt: st
 export class DigiKeyProvider implements SourcingProvider {
   readonly id = "digikey" as const;
   readonly label = "DigiKey";
-  readonly role = "fallback_a" as const;
+  readonly role = "primary" as const;
   readonly terms = "DigiKey API terms: daily request quota (see X-RateLimit-Limit); check caching and display rights.";
   private readonly tokens: TokenCache;
   private readonly clientId: string | undefined;

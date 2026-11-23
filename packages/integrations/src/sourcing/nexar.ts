@@ -74,7 +74,7 @@ export function mapNexarPart(p: NexarPart, currency: string, observedAt: string)
 export class NexarProvider implements SourcingProvider {
   readonly id = "nexar" as const;
   readonly label = "Nexar (Octopart)";
-  readonly role = "primary" as const;
+  readonly role = "fallback_b" as const;   // paid per part: asked only when the free distributors find nothing
   readonly terms = "Nexar API terms: usage billed per part returned; check caching and display rights for your plan.";
   private readonly tokens: TokenCache;
   private readonly clientId: string | undefined;

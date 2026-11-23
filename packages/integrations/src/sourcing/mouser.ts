@@ -63,7 +63,7 @@ export function mapMouserPart(p: MouserPart, observedAt: string): PartRecord {
 export class MouserProvider implements SourcingProvider {
   readonly id = "mouser" as const;
   readonly label = "Mouser";
-  readonly role = "fallback_b" as const;
+  readonly role = "fallback_a" as const;
   readonly terms = "Mouser API terms: request limits per key (commonly cited as 30/min, 1000/day; unconfirmed); check display rights.";
   private readonly apiKey: string | undefined;
   private readonly fetchFn: Fetch;
