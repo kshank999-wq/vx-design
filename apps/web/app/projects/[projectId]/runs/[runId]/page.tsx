@@ -84,6 +84,7 @@ export default async function RunPage({ params, searchParams }: {
   const canDecide = role === "owner" || role === "reviewer";
   const report = run.report as Report | null;
   const active = ["pending", "running", "paused"].includes(run.status);
+  const isReplaced = run.status === "canceled" && /^Replaced by /.test(run.stop_reason ?? "");
   const live = active || !report;
   const inScope = (t: { id: string; risk_level: string }) =>
     (run.allowed_risk_levels as string[]).includes(t.risk_level) && (!run.authorized_task_ids || (run.authorized_task_ids as string[]).includes(t.id));
@@ -121,7 +122,7 @@ export default async function RunPage({ params, searchParams }: {
   const superseded = workingElsewhere ?? (!activeHere && planRuns?.[0] && planRuns[0].id !== runId ? planRuns[0] : null);
   // The side menu: every run of the project, and what is being worked on in any of them.
   const [{ data: projectRuns }, { data: liveAll }] = await Promise.all([
-    supabase.from("runs").select("id, name, status, created_at, plans(version)").eq("project_id", projectId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("runs").select("id, name, status, stop_reason, created_at, plans(version)").eq("project_id", projectId).order("created_at", { ascending: false }).limit(200),
     supabase.from("executions").select("task_id, run_id, tasks(title)").eq("project_id", projectId).eq("status", "running"),
   ]);
   // Buttons for steps act through the run that is working, so they reach the work wherever this page is opened.
@@ -154,7 +155,7 @@ export default async function RunPage({ params, searchParams }: {
   return (
     <main className="run-page">
       <RunsSide projectId={projectId} currentRunId={runId}
-        runs={(projectRuns ?? []).map((r) => ({ id: r.id, name: label(r), status: r.status, created_at: r.created_at, plan_version: (r.plans as unknown as { version: number } | null)?.version ?? null }))}
+        runs={(projectRuns ?? []).map((r) => ({ id: r.id, name: label(r), status: r.status, stop_reason: r.stop_reason, spent: r.id === runId ? aiUsd + computeUsd : null, created_at: r.created_at, plan_version: (r.plans as unknown as { version: number } | null)?.version ?? null }))}
         tasks={(tasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status, deferred_at: t.deferred_at, skipped_at: t.skipped_at, blocker_reason: t.blocker_reason }))}
         live={(liveAll ?? []).map((e) => ({ task_id: e.task_id, run_id: e.run_id, title: (e.tasks as unknown as { title: string } | null)?.title ?? "A step" }))} />
       <div className="run-main">
@@ -164,9 +165,9 @@ export default async function RunPage({ params, searchParams }: {
       </p>
       <div className="row spread">
         <div className="run-title">
-          <span className={`run-light run-light-${run.status}`} aria-hidden="true" />
+          <span className={`run-light run-light-${isReplaced ? "replaced" : run.status}`} aria-hidden="true" />
           <h1>{label(run)}</h1>
-          <span className={`run-state run-state-${run.status}`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
+          <span className={`run-state run-state-${isReplaced ? "replaced" : run.status}`} data-testid="run-status">{isReplaced ? "Replaced" : RUN_LABEL[run.status] ?? run.status}</span>
         </div>
         <div className="row">
           {/* The page refreshes itself only while this run is working (or has not written its report yet). */}
@@ -226,7 +227,7 @@ export default async function RunPage({ params, searchParams }: {
           </section>
         );
       })()}
-      {run.stop_reason && <p className="banner banner-warn">Stopped: {run.stop_reason}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
+      {run.stop_reason && <p className="banner banner-warn">{isReplaced ? "" : "Stopped: "}{run.stop_reason}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
         <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Number(run.max_ai_spend_usd) * 2} style={{ width: "6em" }} aria-label="New AI budget" />
         <input type="hidden" name="compute" value={Number(run.max_compute_spend_usd)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}

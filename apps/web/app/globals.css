@@ -717,3 +717,10 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .run-state-paused, .run-state-stopped { background: var(--warn-bg); color: var(--warn); }
 .run-state-canceled, .run-state-failed { background: var(--error-bg); color: var(--danger); }
 .run-state-completed { background: #e6eefc; color: #1e4fa8; }
+
+.runs-side ul.runs-side-steps { margin: 2px 0 6px 18px; padding-left: 8px; border-left: 2px solid #bbf7d0; }
+.runs-side ul.runs-side-steps li a { display: flex; align-items: flex-start; padding: 3px 6px; font-weight: 500; }
+.runs-side ul.runs-side-steps .dot { margin-right: 6px; }
+.runs-side .dot-replaced { background: #cbd5e1; }
+.pill-replaced, .run-state-replaced { background: #e2e8f0; color: #475569; }
+.run-light-replaced { background: #cbd5e1; }

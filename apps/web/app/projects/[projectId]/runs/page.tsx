@@ -34,6 +34,7 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
   const label = (r: { id: string; name: string | null }) => runLabel(nums.get(r.id), r.name);
   const sorted = [...all.filter((r) => r.status === "running" || r.status === "pending"), ...all.filter((r) => r.status === "paused"),
     ...all.filter((r) => !GOING.includes(r.status))];
+  const replaced = (r: { status: string; stop_reason: string | null }) => r.status === "canceled" && /^Replaced by /.test(r.stop_reason ?? "");
   const goingOn = (planId: string, id: string) => all.find((o) => o.plan_id === planId && o.id !== id && GOING.includes(o.status));
   return (
     <main>
@@ -48,9 +49,9 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
             <article key={r.id} className={`card run-row ${going ? "going" : ["stopped", "paused"].includes(r.status) ? "held" : ""}`} data-run={r.id}>
               <div>
                 <div className="row tight wrap">
-                  <span className={`run-light run-light-${r.status}`} aria-hidden="true" />
+                  <span className={`run-light run-light-${replaced(r) ? "replaced" : r.status}`} aria-hidden="true" />
                   <strong><Link href={`/projects/${projectId}/runs/${r.id}`}>{label(r)}</Link></strong>
-                  <span className={`pill pill-${r.status}`}>{LABEL[r.status] ?? r.status}</span>
+                  <span className={`pill pill-${replaced(r) ? "replaced" : r.status}`}>{replaced(r) ? "Replaced" : LABEL[r.status] ?? r.status}</span>
                   <span className="small muted">plan v{(r.plans as unknown as { version: number }).version} · started {new Date(r.created_at).toLocaleString("en-US")} · ${spent(r.id).toFixed(2)} of ${Number(r.max_ai_spend_usd).toFixed(0)} AI</span>
                 </div>
                 {going && <p className="small" style={{ margin: "6px 0 0" }}>{workingOn(r.id).length ? <>Working on: <strong>{workingOn(r.id).join(", ")}</strong></> : r.status === "pending" ? "Starting…" : "Between steps."}</p>}
