@@ -34,6 +34,24 @@ export function normalizeManufacturer(name: string | null | undefined): string {
   return n.toUpperCase();
 }
 
+/**
+ * Whether two manufacturer names are the same company as distributors write them: equal after normalizing, or one is
+ * the other plus corporate words ("JST" / "JST Sales America Inc.", "Hirose" / "Hirose Electric Co Ltd",
+ * "Nexperia" / "Nexperia USA Inc.", "Amphenol" / "Amphenol ICC (FCI)").
+ */
+export function sameManufacturer(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = normalizeManufacturer(a), y = normalizeManufacturer(b);
+  if (!x || !y || x === y) return true;
+  const core = (n: string) => n.replace(/\(.*?\)/g, " ").replace(/[.,]/g, " ")
+    .replace(/\b(INC|LLC|LTD|CO|CORP|CORPORATION|COMPANY|LIMITED|GMBH|AG|SA|BV|PLC|KK|USA|AMERICA|AMERICAS|NORTH|EUROPE|ASIA|SALES|ELECTRIC|ELECTRONICS|ELECTRONIC|COMPONENTS|TECHNOLOGY|TECHNOLOGIES|SEMICONDUCTOR|SEMICONDUCTORS|INTERNATIONAL|GROUP|INDUSTRIES|MFG|MANUFACTURING|CONNECTIVITY|ICC|FCI|THE)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+  const cx = core(x), cy = core(y);
+  if (!cx || !cy) return false;
+  if (cx === cy) return true;
+  const [short, long] = cx.length <= cy.length ? [cx, cy] : [cy, cx];
+  return short.length >= 3 && (long === short || long.startsWith(`${short} `));
+}
+
 export type IdentityMatch = "exact" | "packaging_variant" | "different";
 
 /**
@@ -44,7 +62,7 @@ export function matchIdentity(want: { mpn: string; manufacturer?: string | null 
                               got: { mpn: string; manufacturer?: string | null }): IdentityMatch {
   const a = normalizeMpn(want.mpn);
   const b = normalizeMpn(got.mpn);
-  if (want.manufacturer && got.manufacturer && normalizeManufacturer(want.manufacturer) !== normalizeManufacturer(got.manufacturer)) {
+  if (want.manufacturer && got.manufacturer && !sameManufacturer(want.manufacturer, got.manufacturer)) {
     return "different";
   }
   if (a === b) return "exact";

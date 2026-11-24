@@ -83,22 +83,30 @@ export class DigiKeyProvider implements SourcingProvider {
     return body.SearchLocaleUsed?.Currency || this.currency;
   }
 
+  /**
+   * By manufacturer part number: the product-details lookup first; when it has no single answer (404, e.g. for part
+   * numbers with brackets or ordering suffixes such as "B4B-PH-K-S(LF)(SN)" or "PESD5V0S1BA"), a keyword search for
+   * the number, in stock or not, whose exact matches and close variants are returned.
+   */
   async searchMpn(mpn: string): Promise<PartRecord[]> {
     const r = await request("digikey", this.fetchFn, `${DIGIKEY_BASE}/search/${encodeURIComponent(mpn)}/productdetails`,
                             { method: "GET", headers: await this.headers() });
-    if (r.status === 404) return [];
-    if (r.status !== 200) throw new ProviderError("digikey", "http", `HTTP ${r.status}: ${short(r.body)}`);
-    const body = r.body as { Product?: DkProduct; SearchLocaleUsed?: { Currency?: string } };
-    return body.Product ? [mapDigikeyProduct(body.Product, this.currencyOf(body), new Date().toISOString())] : [];
+    if (r.status !== 200 && r.status !== 404) throw new ProviderError("digikey", "http", `HTTP ${r.status}: ${short(r.body)}`);
+    const body = r.body as { Product?: DkProduct; SearchLocaleUsed?: { Currency?: string } } | null;
+    if (r.status === 200 && body?.Product) return [mapDigikeyProduct(body.Product, this.currencyOf(body), new Date().toISOString())];
+    return this.keyword(mpn, 10, false);
   }
 
-  async searchKeyword(query: string, limit: number): Promise<PartRecord[]> {
+  searchKeyword(query: string, limit: number): Promise<PartRecord[]> { return this.keyword(query, limit, true); }
+
+  private async keyword(query: string, limit: number, inStockOnly: boolean): Promise<PartRecord[]> {
     const r = await request("digikey", this.fetchFn, `${DIGIKEY_BASE}/search/keyword`, {
       method: "POST", headers: await this.headers(),
       body: JSON.stringify({ Keywords: query.slice(0, 250), Limit: Math.min(Math.max(limit, 1), 50), Offset: 0,
-                             FilterOptionsRequest: { SearchOptions: ["InStock"] },
+                             ...(inStockOnly ? { FilterOptionsRequest: { SearchOptions: ["InStock"] } } : {}),
                              SortOptions: { Field: "QuantityAvailable", SortOrder: "Descending" } }),
     });
+    if (r.status === 404) return [];
     if (r.status !== 200) throw new ProviderError("digikey", "http", `HTTP ${r.status}: ${short(r.body)}`);
     const body = r.body as { Products?: DkProduct[]; ExactMatches?: DkProduct[]; SearchLocaleUsed?: { Currency?: string } };
     const now = new Date().toISOString();

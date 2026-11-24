@@ -157,6 +157,15 @@ export function sourcingExecutor(providers: SourcingProvider[]): Executor {
         const refusal = /skipped:|invalid|api key|identifier|exceeded your part limit|upgrade your plan|anti-bot|HTTP 40[13]/i;
         const transient = errs.length > 0 && !errs.every((e) => refusal.test(e));
         const allRefused = errs.length > 0 && errs.every((e) => refusal.test(e));
+        if (!transient && c.sourced > 0) {
+          // Some services answered and found part of the list: keep what was found and hand the rest to a person,
+          // instead of holding the whole step (or retrying a lookup that will not change).
+          const refused = [...new Set(resolution.lines.flatMap((l) => l.attempts.filter((a) => a.outcome === "error").map((a) => a.provider)))];
+          const note = `${c.sourced} of ${c.lines} lines found; ${c.unsourced} not found${refused.length ? ` (${refused.join(", ")} refused the lookup, so only the other services were asked)` : ""}. ` +
+                       `Review the lines not found: give them exact part numbers, or choose parts for them.`;
+          return { status: "passed", validations: [{ ...check, result: "warning", summary: `${note} ${check.summary}` }],
+                   summary: note, reviewReason: `Parts not found: ${errors.slice(0, 5).join("; ")}${errors.length > 5 ? ` and ${errors.length - 5} more` : ""}` };
+        }
         if (allRefused) {
           // Nothing to retry: every parts service refused (keys, plan limits, firewall). Put the step on hold so the
           // design carries on; the parts list from the schematics stays, without prices, stock or LCSC numbers.

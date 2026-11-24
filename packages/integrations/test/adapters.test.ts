@@ -119,3 +119,17 @@ test("keys pasted with quotes, spaces or a Windows line ending still work", asyn
   const [, mouser] = sourcingProvidersFromEnv({ MOUSER_API_KEY: "  \r" });
   assert.equal(mouser!.configured(), false);
 });
+
+test("digikey: a part number the details lookup does not know falls back to a keyword search (any stock)", async () => {
+  const product = fx("digikey-productdetails.json").Product;
+  const { fn, calls } = fakeFetch((url) => url.includes("oauth2/token")
+    ? { body: { access_token: "dk", expires_in: 599, token_type: "Bearer" } }
+    : url.includes("/productdetails") ? { status: 404, body: { title: "Not Found" } }
+    : { body: { ExactMatches: [product], Products: [product], SearchLocaleUsed: { Currency: "USD" } } });
+  const parts = await new DigiKeyProvider("cid", "sec", "US", "USD", { fetch: fn }).searchMpn("B4B-PH-K-S(LF)(SN)");
+  assert.equal(parts.length, 1, "duplicates folded");
+  const kw = calls.find((c) => c.url.endsWith("/search/keyword"))!;
+  const body = JSON.parse(String(kw.init.body));
+  assert.equal(body.Keywords, "B4B-PH-K-S(LF)(SN)");
+  assert.equal(body.FilterOptionsRequest, undefined, "not limited to parts in stock");
+});

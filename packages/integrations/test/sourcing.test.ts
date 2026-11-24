@@ -134,3 +134,15 @@ test("the paid provider (Nexar) is asked only for parts the free distributors di
   await resolveBom(one, [new Scripted("digikey", "primary", []), new CountingNexar("nexar", "fallback_b", [])]);
   assert.equal(nexarCalls, 1, "not found by the free ones: Nexar asked");
 });
+
+test("manufacturer names as distributors write them still match", async () => {
+  const { sameManufacturer } = await import("../src/index.ts");
+  assert.ok(sameManufacturer("JST", "JST Sales America Inc."));
+  assert.ok(sameManufacturer("Hirose", "Hirose Electric Co Ltd"));
+  assert.ok(sameManufacturer("Nexperia", "Nexperia USA Inc."));
+  assert.ok(sameManufacturer("Amphenol", "Amphenol ICC (FCI)"));
+  assert.ok(sameManufacturer("Molex", "Molex"));
+  assert.ok(!sameManufacturer("Texas Instruments", "Microchip Technology"));
+  assert.ok(!sameManufacturer("ON", "Onkyo"));
+  assert.equal(matchIdentity({ mpn: "FH12-30S-0.5SH(55)", manufacturer: "Hirose" }, { mpn: "FH12-30S-0.5SH(55)", manufacturer: "Hirose Electric Co Ltd" }), "exact");
+});
