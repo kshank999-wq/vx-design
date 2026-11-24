@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
-import { acceptAllRecommendations, answerQuestion } from "./actions";
+import { acceptAllRecommendations, answerQuestion, askAboutQuestion } from "./actions";
+import { QREF_RE, askedPart } from "@/lib/question-ref";
 import { DictateButton, ReadAloud } from "@/components/VoiceTools";
 
 interface Q {
@@ -25,6 +26,17 @@ export default async function QuestionsPage({ params, searchParams }: {
       .eq("project_id", projectId).order("created_at"),
   ]);
   if (!project) notFound();
+  // Questions asked about a question ("I have a question about this"), each with the assistant's reply after it.
+  const { data: recent } = await supabase.from("project_messages").select("id, author_kind, body, created_at").eq("project_id", projectId).order("id", { ascending: false }).limit(600);
+  const msgs = [...(recent ?? [])].reverse();
+  const asked = new Map<string, { ask: string; reply: string | null; at: string }[]>();
+  (msgs ?? []).forEach((m, i) => {
+    const ref = m.author_kind === "user" ? QREF_RE.exec(m.body ?? "") : null;
+    if (!ref) return;
+    const next = (msgs ?? []).slice(i + 1).find((n) => n.author_kind === "assistant");
+    const reply = next && !(msgs ?? []).slice(i + 1, (msgs ?? []).indexOf(next)).some((n) => n.author_kind === "user") ? next.body : null;
+    asked.set(ref[1]!, [...(asked.get(ref[1]!) ?? []), { ask: askedPart(m.body), reply, at: m.created_at }]);
+  });
   const canAnswer = ["owner", "engineer", "reviewer", "client"].includes(me?.role ?? "");
   const qs = (rows ?? []) as unknown as Q[];
   const open = qs.filter((q) => q.status === "open");
@@ -49,7 +61,7 @@ export default async function QuestionsPage({ params, searchParams }: {
             <section key={step} className="q-group">
               <h2><span className="muted small">Raised by</span> {step}</h2>
               {list.map((q, i) => (
-                <article key={q.id} className="card q-card" data-testid="question">
+                <article key={q.id} id={`q-${q.id}`} className="card q-card" data-testid="question">
                   <div className="q-num">{i + 1}</div>
                   <div className="q-body">
                     <div className="row spread q-head"><h3>{q.question}</h3>
@@ -57,6 +69,26 @@ export default async function QuestionsPage({ params, searchParams }: {
                     {q.why && <p className="q-why"><strong>Why it matters:</strong> {q.why}</p>}
                     <div className="q-rec" data-testid="recommendation"><span className="q-rec-badge">★ Recommended</span><p>{q.recommendation}</p>
                       <p className="small muted">VX Design follows this until you answer.</p></div>
+                    <details className="q-ask" open={(asked.get(q.id) ?? []).length > 0} data-testid="ask-about">
+                      <summary>💬 I have a question about this</summary>
+                      {(asked.get(q.id) ?? []).map((a, n) => (
+                        <div key={n} className="q-ask-pair">
+                          <p className="q-ask-you"><strong>You asked:</strong> {a.ask}</p>
+                          <div className="q-ask-reply">{a.reply ? <>{a.reply.split(/\n{2,}/).map((para, k) => <p key={k}>{para}</p>)}<ReadAloud text={a.reply} /></> : <p className="muted">No reply yet.</p>}</div>
+                        </div>))}
+                      {canAnswer && (
+                        <form className="stack tight" action={askAboutQuestion.bind(null, projectId, q.id)}>
+                          <div className="row tight wrap">
+                            <textarea id={`ask-${q.id}`} name="ask" rows={2} required maxLength={2000} className="q-input"
+                              placeholder="What would you like explained? e.g. What does a pilot build mean, and what would each choice cost?" aria-label={`Your question about: ${q.question}`} />
+                            <div className="stack tight">
+                              <DictateButton target={`ask-${q.id}`} />
+                              <SubmitButton variant="secondary" pendingText="Asking…">Ask</SubmitButton>
+                            </div>
+                          </div>
+                          <p className="small muted">The design agent explains it here; nothing is answered until you choose below.</p>
+                        </form>)}
+                    </details>
                     {canAnswer ? (
                       <form className="stack" action={answerQuestion.bind(null, projectId, q.id)}>
                         {(q.options ?? []).length > 0 && (

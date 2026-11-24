@@ -730,3 +730,11 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .issue-suggest p { margin: 0 0 8px; }
 .btn.btn-suggest { background: #16a34a; border-color: #15803d; color: #fff; }
 .btn.btn-suggest:hover { background: #15803d; }
+
+/* "I have a question about this" under each open question. */
+.q-ask { margin: 4px 0 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--surface); }
+.q-ask > summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.q-ask-pair { margin: 10px 0; }
+.q-ask-you { margin: 0 0 6px; }
+.q-ask-reply { background: #eef4ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 8px 12px; }
+.q-ask-reply p { margin: 0 0 8px; }

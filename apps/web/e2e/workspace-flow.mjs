@@ -109,9 +109,20 @@ try {
   assert.match(await q.getByTestId("recommendation").innerText(), /★ Recommended\s+US only/);
   await q.getByTestId("read-aloud").waitFor();   // read-aloud is offered wherever the browser can speak
   const hasDictation = await cpage.evaluate(() => "webkitSpeechRecognition" in window || "SpeechRecognition" in window);
-  assert.equal(await q.getByTestId("dictate").count(), hasDictation ? 1 : 0, "dictation offered only where the browser supports it");
+  assert.equal(await q.getByTestId("dictate").count(), hasDictation ? 2 : 0, "dictation (for asking and for answering) offered only where the browser supports it");
   await shot(cpage, "client-questions");
-  await q.getByRole("button", { name: "US and EU" }).click();
+  // "I have a question about this": asked before answering, explained under the question, nothing answered yet.
+  const ask = q.getByTestId("ask-about");
+  await ask.locator("summary").click();
+  await ask.getByLabel(/Your question about/).fill("What does selling in the EU change for the design?");
+  await ask.getByRole("button", { name: "Ask" }).click();
+  await cpage.getByText("Answered below the question.").waitFor();
+  const asked = cpage.getByTestId("question").getByTestId("ask-about");
+  assert.match(await asked.innerText(), /You asked: What does selling in the EU change for the design\?/);
+  assert.ok((await asked.locator(".q-ask-reply").innerText()).trim().length > 10, "the assistant's explanation is shown");
+  const { data: stillOpen } = await admin.from("project_questions").select("status").eq("project_id", project.id).single();
+  assert.equal(stillOpen.status, "open", "asking does not answer the question");
+  await cpage.getByTestId("question").getByRole("button", { name: "US and EU" }).click();
   await cpage.getByText("Saved: the next steps will follow your answer.").waitFor();
   const { data: answered } = await admin.from("project_questions").select("status, answer").eq("project_id", project.id).single();
   assert.deepEqual([answered.status, answered.answer], ["answered", "US and EU"]);

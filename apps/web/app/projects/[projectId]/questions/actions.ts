@@ -2,6 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fail, requireUser } from "@/lib/auth";
+import { askAndPost } from "@/lib/chat";
+import { QREF } from "@/lib/question-ref";
 
 /** Answers a question raised by finished work: one of its choices, a written answer, the recommendation, or set aside. */
 export async function answerQuestion(projectId: string, questionId: string, form: FormData) {
@@ -34,4 +36,27 @@ export async function acceptAllRecommendations(projectId: string) {
   revalidatePath(path);
   revalidatePath(`/projects/${projectId}/workspace`);
   redirect(`${path}?notice=${encodeURIComponent(`${n} recommendation(s) accepted. You can change any answer below.`)}`);
+}
+
+/**
+ * "I have a question about this": asks the design assistant about one open question before answering it. The
+ * assistant gets the question, why it matters, the choices and the recommendation, and is asked to explain in plain
+ * words; the exchange is kept in the project chat and shown under the question.
+ */
+export async function askAboutQuestion(projectId: string, questionId: string, form: FormData) {
+  const path = `/projects/${projectId}/questions`;
+  const { supabase, userId } = await requireUser();
+  const ask = String(form.get("ask") ?? "").trim();
+  if (ask.length < 2) fail(path, "Type what you would like to know first.");
+  const { data: q } = await supabase.from("project_questions").select("id, question, why, recommendation, options").eq("id", questionId).eq("project_id", projectId).maybeSingle();
+  if (!q) fail(path, "That question was not found.");
+  const choices = ((q.options as string[] | null) ?? []).map((o) => `- ${o}`).join("\n");
+  const message = `${QREF(questionId)} About the question "${q.question}"` +
+    (q.why ? ` (why it matters: ${q.why})` : "") + `. VX Design recommends: ${q.recommendation}.` +
+    (choices ? `\nThe choices are:\n${choices}` : "") +
+    `\n\nMy question: ${ask}\n\nPlease explain in plain, everyday words what this means for the project, what each choice would lead to (cost, time, risk), and why the recommendation is suggested.`;
+  const err = await askAndPost(supabase, userId, projectId, message.slice(0, 4000));
+  if (err) fail(path, err);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent("Answered below the question.")}#q-${questionId}`);
 }
