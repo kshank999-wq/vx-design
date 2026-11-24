@@ -724,3 +724,9 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .runs-side .dot-replaced { background: #cbd5e1; }
 .pill-replaced, .run-state-replaced { background: #e2e8f0; color: #475569; }
 .run-light-replaced { background: #cbd5e1; }
+
+/* Suggested fixes on a step that could not finish: green, one click each. */
+.issue-suggest { margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; background: var(--ok-bg); }
+.issue-suggest p { margin: 0 0 8px; }
+.btn.btn-suggest { background: #16a34a; border-color: #15803d; color: #fff; }
+.btn.btn-suggest:hover { background: #15803d; }

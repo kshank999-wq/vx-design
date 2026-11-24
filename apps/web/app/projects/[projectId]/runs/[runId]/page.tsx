@@ -11,6 +11,7 @@ import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideS
 import { DictateButton } from "@/components/VoiceTools";
 import { RunChat } from "@/components/RunChat";
 import { RunsSide } from "@/components/RunsSide";
+import { stepSuggestions } from "@/lib/step-suggestions";
 import { runLabel, runNumbers } from "@/lib/run-label";
 
 interface Report {
@@ -249,6 +250,20 @@ export default async function RunPage({ params, searchParams }: {
               </div>
               <p className="issue-reason"><strong>The problem:</strong> {reason}</p>
               {notes.length > 0 && <div className="issue-notes small"><strong>Your guidance so far:</strong><ul>{notes.map((g, i) => <li key={i}>{g.note} <span className="muted">({new Date(g.created_at).toLocaleString("en-US")})</span></li>)}</ul></div>}
+              {canControl && retryable && (() => {
+                const ideas = stepSuggestions(t.blocker_reason, notes.map((g) => g.note));
+                return ideas.length > 0 && (
+                  <div className="issue-suggest" data-testid="suggestions">
+                    <p className="small"><strong>Suggested fixes</strong> (one click saves it as guidance and tries again):</p>
+                    <div className="row tight wrap">
+                      {ideas.map((s) => (
+                        <form key={s.label} action={guideStep.bind(null, projectId, actRun, t.id)}>
+                          <input type="hidden" name="note" value={s.note} /><input type="hidden" name="then" value="retry" />
+                          <SubmitButton className="btn btn-suggest" pendingText="Starting…" title={s.note}>✓ {s.label}</SubmitButton>
+                        </form>))}
+                    </div>
+                  </div>);
+              })()}
               {canControl && (
                 <div className="issue-actions">
                   {retryable && /cost cap was reached/.test(t.blocker_reason ?? "") ? (
