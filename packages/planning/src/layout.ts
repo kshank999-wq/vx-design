@@ -61,6 +61,23 @@ export interface LayoutInput {
   circuit: CircuitDesign;
   footprints: FootprintFacts[];
   fabProfiles: { name: string; description: string }[];
+  /** Copper layers the owner/team requires (from their guidance); the matching fab profile is enforced. */
+  requiredLayers?: number | null;
+}
+
+/** The layer count the latest guidance asks for ("use 4 layers", "4-layer board"), or null. */
+export function requiredLayersFromNotes(notes: string[]): number | null {
+  let got: number | null = null;
+  for (const n of notes) {
+    const m = [...n.matchAll(/\b(2|4|6)[- ]?(?:layers?|copper layers?)\b/gi)];
+    if (m.length) got = Number(m[m.length - 1]![1]);
+  }
+  return got;
+}
+
+/** The fab profile for a layer count among those offered, e.g. 4 -> "jlcpcb-4layer-standard". */
+export function profileForLayers(profiles: { name: string }[], layers: number): string | null {
+  return profiles.find((p) => new RegExp(`(^|-)${layers}layer(-|$)`).test(p.name))?.name ?? null;
 }
 
 export interface LayoutCheck {
@@ -118,6 +135,7 @@ export function renderLayoutPrompt(input: LayoutInput): string {
   const upstream = input.upstream.map((u) => `### ${u.title} (${u.taskKey})\n${u.content}`).join("\n\n") || "(no text outputs)";
   const parts = input.circuit.components.map((c) => `- ${c.ref}: ${c.value} — ${c.purpose}`).join("\n");
   const nets = input.circuit.nets.map((n) => `- ${n.name}: ${n.pins.join(", ")}`).join("\n");
+  const required = input.requiredLayers ? profileForLayers(input.fabProfiles, input.requiredLayers) : null;
   const notes = input.reviewNotes.length
     ? `\n\nA reviewer returned the previous layout with these notes; address them:\n${input.reviewNotes.map((n) => `- ${n}`).join("\n")}` : "";
   return `Project: ${input.projectContext}\n\nTask: ${input.task.title} (${input.task.key})\n${input.task.description ?? ""}\n\n` +
@@ -125,6 +143,7 @@ export function renderLayoutPrompt(input: LayoutInput): string {
     `Circuit: ${input.circuit.title}\n${input.circuit.summary}\n\nComponents:\n${parts}\n\nNets:\n${nets}\n\n` +
     `Footprints (KiCad library facts):\n${input.footprints.map(fmtFootprint).join("\n")}\n\n` +
     `Fab profiles:\n${input.fabProfiles.map((p) => `- ${p.name}: ${p.description}`).join("\n")}\n\n` +
+    (required ? `The owner requires a ${input.requiredLayers}-layer board: use the ${required} profile (enlarge the board if parts need more room).\n\n` : "") +
     `Upstream outputs:\n${upstream}${notes}\n\nPlace the board.`;
 }
 
@@ -147,6 +166,12 @@ export async function generateLayout(
       purpose: round === 1 ? "board_layout" : "board_layout_repair", system: SYSTEM, messages, schema: BoardLayout, cache: "follow-up",
     });
     usage.push(result.usage);
+    // The owner's layer requirement is binding: a different profile is replaced with the required one.
+    const required = input.requiredLayers ? profileForLayers(input.fabProfiles, input.requiredLayers) : null;
+    if (required && result.output.fab_profile !== required) {
+      result.output.fab_profile = required;
+      if (input.requiredLayers === 2) result.output.inner_planes = [];
+    }
     const c = await check(result.output, round);
     history.push({ round, stage: c.stage, problems: c.problems.length });
     await onRound?.(round, c, result.usage);

@@ -15,7 +15,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  CircuitDesign, LAYOUT_PROMPT_VERSION, LayoutDesignError, generateLayout,
+  CircuitDesign, LAYOUT_PROMPT_VERSION, LayoutDesignError, generateLayout, requiredLayersFromNotes,
   type BoardLayout, type LayoutCheck, type LayoutInput,
 } from "@vx/planning";
 import type { Validation } from "../db.ts";
@@ -100,7 +100,10 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
           return { status: "blocked", reason: "PCB layout needs the committed circuit design of an upstream schematic task " +
                                               "(artifact '<schematic task>/design'). Run and approve the schematic first." };
         }
-        const { input, source, models: libraryModels } = context;
+        const { input: cached, source, models: libraryModels } = context;
+        // Guidance given after this attempt's context was saved still counts (e.g. "use 4 layers").
+        const freshNotes = await db.reviewNotes(task.id);
+        const input: LayoutInput = { ...cached, reviewNotes: freshNotes, requiredLayers: requiredLayersFromNotes(freshNotes) };
 
         // Stackup, placement and routing of one board are often separate tasks: when the board's earlier layout task
         // already routed this exact design version, take that board over (copied, with its checks) instead of laying
