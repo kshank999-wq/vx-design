@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUser } from "@/lib/auth";
+import { runLabel, runNumbers } from "@/lib/run-label";
 import { restartRun } from "./[runId]/actions";
 
 const LABEL: Record<string, string> = {
@@ -25,6 +26,8 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
   const { data: costs } = ids.length ? await supabase.from("cost_events").select("run_id, cost_usd").in("run_id", ids) : { data: [] };
   const spent = (id: string) => (costs ?? []).filter((c) => c.run_id === id).reduce((n, c) => n + Number(c.cost_usd), 0);
   const all = runs ?? [];
+  const nums = runNumbers(all);
+  const label = (r: { id: string; name: string | null }) => runLabel(nums.get(r.id), r.name);
   const sorted = [...all.filter((r) => r.status === "running" || r.status === "pending"), ...all.filter((r) => r.status === "paused"),
     ...all.filter((r) => !GOING.includes(r.status))];
   const goingOn = (planId: string, id: string) => all.find((o) => o.plan_id === planId && o.id !== id && GOING.includes(o.status));
@@ -41,12 +44,12 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
             <article key={r.id} className={`card run-row ${going ? "going" : ["stopped", "paused"].includes(r.status) ? "held" : ""}`} data-run={r.id}>
               <div>
                 <div className="row tight wrap">
-                  <strong><Link href={`/projects/${projectId}/runs/${r.id}`}>{r.name || "Run"}</Link></strong>
+                  <strong><Link href={`/projects/${projectId}/runs/${r.id}`}>{label(r)}</Link></strong>
                   <span className={`pill pill-${r.status}`}>{LABEL[r.status] ?? r.status}</span>
                   <span className="small muted">plan v{(r.plans as unknown as { version: number }).version} · started {new Date(r.created_at).toLocaleString("en-US")} · ${spent(r.id).toFixed(2)} of ${Number(r.max_ai_spend_usd).toFixed(0)} AI</span>
                 </div>
                 {r.stop_reason && !going && <p className="small" style={{ margin: "6px 0 0" }}>{r.status === "stopped" ? "Stopped: " : ""}{r.stop_reason}</p>}
-                {other && !going && <p className="small muted" style={{ margin: "4px 0 0" }}>The work of this plan is going on in {other.name || "another run"}; restarting this one stops that one (its finished work is kept).</p>}
+                {other && !going && <p className="small muted" style={{ margin: "4px 0 0" }}>The work of this plan is going on in {label(other)}; restarting this one stops that one (its finished work is kept).</p>}
               </div>
               <div className="row tight">
                 <Link className="btn btn-secondary" href={`/projects/${projectId}/runs/${r.id}`}>Open</Link>

@@ -32,7 +32,7 @@ export function RunsSide({ projectId, currentRunId, runs, tasks, live }: {
     <li key={r.id} className={r.id === currentRunId ? "current" : ""}>
       <Link href={`/projects/${projectId}/runs/${r.id}`}>
         <span className={`dot dot-${r.status}`} aria-hidden="true" />
-        <span className="runs-side-name">{r.name || "Run"}{r.plan_version ? <span className="muted"> · plan v{r.plan_version}</span> : null}</span>
+        <span className="runs-side-name">{r.name}{r.plan_version ? <span className="muted"> · plan v{r.plan_version}</span> : null}</span>
         <span className="muted small">{LABEL[r.status] ?? r.status} · {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
       </Link>
     </li>

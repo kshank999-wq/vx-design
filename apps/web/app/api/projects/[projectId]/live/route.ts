@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   const last = new Map<string, string>();
   for (const l of logs ?? []) if (!last.has(l.execution_id)) last.set(l.execution_id, l.message);
   return NextResponse.json({
-    run: { id: run.id, name: run.name, status: run.status, stop_reason: run.stop_reason, ai_max: Number(run.max_ai_spend_usd),
+    run: { id: run.id, name: run.name, number: (await supabase.rpc("run_number", { p_run: run.id })).data ?? null, status: run.status, stop_reason: run.stop_reason, ai_max: Number(run.max_ai_spend_usd),
            ai_spent: (costs ?? []).filter((c) => c.kind === "ai_tokens").reduce((n, c) => n + Number(c.cost_usd), 0) },
     working: (execs ?? []).map((e) => { const t = e.tasks as unknown as { key: string; title: string } | null;
       return { key: t?.key ?? "", title: t?.title ?? "", started_at: e.started_at, step: last.get(e.id) ?? null }; }),

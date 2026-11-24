@@ -130,7 +130,7 @@ try {
   await page.goto(page.url().replace(/\/runs\/.*$/, "/workspace"));
   const strip = page.getByTestId("live-strip");
   await strip.waitFor();
-  assert.match(await strip.innerText(), /Design run (in progress|working)[\s\S]*AI \$\d+\.\d\d of \$200[\s\S]*Open the run/);
+  assert.match(await strip.innerText(), /Run \d+ (in progress|working)[\s\S]*AI \$\d+\.\d\d of \$200[\s\S]*Open the run/);
   await strip.getByRole("link", { name: "Open the run →" }).click();
   await page.waitForURL(/\/runs\/[0-9a-f-]{36}/);
   await shot(page, "run-authorized");

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface Live {
-  run: { id: string; name: string | null; status: string; stop_reason: string | null; ai_max: number; ai_spent: number } | null;
+  run: { id: string; name: string | null; number?: number | null; status: string; stop_reason: string | null; ai_max: number; ai_spent: number } | null;
   working?: { key: string; title: string; started_at: string | null; step: string | null }[];
   waiting?: number;
   questions?: number;
@@ -43,7 +43,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
     return (
       <div className={`live-strip live-strip-idle`} data-testid="live-strip">
         <span className="live-strip-dot idle" aria-hidden="true" />
-        <span>Last run <strong>{run.status}</strong>{run.stop_reason ? `: ${run.stop_reason}` : ""}</span>
+        <span>Last run ({run.number ? `Run ${run.number}` : "Run"}) <strong>{run.status}</strong>{run.stop_reason ? `: ${run.stop_reason}` : ""}</span>
         {ask}
         <Link className="live-strip-link" href={href}>Open the run</Link>
       </div>
@@ -54,7 +54,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
     <div className={`live-strip live-strip-${run.status}`} data-testid="live-strip" role="status" aria-live="polite">
       <span className={`live-strip-dot ${active && run.status !== "paused" ? "" : "idle"}`} aria-hidden="true" />
       <span className="live-strip-main">
-        <strong>{run.status === "paused" ? "Design run paused" : !active ? "Run stopped" : working.length ? "Design run working" : "Design run in progress"}</strong>
+        <strong>{run.number ? `Run ${run.number} ` : "Design run "}{run.status === "paused" ? "paused" : !active ? "stopped" : working.length ? "working" : "in progress"}</strong>
         {working.length > 0 && <> · {working.map((w, i) => (
           <span key={w.key} className="live-strip-task">{i ? ", " : ""}{w.title} <span className="mono">{mmss(w.started_at, now)}</span>
             {w.step && working.length === 1 && <span className="live-strip-step"> — {w.step.slice(0, 140)}</span>}</span>))}</>}

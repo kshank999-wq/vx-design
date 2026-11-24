@@ -45,7 +45,7 @@ export async function continueRun(projectId: string, runId: string, form?: FormD
     p_max_retries_per_task: run.max_retries_per_task,
     p_task_ids: run.authorized_task_ids,
     p_stop_conditions: run.stop_conditions,
-    p_name: `${base} (continued)`,
+    p_name: /^Run$/.test(base) ? undefined : base,
   });
   if (error) fail(path, error);
   redirect(`/projects/${projectId}/runs/${data}?notice=${encodeURIComponent("New run authorized with the same limits.")}`);
@@ -109,18 +109,30 @@ export async function sendRunGuidance(projectId: string, runId: string, form: Fo
   redirect(`${path}?notice=${encodeURIComponent(taskId ? "Saved: the step's next attempt will follow your guidance. Continue the run when you are ready." : "Sent.")}${err ? `&error=${encodeURIComponent(err)}` : ""}#run-chat`);
 }
 
-/** "Try again" on one step: it goes back to the queue with a fresh retry allowance, and the run continues. */
+/**
+ * "Try again" on one step: it goes back to the queue with a fresh retry allowance. A run that is going simply picks it
+ * up; a stopped run is continued (only then), so pressing it never restarts a run that is already going.
+ */
 export async function retryStepAndContinue(projectId: string, runId: string, taskId: string) {
   const path = `/projects/${projectId}/runs/${runId}`;
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("retry_step", { p_task: taskId });
   if (error) fail(path, error);
-  const { data: run } = await supabase.from("runs").select("stop_conditions").eq("id", runId).single();
-  const { error: e2 } = await supabase.rpc("continue_run", { p_run: runId, p_ai: 0, p_auto_approve: !!(run?.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
-    p_retry_failed: false, p_include_critical: false, p_compute: null });
-  if (e2 && !/another run of this plan is active/.test(e2.message)) fail(path, e2);
+  const notice = await keepGoing(supabase, runId);
   revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent("Trying that step again: the run is going.")}`);
+  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
+}
+
+/** After a step is queued again: continue the run if it is not going (and no other run of its plan is); say which. */
+async function keepGoing(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], runId: string): Promise<string> {
+  const { data: run } = await supabase.from("runs").select("status, plan_id, stop_conditions").eq("id", runId).single();
+  if (!run) return "Queued.";
+  if (["pending", "running", "paused"].includes(run.status)) return "Queued: the run that is going picks it up next.";
+  const { data: other } = await supabase.from("runs").select("id, name, created_at").eq("plan_id", run.plan_id).neq("id", runId).in("status", ["pending", "running", "paused"]).limit(1).maybeSingle();
+  if (other) { const { data: n } = await supabase.rpc("run_number", { p_run: other.id }); return `Queued: Run ${n ?? ""} (the run that is going) picks it up next.`; }
+  const { error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: 0, p_auto_approve: !!(run.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
+    p_retry_failed: false, p_include_critical: false, p_compute: null });
+  return error ? `Queued, but the run could not continue: ${error.message}` : "Queued, and the run is going again.";
 }
 
 /** Guidance written under a step's card: saved with the step, answered by the agent, and optionally tried again at once. */
@@ -155,8 +167,15 @@ export async function undeferStep(projectId: string, runId: string, taskId: stri
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("undefer_step", { p_task: taskId });
   if (error) fail(path, error);
+  // Bringing a step back means doing it: a step that could not finish is queued again straight away.
+  const { data: t } = await supabase.from("tasks").select("status, blocker_reason").eq("id", taskId).single();
+  let notice = "Brought back: it is in the list again.";
+  if (t && (t.status === "failed" || (t.status === "blocked" && /^interrupted /.test(t.blocker_reason ?? "")))) {
+    const { error: e2 } = await supabase.rpc("retry_step", { p_task: taskId });
+    notice = e2 ? `Brought back, but it could not be queued: ${e2.message}` : `Brought back. ${await keepGoing(supabase, runId)}`;
+  }
   revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent("Brought back: it is in the list again.")}`);
+  redirect(`${path}?notice=${encodeURIComponent(notice)}`);
 }
 
 /** "Skip this step": done without its result, so the steps after it can run. Undone by "Try again". */
@@ -193,19 +212,20 @@ export async function raiseStepBudget(projectId: string, runId: string, taskId: 
 export async function restartRun(projectId: string, runId: string) {
   const path = `/projects/${projectId}/runs/${runId}`;
   const { supabase } = await requireUser();
-  const { data: run } = await supabase.from("runs").select("id, plan_id, status, stop_conditions").eq("id", runId).single();
+  const { data: run } = await supabase.from("runs").select("id, plan_id, status").eq("id", runId).single();
   if (!run) fail(path, "Run not found.");
-  if (["canceled", "failed"].includes(run.status)) return continueRun(projectId, runId);
   if (["pending", "running", "paused"].includes(run.status)) redirect(`${path}?notice=${encodeURIComponent("This run is already going.")}`);
-  const { data: others } = await supabase.from("runs").select("id").eq("plan_id", run.plan_id).neq("id", runId).in("status", ["pending", "running", "paused"]);
-  for (const o of others ?? []) {
-    const { error } = await supabase.rpc("control_run", { p_run_id: o.id, p_action: "cancel" });
-    if (error) fail(path, error);
+  if (["canceled", "failed"].includes(run.status)) {
+    // A canceled run is not reopened: when another run of the plan is going, that is where the work is.
+    const { data: going } = await supabase.from("runs").select("id").eq("plan_id", run.plan_id).in("status", ["pending", "running", "paused"]).limit(1).maybeSingle();
+    if (going) {
+      const { data: n } = await supabase.rpc("run_number", { p_run: going.id });
+      redirect(`/projects/${projectId}/runs/${going.id}?notice=${encodeURIComponent(`The work of this plan is already going here, in Run ${n ?? ""}.`)}`);
+    }
+    return continueRun(projectId, runId);
   }
-  const { error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: 0,
-    p_auto_approve: !!(run.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
-    p_retry_failed: true, p_include_critical: false, p_compute: null });
+  const { data: stopped, error } = await supabase.rpc("restart_run", { p_run: runId });
   if (error) fail(path, error);
   revalidatePath(path);
-  redirect(`${path}?notice=${encodeURIComponent((others ?? []).length ? "Restarted here. The other run was stopped; its finished work is kept." : "Restarted: the run picks up where it stopped.")}`);
+  redirect(`${path}?notice=${encodeURIComponent(stopped ? `Restarted: this run picks up where it stopped. ${stopped} was stopped so this one could work (its finished work is kept).` : "Restarted: this run picks up where it stopped.")}`);
 }
