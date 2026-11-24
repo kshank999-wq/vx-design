@@ -394,10 +394,23 @@ def _route(board, work: Path) -> dict[str, Any]:
     dsn, ses = work / "board.dsn", work / "board.ses"
     if not pcbnew.ExportSpecctraDSN(board, str(dsn)):
         raise kicad.KicadError("Specctra DSN export failed")
-    p = subprocess.run(["java", "-jar", FREEROUTING_JAR, "-de", dsn.name, "-do", ses.name, "-mp", "30", "-mt", "1",
-                        "--gui.enabled=false", "--usage_and_diagnostic_data.disable_analytics=true",
-                        "--feature_flags.save_jobs=false"],
-                       cwd=work, capture_output=True, text=True, timeout=1200)
+    # Dense boards (150 parts, fine-pitch connectors) need many more passes than small ones. The time goes into
+    # connecting everything: the route optimizer (shortening finished tracks) is off, since it took most of the time
+    # and an unfinished board fails anyway. Both can be tuned per worker with VX_ROUTER_PASSES / VX_ROUTER_TIMEOUT_S.
+    passes = int(os.environ.get("VX_ROUTER_PASSES", "100"))
+    limit = int(os.environ.get("VX_ROUTER_TIMEOUT_S", "2700"))
+    cmd = ["java", "-jar", FREEROUTING_JAR, "-de", dsn.name, "-do", ses.name, "-mp", str(passes),
+           "-mt", str(max(1, (os.cpu_count() or 2) - 1)),
+           "--gui.enabled=false", "--usage_and_diagnostic_data.disable_analytics=true",
+           "--feature_flags.save_jobs=false", "--router.optimizer.enabled=false"]
+    try:
+        p = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=limit)
+    except subprocess.TimeoutExpired as e:
+        log = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + \
+              ((e.stderr or b"").decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or ""))
+        (work / "freerouting.log").write_text(log)
+        raise kicad.KicadError(f"Freerouting did not finish within {limit // 60} minutes ({passes} passes allowed): "
+                               "the placement leaves too little room to connect everything")
     log = (p.stdout or "") + (p.stderr or "")
     (work / "freerouting.log").write_text(log)
     if not ses.exists():

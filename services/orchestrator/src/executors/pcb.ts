@@ -11,7 +11,7 @@
  * step that checked them; a resumed attempt registers those exact files instead of rebuilding.
  */
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -163,8 +163,12 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
                 local[ref] = { path, name: `${m.mpn}-${m.sha256.slice(0, 8)}` };
               }
             }
-            const r = await generateLayout(input, ctx.model,
+            let lastLayout: BoardLayout | null = null;
+            let r: Awaited<ReturnType<typeof generateLayout>>;
+            try {
+            r = await generateLayout(input, ctx.model,
               async (layout, round): Promise<LayoutCheck> => {
+                lastLayout = layout;
                 const dir = join(work, `round-${round}`);
                 const result = await buildLayout(tools, input.circuit, layout, dir, local);
                 builds.set(round, { dir, result });
@@ -179,6 +183,30 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
                   { round, stage: check.stage, problems: check.problems.slice(0, 20), drc: b?.drc && { ...b.drc, violations: undefined } },
                   check.ok ? "info" : "warn");
               });
+            } catch (e) {
+              // A layout that never passed still leaves its last board behind: the placement, the partly routed
+              // board and the router's log, kept so it can be finished by hand in KiCad or replayed without the model.
+              if (e instanceof LayoutDesignError && builds.size) {
+                const last = Math.max(...builds.keys());
+                const { dir } = builds.get(last)!;
+                const kept: Record<string, string> = {};
+                const files = await readdir(dir).catch(() => [] as string[]);
+                for (const name of files.filter((f) => /\.(kicad_pcb|kicad_pro|kicad_sch|dsn|log)$/.test(f))) {
+                  const bytes = await readFile(join(dir, name));
+                  const path = `${task.project_id}/attempts/${ctx.exec.id}/${name}`;
+                  await db.upload(path, bytes, "application/octet-stream");
+                  kept[name] = path;
+                }
+                if (lastLayout) {
+                  const path = `${task.project_id}/attempts/${ctx.exec.id}/layout.json`;
+                  await db.upload(path, new TextEncoder().encode(JSON.stringify(lastLayout, null, 2)), "application/json");
+                  kept["layout.json"] = path;
+                }
+                (e as LayoutDesignError & { kept?: Record<string, string> }).kept = kept;
+                await ctx.log(`kept the last attempt's board for hand-finishing or replay: ${Object.keys(kept).join(", ")}`, { kept });
+              }
+              throw e;
+            }
             const { dir, result } = builds.get(r.rounds)!;
             const stash: LayoutOutcome["stash"] = {};
             for (const f of FILES) {
@@ -199,7 +227,8 @@ export function pcbExecutor(tools: EngineeringTools): Executor {
           if (e instanceof LayoutDesignError) {
             return { status: "failed", retryable: true, error: e.message, validations: [{
               kind: "drc", result: "fail", evidence_category: "cad_check", tool_name: "kicad", tool_version: tools.versions.kicad,
-              summary: `Layout still failed placement, routing or DRC after ${e.rounds} round(s)`, details: { problems: e.problems.slice(0, 50) } }] };
+              summary: `Layout still failed placement, routing or DRC after ${e.rounds} round(s)`,
+              details: { problems: e.problems.slice(0, 50), last_attempt: (e as LayoutDesignError & { kept?: Record<string, string> }).kept ?? null } }] };
           }
           throw e;
         }
