@@ -389,11 +389,13 @@ def short_net(name: str) -> str:
 
 # --- Routing ----------------------------------------------------------------------------
 
-def _route(board, work: Path) -> dict[str, Any]:
+def _route(board, work: Path, skip_nets: list[str] | None = None) -> dict[str, Any]:
     pcbnew = _pcbnew()
     dsn, ses = work / "board.dsn", work / "board.ses"
     if not pcbnew.ExportSpecctraDSN(board, str(dsn)):
         raise kicad.KicadError("Specctra DSN export failed")
+    if skip_nets:
+        _drop_nets_from_dsn(dsn, skip_nets)
     # Dense boards (150 parts, fine-pitch connectors) need many more passes than small ones. The time goes into
     # connecting everything: the route optimizer (shortening finished tracks) is off, since it took most of the time
     # and an unfinished board fails anyway. Both can be tuned per worker with VX_ROUTER_PASSES / VX_ROUTER_TIMEOUT_S.
@@ -438,7 +440,7 @@ def _ground_pour(board, layout: Layout, profile: FabProfile, net) -> list[str]:
         z.SetIsRuleArea(False)
         z.SetLocalClearance(mm(max(profile.clearance_mm, 0.3)))
         z.SetMinThickness(mm(max(profile.min_track_mm, 0.2)))
-        z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
+        z.SetPadConnection(pcbnew.ZONE_CONNECTION_THT_THERMAL)
         z.SetThermalReliefGap(mm(0.3))
         z.SetThermalReliefSpokeWidth(mm(max(profile.track_mm, 0.3)))
         z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
@@ -455,7 +457,7 @@ def _ground_pour(board, layout: Layout, profile: FabProfile, net) -> list[str]:
 def _plane_nets(layout: Layout, nets: dict[str, Any], power: list[str], pin_net_names: dict) -> list[str]:
     """Full net names for In1 and In2: the layout's choice, else ground then the supply with the most pins."""
     by_short = {short_net(n): n for n in nets}
-    chosen = [by_short[n] for n in layout.inner_planes if n in by_short]
+    chosen = [by_short[short_net(n)] for n in layout.inner_planes if short_net(n) in by_short]
     if len(chosen) == 2:
         return chosen
     ground = by_short.get(layout.ground_pour or "GND") or next((n for n in nets if short_net(n).upper() in ("GND", "GNDD", "VSS")), None)
@@ -486,7 +488,7 @@ def _inner_planes(board, layout: Layout, profile: FabProfile, plane_nets: list[s
         z.SetIsRuleArea(False)
         z.SetLocalClearance(mm(max(profile.clearance_mm, 0.25)))
         z.SetMinThickness(mm(max(profile.min_track_mm, 0.2)))
-        z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
+        z.SetPadConnection(pcbnew.ZONE_CONNECTION_THT_THERMAL)
         z.SetThermalReliefGap(mm(0.3))
         z.SetThermalReliefSpokeWidth(mm(max(profile.track_mm, 0.3)))
         z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
@@ -498,6 +500,154 @@ def _inner_planes(board, layout: Layout, profile: FabProfile, plane_nets: list[s
         board.Add(z)
         out.append({"layer": lname, "net": short_net(net)})
     return out
+
+
+def _fanout_planes(board, plane_nets: list[str], profile: FabProfile) -> dict[str, Any]:
+    """Connect every surface-mount pin of the inner-plane nets to its plane before routing: a short stub from the pad
+    to a via placed clear of other pins. Freerouting does not drop vias to planes on its own (it left every plane pin
+    unrouted), so the router is then given only the signal nets."""
+    pcbnew = _pcbnew()
+    mm, to_mm = pcbnew.FromMM, pcbnew.ToMM
+    via_d, drill = profile.via_diameter_mm, profile.via_drill_mm
+    clear = max(profile.clearance_mm, 0.15)
+    # Stubs out of fine-pitch pins (0.5 mm LQFP) run between their neighbours: thinner, at the fab's minimum rules.
+    # Plane nets are in the Power net class, whose clearance is the profile's normal clearance (not the minimum).
+    stub_clear = max(profile.clearance_mm, profile.min_clearance_mm, 0.1)
+    track_w = max(profile.min_track_mm, min(profile.track_mm, 0.25))
+    # The board outline's extent, from the Edge.Cuts drawings.
+    xs: list[float] = []
+    ys: list[float] = []
+    for d in board.GetDrawings():
+        if d.GetLayer() == pcbnew.Edge_Cuts:
+            bb = d.GetBoundingBox()
+            xs += [to_mm(bb.GetX()), to_mm(bb.GetX() + bb.GetWidth())]
+            ys += [to_mm(bb.GetY()), to_mm(bb.GetY() + bb.GetHeight())]
+    ex0, ey0, ex1, ey1 = (min(xs), min(ys), max(xs), max(ys)) if xs else (-1e9, -1e9, 1e9, 1e9)
+    margin = max(profile.copper_edge_clearance_mm, 0.3) + via_d / 2
+    wanted = set(plane_nets)
+    pads = list(board.GetPads())
+
+    def box(p):
+        bb = p.GetBoundingBox()
+        x, y = to_mm(bb.GetX()), to_mm(bb.GetY())
+        return (x, y, x + to_mm(bb.GetWidth()), y + to_mm(bb.GetHeight()))
+
+    # Obstacles: every pad (with its net), and the vias placed so far.
+    obstacles = [(box(p), p.GetNetname(), p.IsOnLayer(pcbnew.F_Cu), p.IsOnLayer(pcbnew.B_Cu)) for p in pads]
+    placed: list[tuple[float, float, str]] = []
+
+    def dist_to_box(x: float, y: float, b) -> float:
+        dx = max(b[0] - x, 0.0, x - b[2])
+        dy = max(b[1] - y, 0.0, y - b[3])
+        return (dx * dx + dy * dy) ** 0.5
+
+    def via_ok(x: float, y: float, net: str) -> bool:
+        if not (ex0 + margin <= x <= ex1 - margin and ey0 + margin <= y <= ey1 - margin):
+            return False
+        for b, n, _f, _b in obstacles:
+            # A through via touches every layer: keep it clear of all pads but its own net's.
+            if n != net and dist_to_box(x, y, b) < via_d / 2 + clear:
+                return False
+        return all(((x - vx) ** 2 + (y - vy) ** 2) ** 0.5 >= via_d + clear for vx, vy, _n in placed)
+
+    def stub_ok(x0: float, y0: float, x1: float, y1: float, net: str, top: bool, width: float) -> bool:
+        steps = max(12, int(((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / 0.05))
+        for i in range(1, steps + 1):
+            t = i / steps
+            x, y = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+            for b, n, on_f, on_b in obstacles:
+                if n != net and (on_f if top else on_b) and dist_to_box(x, y, b) < width / 2 + stub_clear:
+                    return False
+        return True
+
+    done, missed = 0, []
+    for pad in pads:
+        net = pad.GetNetname()
+        if net not in wanted or pad.GetAttribute() not in (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN):
+            continue
+        top = pad.IsOnLayer(pcbnew.F_Cu)
+        layer = pcbnew.F_Cu if top else pcbnew.B_Cu
+        b = box(pad)
+        px, py = to_mm(pad.GetPosition().x), to_mm(pad.GetPosition().y)
+        fp = pad.GetParentFootprint()
+        cx, cy = (to_mm(fp.GetPosition().x), to_mm(fp.GetPosition().y)) if fp else (px, py)
+        # Directions: away from the part's centre first, then the other seven.
+        import math
+        away = math.atan2(py - cy, px - cx) if (px, py) != (cx, cy) else 0.0
+        angles = [away + k * math.pi / 4 for k in (0, 1, -1, 2, -2, 3, -3, 4)]
+        # An elongated pin (QFP, SOIC, connector) is left straight out along its length first, the only way that does
+        # not cross its neighbours.
+        w, h = b[2] - b[0], b[3] - b[1]
+        if max(w, h) > 1.3 * min(w, h):
+            axis = (0.0 if px >= cx else math.pi) if w > h else (math.pi / 2 if py >= cy else -math.pi / 2)
+            angles = [axis] + angles
+        reach = max(b[2] - b[0], b[3] - b[1]) / 2
+        width = max(profile.min_track_mm, min(track_w, min(b[2] - b[0], b[3] - b[1]) * 0.6))
+        spot = None
+        for extra in (0.35, 0.6, 0.9, 1.3, 1.8, 2.5, 3.2):
+            for a in angles:
+                d = reach + via_d / 2 + extra
+                x, y = px + d * math.cos(a), py + d * math.sin(a)
+                if via_ok(x, y, net) and stub_ok(px, py, x, y, net, top, width):
+                    spot = (x, y)
+                    break
+            if spot:
+                break
+        ref = fp.GetReference() if fp else "?"
+        if not spot:
+            missed.append(f"{ref}.{pad.GetNumber()}")
+            continue
+        netinfo = pad.GetNet()
+        via = pcbnew.PCB_VIA(board)
+        via.SetPosition(pcbnew.VECTOR2I(mm(spot[0]), mm(spot[1])))
+        try:
+            via.SetWidth(mm(via_d))
+        except TypeError:
+            via.SetWidth(pcbnew.F_Cu, mm(via_d))
+        via.SetDrill(mm(drill))
+        via.SetNet(netinfo)
+        board.Add(via)
+        track = pcbnew.PCB_TRACK(board)
+        track.SetStart(pad.GetPosition())
+        track.SetEnd(pcbnew.VECTOR2I(mm(spot[0]), mm(spot[1])))
+        track.SetWidth(mm(width))
+        track.SetLayer(layer)
+        track.SetNet(netinfo)
+        board.Add(track)
+        placed.append((spot[0], spot[1], net))
+        done += 1
+    return {"vias": done, "missed": missed[:50], "missed_count": len(missed), "nets": [short_net(n) for n in plane_nets]}
+
+
+def _drop_nets_from_dsn(dsn: Path, nets: list[str]) -> int:
+    """Take nets out of a Specctra design's netlist so the router leaves them alone (they reach their planes through
+    the fanout vias). Returns how many were removed."""
+    text = dsn.read_text()
+    removed = 0
+    for net in nets:
+        quoted = [f'"{net}"', net]
+        for q in quoted:
+            start = text.find(f"(net {q}\n")
+            if start < 0:
+                start = text.find(f"(net {q} ")
+            if start < 0:
+                continue
+            depth, i = 0, start
+            while i < len(text):
+                if text[i] == "(":
+                    depth += 1
+                elif text[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                i += 1
+            text = text[:start] + text[i + 1:]
+            removed += 1
+            break
+        # Class membership lists name the net too.
+        text = re.sub(rf'(\(class [^\n]*?)\s(?:"{re.escape(net)}"|{re.escape(net)})(?=[\s)])', r"\1", text)
+    dsn.write_text(text)
+    return removed
 
 
 # --- DRC --------------------------------------------------------------------------------
@@ -521,6 +671,14 @@ def drc(project_dir: Path, pcb: str, refill: bool = True, parity: bool = True) -
                 "items": [{"description": i.get("description"), "pos": i.get("pos")} for i in v.get("items", [])]}
 
     violations = [simplify(v) for v in report.get("violations", [])]
+    # A hole-clearance clash between two features of the same footprint (a USB-C receptacle's pad beside its own
+    # locating hole) is the library footprint's geometry, not something placement or routing can change: waived,
+    # with the reason kept.
+    for v in violations:
+        refs = {m.group(1) for i in v["items"] for m in [re.search(r" of ([A-Z]+[0-9]+)\b", i.get("description") or "")] if m}
+        if v["type"] == "hole_clearance" and len(refs) == 1 and len(v["items"]) >= 2 and all(" of " in (i.get("description") or "") for i in v["items"]):
+            v["excluded"] = True
+            v["waiver"] = f"inside footprint {next(iter(refs))}: the library footprint's own pad-to-hole spacing"
     unconnected = [simplify(v) for v in report.get("unconnected_items", [])]
     parity = [simplify(v) for v in report.get("schematic_parity", [])]
     live = [v for v in violations + unconnected + parity if not v["excluded"]]
@@ -684,11 +842,28 @@ def build_board(circuit: Circuit, layout: Layout, project_dir: Path, name: str, 
     _assign_netclasses(board, profile, power)
 
     planes: list[dict[str, str]] = []
+    fanout: dict[str, Any] | None = None
+    plane_full: list[str] = []
     if profile.layers == 4:
-        planes = _inner_planes(board, layout, profile, _plane_nets(layout, nets, power, pin_net_names), nets)
+        plane_full = _plane_nets(layout, nets, power, pin_net_names)
+        planes = _inner_planes(board, layout, profile, plane_full, nets)
+        fanout = _fanout_planes(board, plane_full, profile)
         pcbnew.ZONE_FILLER(board).Fill(board.Zones())
-    routing = _route(board, project_dir) if route else {"router": None, "segments": 0, "vias": 0}
+    # Plane nets are connected by the fanout; the router only connects signals (and any pin the fanout missed is
+    # reported as unrouted by DRC, as before).
+    skip = plane_full if fanout and not fanout["missed_count"] else []
+    routing = _route(board, project_dir, skip) if route else {"router": None, "segments": 0, "vias": 0}
+    # The router sometimes leaves a sliver narrower than the fab minimum where it necks into a pad: widen it.
+    min_w = pcbnew.FromMM(profile.min_track_mm)
+    widened = 0
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_TRACK" and t.GetWidth() < min_w:
+            t.SetWidth(min_w)
+            widened += 1
+    routing["widened_to_minimum"] = widened
     routing["planes"] = planes
+    if fanout:
+        routing["fanout"] = fanout
     pour_layers: list[str] = []
     pour_net = next((n for n in nets if layout.ground_pour and short_net(n) == layout.ground_pour), None)
     if pour_net:
