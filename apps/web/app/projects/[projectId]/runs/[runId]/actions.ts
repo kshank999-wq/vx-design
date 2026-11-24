@@ -183,3 +183,29 @@ export async function raiseStepBudget(projectId: string, runId: string, taskId: 
   if (error) fail(path, error);
   await retryStepAndContinue(projectId, runId, taskId);
 }
+
+/**
+ * "Restart this run" on any run that is not going: it picks up where it stopped (steps that could not finish are tried
+ * again; saved-for-later steps are left alone). Another run of the same plan that is still going is stopped first,
+ * since only one run of a plan works at a time; its finished work is kept. A canceled or failed run starts again as a
+ * new run with the same settings.
+ */
+export async function restartRun(projectId: string, runId: string) {
+  const path = `/projects/${projectId}/runs/${runId}`;
+  const { supabase } = await requireUser();
+  const { data: run } = await supabase.from("runs").select("id, plan_id, status, stop_conditions").eq("id", runId).single();
+  if (!run) fail(path, "Run not found.");
+  if (["canceled", "failed"].includes(run.status)) return continueRun(projectId, runId);
+  if (["pending", "running", "paused"].includes(run.status)) redirect(`${path}?notice=${encodeURIComponent("This run is already going.")}`);
+  const { data: others } = await supabase.from("runs").select("id").eq("plan_id", run.plan_id).neq("id", runId).in("status", ["pending", "running", "paused"]);
+  for (const o of others ?? []) {
+    const { error } = await supabase.rpc("control_run", { p_run_id: o.id, p_action: "cancel" });
+    if (error) fail(path, error);
+  }
+  const { error } = await supabase.rpc("continue_run", { p_run: runId, p_ai: 0,
+    p_auto_approve: !!(run.stop_conditions as { auto_approve?: boolean } | null)?.auto_approve,
+    p_retry_failed: true, p_include_critical: false, p_compute: null });
+  if (error) fail(path, error);
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent((others ?? []).length ? "Restarted here. The other run was stopped; its finished work is kept." : "Restarted: the run picks up where it stopped.")}`);
+}

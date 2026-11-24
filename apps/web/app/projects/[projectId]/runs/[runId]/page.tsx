@@ -7,9 +7,10 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PlainSummary } from "@/components/PlainSummary";
 import { requireUser } from "@/lib/auth";
-import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideStep, raiseBudget, raiseStepBudget, retryStepAndContinue, sendRunGuidance, setAutoApprove, skipStep, undeferStep } from "./actions";
+import { continueRun, continueThisRun, controlRun, decideTask, deferStep, guideStep, raiseBudget, raiseStepBudget, restartRun, retryStepAndContinue, sendRunGuidance, setAutoApprove, skipStep, undeferStep } from "./actions";
 import { DictateButton } from "@/components/VoiceTools";
 import { RunChat } from "@/components/RunChat";
+import { RunsSide } from "@/components/RunsSide";
 
 interface Report {
   headline: string;
@@ -117,6 +118,13 @@ export default async function RunPage({ params, searchParams }: {
   const activeHere = ["pending", "running", "paused"].includes(run.status);
   const workingElsewhere = activeHere ? null : (planRuns ?? []).find((r) => r.id !== runId && ["pending", "running", "paused"].includes(r.status)) ?? null;
   const superseded = workingElsewhere ?? (!activeHere && planRuns?.[0] && planRuns[0].id !== runId ? planRuns[0] : null);
+  // The side menu: every run of the project, and what is being worked on in any of them.
+  const [{ data: projectRuns }, { data: liveAll }] = await Promise.all([
+    supabase.from("runs").select("id, name, status, created_at, plans(version)").eq("project_id", projectId).order("created_at", { ascending: false }).limit(20),
+    supabase.from("executions").select("task_id, run_id, tasks(title)").eq("project_id", projectId).eq("status", "running"),
+  ]);
+  // Buttons for steps act through the run that is working, so they reach the work wherever this page is opened.
+  const actRun = workingElsewhere?.id ?? runId;
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
   const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
   const chatSteps = [
@@ -141,7 +149,12 @@ export default async function RunPage({ params, searchParams }: {
   const artifactName = (v: { artifacts: unknown }) => (v.artifacts as { name: string }).name;
 
   return (
-    <main>
+    <main className="run-page">
+      <RunsSide projectId={projectId} currentRunId={runId}
+        runs={(projectRuns ?? []).map((r) => ({ id: r.id, name: r.name, status: r.status, created_at: r.created_at, plan_version: (r.plans as unknown as { version: number } | null)?.version ?? null }))}
+        tasks={(tasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status, deferred_at: t.deferred_at, skipped_at: t.skipped_at, blocker_reason: t.blocker_reason }))}
+        live={(liveAll ?? []).map((e) => ({ task_id: e.task_id, run_id: e.run_id, title: (e.tasks as unknown as { title: string } | null)?.title ?? "A step" }))} />
+      <div className="run-main">
       <p className="crumbs">
         <Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{(run.projects as { name: string }).name}</Link> /{" "}
         <Link href={`/projects/${projectId}/plans/${run.plan_id}`}>Plan v{(run.plans as { version: number }).version}</Link> /
@@ -151,6 +164,11 @@ export default async function RunPage({ params, searchParams }: {
         <div className="row">
           {live && <AutoRefresh quiet={active} intervalMs={20000} />}
           <span className={`pill pill-${run.status} big`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
+          {canControl && !active && (
+            <form action={restartRun.bind(null, projectId, runId)} data-testid="restart-run">
+              <SubmitButton pendingText="Restarting…">{["canceled", "failed"].includes(run.status) ? "↻ Start it again" : workingElsewhere ? "↻ Restart this run here" : "↻ Restart this run"}</SubmitButton>
+            </form>
+          )}
         </div>
       </div>
       <Banner error={error} notice={notice} />
@@ -207,9 +225,10 @@ export default async function RunPage({ params, searchParams }: {
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
       {superseded && (
         <p className="banner banner-warn" data-testid="older-run">{workingElsewhere ? <>The work is running in another run{workingElsewhere.name ? ` (${workingElsewhere.name})` : ""} right now. </> : <>This is an earlier run. Work continues in the latest one. </>}
-          <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>{workingElsewhere ? "Open the run that is working →" : "Open the latest run →"}</Link></p>
+          <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>{workingElsewhere ? "Open the run that is working →" : "Open the latest run →"}</Link>
+          {workingElsewhere && canControl && <span className="small"> Restarting this run instead stops that one (its finished work is kept).</span>}</p>
       )}
-      {!active && !superseded && (failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || deferred.length > 0 || skipped.length > 0 || canContinue) && (() => {
+      {(failed.length > 0 || outOfScope.length > 0 || waiting.length > 0 || heldBlocked.length > 0 || (openQuestions ?? 0) > 0 || deferred.length > 0 || skipped.length > 0 || canContinue) && (() => {
         const issue = (t: { id: string; key: string; title: string; discipline: string; blocker_reason: string | null; budget_override_usd: number | null }, kind: "failed" | "critical" | "waiting_outside", reason: string) => {
           const open = guide === t.key;
           const notes = (guidance ?? []).filter((g) => g.task_id === t.id);
@@ -225,13 +244,13 @@ export default async function RunPage({ params, searchParams }: {
               {canControl && (
                 <div className="issue-actions">
                   {retryable && /cost cap was reached/.test(t.blocker_reason ?? "") ? (
-                    <form className="row tight" action={raiseStepBudget.bind(null, projectId, runId, t.id)}>
+                    <form className="row tight" action={raiseStepBudget.bind(null, projectId, actRun, t.id)}>
                       <label className="inline small">Limit for this step $<input name="usd" type="number" min={1} max={1000} step="any"
                         defaultValue={Math.max(Number(/of \$([\d.]+)/.exec(t.blocker_reason ?? "")?.[1] ?? 20) * 2, Number(t.budget_override_usd ?? 0))} style={{ width: "5em" }} /></label>
                       <SubmitButton pendingText="Starting…">↻ Raise it and try again</SubmitButton></form>
-                  ) : retryable && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton pendingText="Starting…">↻ Try again</SubmitButton></form>}
+                  ) : retryable && <form action={retryStepAndContinue.bind(null, projectId, actRun, t.id)}><SubmitButton pendingText="Starting…">↻ Try again</SubmitButton></form>}
                   {kind === "failed" && (
-                    <form action={skipStep.bind(null, projectId, runId, t.id)} data-testid="skip-step"><input type="hidden" name="note" value="" />
+                    <form action={skipStep.bind(null, projectId, actRun, t.id)} data-testid="skip-step"><input type="hidden" name="note" value="" />
                       <SubmitButton variant="secondary" pendingText="Moving on…">⏭ Put on hold and move on</SubmitButton></form>
                   )}
                   {kind === "critical" && role === "owner" && (
@@ -242,11 +261,11 @@ export default async function RunPage({ params, searchParams }: {
                   )}
                   {/Hardware test|built units/i.test(t.blocker_reason ?? "") && <Link className="btn btn-secondary" href={`/projects/${projectId}/validation`}>Open Validation</Link>}
                   <Link className={`btn ${open ? "" : "btn-secondary"}`} href={open ? `?#issue-${t.key}` : `?guide=${t.key}#issue-${t.key}`} data-testid="give-guidance">✎ {open ? "Close guidance" : "Give guidance"}</Link>
-                  {kind !== "failed" && <form action={deferStep.bind(null, projectId, runId, t.id)}><input type="hidden" name="note" value="" /><SubmitButton variant="secondary" pendingText="Saving…">⏸ Save for later</SubmitButton></form>}
+                  {kind !== "failed" && <form action={deferStep.bind(null, projectId, actRun, t.id)}><input type="hidden" name="note" value="" /><SubmitButton variant="secondary" pendingText="Saving…">⏸ Save for later</SubmitButton></form>}
                 </div>
               )}
               {open && canControl && (
-                <form className="issue-guide stack" action={guideStep.bind(null, projectId, runId, t.id)} data-testid="guide-form">
+                <form className="issue-guide stack" action={guideStep.bind(null, projectId, actRun, t.id)} data-testid="guide-form">
                   <label className="small"><strong>Your guidance for this step</strong> (what to do differently, what to use, what to leave out)
                     <textarea id={`guide-${t.key}`} name="note" rows={3} required maxLength={4000} placeholder="e.g. Use the 4-layer board profile and keep the SoM in the middle" /></label>
                   <div className="row tight wrap">
@@ -263,10 +282,11 @@ export default async function RunPage({ params, searchParams }: {
         return (
           <div className="run-help">
           <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
-            action={sendRunGuidance.bind(null, projectId, runId)} canWrite={role !== "viewer"} />
-          <section className="card todo" data-testid="what-to-do">
+            action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} />
+          <section className="card todo" id="what-to-do" data-testid="what-to-do">
             <h2>What you need to do</h2>
-            {!failed.length && !critical.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <p>Nothing needs fixing. Continue the run when you are ready.</p>}
+            {!failed.length && !critical.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <p>{active || workingElsewhere ? "Nothing needs fixing: the work is going." : "Nothing needs fixing. Continue the run when you are ready."}</p>}
+            {workingElsewhere && <p className="small muted">These buttons act on the run that is working ({workingElsewhere.name || "Run"}).</p>}
             <div className="issues">
               {failed.map((t) => issue(t, "failed", plainFailure(t.blocker_reason)))}
               {critical.map((t) => issue(t, "critical", "Runs leave out critical-risk work unless the project owner includes it. Including it lets the run do this step." + (role === "owner" ? "" : " Only the owner can include it.")))}
@@ -290,14 +310,14 @@ export default async function RunPage({ params, searchParams }: {
               <details className="issue-deferred small" data-testid="skipped">
                 <summary>On hold ({skipped.length}): the steps after them carried on without their result</summary>
                 <ul>{skipped.map((t) => <li key={t.id} className="row tight"><span>{t.title}{t.skipped_note ? ` (${t.skipped_note})` : ""}</span>
-                  {canControl && <form action={retryStepAndContinue.bind(null, projectId, runId, t.id)}><SubmitButton variant="secondary" pendingText="…">Do it now</SubmitButton></form>}</li>)}</ul>
+                  {canControl && <form action={retryStepAndContinue.bind(null, projectId, actRun, t.id)}><SubmitButton variant="secondary" pendingText="…">Do it now</SubmitButton></form>}</li>)}</ul>
               </details>
             )}
             {deferred.length > 0 && (
               <details className="issue-deferred small" data-testid="deferred">
                 <summary>Saved for later ({deferred.length})</summary>
                 <ul>{deferred.map((t) => <li key={t.id} className="row tight"><span>{t.title}</span>
-                  {canControl && <form action={undeferStep.bind(null, projectId, runId, t.id)}><SubmitButton variant="secondary" pendingText="…">Bring back</SubmitButton></form>}</li>)}</ul>
+                  {canControl && <form action={undeferStep.bind(null, projectId, actRun, t.id)}><SubmitButton variant="secondary" pendingText="…">Bring back</SubmitButton></form>}</li>)}</ul>
               </details>
             )}
             {canContinue ? (
@@ -484,6 +504,7 @@ export default async function RunPage({ params, searchParams }: {
       </section>
         </>) },
       ]} />
+      </div>
     </main>
   );
 }

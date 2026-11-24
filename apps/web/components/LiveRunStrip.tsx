@@ -26,7 +26,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
     let stop = false;
     const load = async () => {
       if (document.visibilityState !== "visible") return;
-      try { const r = await fetch(`/api/projects/${projectId}/live`, { cache: "no-store" }); if (r.ok && !stop) setLive(await r.json()); } catch { /* next tick */ }
+      try { const r = await fetch(`/api/projects/${projectId}/live`, { cache: "no-store" }); if (r.ok && !stop) { const j = await r.json(); setLive(j); window.dispatchEvent(new CustomEvent("vx-live", { detail: j })); } } catch { /* next tick */ }
     };
     load();
     const poll = setInterval(load, 20000), tick = setInterval(() => setNow(Date.now()), 1000);
