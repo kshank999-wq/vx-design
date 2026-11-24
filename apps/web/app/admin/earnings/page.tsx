@@ -40,6 +40,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   return (
     <main>
       <h1>Earnings <span className="muted small">administrators only</span></h1>
+      <p><a href="/admin/accounts">Accounts and plans →</a></p>
       <Banner error={error ?? e?.message} notice={notice} />
       <form className="row tight" method="get">
         <label className="inline">Month <select name="month" defaultValue={month}>{months.map((x) => <option key={x}>{x}</option>)}</select></label>

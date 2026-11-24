@@ -228,7 +228,7 @@ export default async function RunPage({ params, searchParams }: {
           </section>
         );
       })()}
-      {run.stop_reason && <p className="banner banner-warn">{isReplaced ? "" : "Stopped: "}{run.stop_reason}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
+      {run.stop_reason && <p className="banner banner-warn">{isReplaced ? "" : "Stopped: "}{run.stop_reason}{/Plan limit|allowance/i.test(run.stop_reason) && <> <Link className="btn" href="/admin/accounts">Change the account&apos;s plan</Link></>}{/budget reached/.test(run.stop_reason) && canControl && <> <form className="row tight" style={{ display: "inline-flex", marginLeft: 8 }} action={raiseBudget.bind(null, projectId, runId)}>
         <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Number(run.max_ai_spend_usd) * 2} style={{ width: "6em" }} aria-label="New AI budget" />
         <input type="hidden" name="compute" value={Number(run.max_compute_spend_usd)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
