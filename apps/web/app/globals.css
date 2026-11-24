@@ -109,7 +109,7 @@ details summary { cursor: pointer; }
 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 750; padding: 2px 8px; border-radius: 6px; background: var(--sub); color: var(--muted); margin-left: 6px; white-space: nowrap; vertical-align: middle; }
 .pill.big { font-size: 13px; padding: 3px 10px; }
 .pill-approved, .pill-confirmed, .pill-done, .pill-complete, .pill-ready { background: var(--ok-bg); color: var(--ok); }
-.pill-awaiting_approval, .pill-ambiguous, .pill-running, .pill-pending, .pill-gate { background: var(--warn-bg); color: var(--warn); }
+.pill-awaiting_approval, .pill-ambiguous, .pill-gate { background: var(--warn-bg); color: var(--warn); }
 .pill-failed, .pill-rejected, .risk-critical { background: var(--error-bg); color: var(--danger); }
 .pill-replace, .pill-open { background: var(--warn-bg); color: var(--warn); }
 .risk-high { background: var(--warn-bg); color: var(--warn); }
@@ -686,3 +686,16 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .pn-badge-bad { background: #dc2626; }
 @keyframes pn-pulse { 50% { box-shadow: 0 0 0 2px var(--surface, #fff), 0 0 0 5px rgba(22,163,74,.25); } }
 @media (prefers-reduced-motion: reduce) { .pn-badge-ok { animation: none; } }
+
+/* A run or step that is going is green with a pulsing dot; stopped or paused stays yellow. */
+.pill-running, .pill-pending { background: var(--ok-bg); color: var(--ok); }
+.pill-running::before, .pill-pending::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a;
+  margin-right: 6px; vertical-align: 1px; animation: pill-pulse 1.6s ease-in-out infinite; }
+@keyframes pill-pulse { 50% { box-shadow: 0 0 0 4px rgba(22,163,74,.25); } }
+@media (prefers-reduced-motion: reduce) { .pill-running::before, .pill-pending::before { animation: none; } }
+.pill-completed { background: #e6eefc; color: #1e4fa8; }
+.runs-list { display: grid; gap: 10px; }
+.runs-list .run-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.runs-list .run-row.going { border-left: 4px solid #16a34a; }
+.runs-list .run-row.held { border-left: 4px solid #d97706; }
+@media (max-width: 700px) { .runs-list .run-row { grid-template-columns: 1fr; } }
