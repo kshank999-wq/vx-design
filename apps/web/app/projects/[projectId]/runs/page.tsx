@@ -23,7 +23,11 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
   ]);
   const canControl = me?.role === "owner" || me?.role === "engineer";
   const ids = (runs ?? []).map((r) => r.id);
-  const { data: costs } = ids.length ? await supabase.from("cost_events").select("run_id, cost_usd").in("run_id", ids) : { data: [] };
+  const [{ data: costs }, { data: live }] = ids.length ? await Promise.all([
+    supabase.from("cost_events").select("run_id, cost_usd").in("run_id", ids),
+    supabase.from("executions").select("run_id, tasks(title)").in("run_id", ids).eq("status", "running"),
+  ]) : [{ data: [] }, { data: [] }];
+  const workingOn = (id: string) => (live ?? []).filter((e) => e.run_id === id).map((e) => (e.tasks as unknown as { title: string } | null)?.title ?? "a step");
   const spent = (id: string) => (costs ?? []).filter((c) => c.run_id === id).reduce((n, c) => n + Number(c.cost_usd), 0);
   const all = runs ?? [];
   const nums = runNumbers(all);
@@ -44,16 +48,18 @@ export default async function RunsPage({ params }: { params: Promise<{ projectId
             <article key={r.id} className={`card run-row ${going ? "going" : ["stopped", "paused"].includes(r.status) ? "held" : ""}`} data-run={r.id}>
               <div>
                 <div className="row tight wrap">
+                  <span className={`run-light run-light-${r.status}`} aria-hidden="true" />
                   <strong><Link href={`/projects/${projectId}/runs/${r.id}`}>{label(r)}</Link></strong>
                   <span className={`pill pill-${r.status}`}>{LABEL[r.status] ?? r.status}</span>
                   <span className="small muted">plan v{(r.plans as unknown as { version: number }).version} · started {new Date(r.created_at).toLocaleString("en-US")} · ${spent(r.id).toFixed(2)} of ${Number(r.max_ai_spend_usd).toFixed(0)} AI</span>
                 </div>
+                {going && <p className="small" style={{ margin: "6px 0 0" }}>{workingOn(r.id).length ? <>Working on: <strong>{workingOn(r.id).join(", ")}</strong></> : r.status === "pending" ? "Starting…" : "Between steps."}</p>}
                 {r.stop_reason && !going && <p className="small" style={{ margin: "6px 0 0" }}>{r.status === "stopped" ? "Stopped: " : ""}{r.stop_reason}</p>}
-                {other && !going && <p className="small muted" style={{ margin: "4px 0 0" }}>The work of this plan is going on in {label(other)}; restarting this one stops that one (its finished work is kept).</p>}
+                {other && !going && <p className="small muted" style={{ margin: "4px 0 0" }}>The work of this plan is going on in {label(other)}{["canceled", "failed"].includes(r.status) ? "." : "; restarting this one stops that one (its finished work is kept)."}</p>}
               </div>
               <div className="row tight">
                 <Link className="btn btn-secondary" href={`/projects/${projectId}/runs/${r.id}`}>Open</Link>
-                {canControl && !GOING.includes(r.status) && (
+                {canControl && !GOING.includes(r.status) && !(["canceled", "failed"].includes(r.status) && other) && (
                   <form action={restartRun.bind(null, projectId, r.id)}>
                     <SubmitButton pendingText="Restarting…">{["canceled", "failed"].includes(r.status) ? "↻ Start again" : "↻ Restart"}</SubmitButton>
                   </form>

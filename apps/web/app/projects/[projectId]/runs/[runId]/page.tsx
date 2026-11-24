@@ -163,11 +163,15 @@ export default async function RunPage({ params, searchParams }: {
         <Link href={`/projects/${projectId}/plans/${run.plan_id}`}>Plan v{(run.plans as { version: number }).version}</Link> /
       </p>
       <div className="row spread">
-        <h1>{label(run)}</h1>
+        <div className="run-title">
+          <span className={`run-light run-light-${run.status}`} aria-hidden="true" />
+          <h1>{label(run)}</h1>
+          <span className={`run-state run-state-${run.status}`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
+        </div>
         <div className="row">
-          {live && <AutoRefresh quiet={active} intervalMs={20000} />}
-          <span className={`pill pill-${run.status} big`} data-testid="run-status">{RUN_LABEL[run.status] ?? run.status}</span>
-          {canControl && !active && (
+          {/* The page refreshes itself only while this run is working (or has not written its report yet). */}
+          {live && !["canceled", "failed"].includes(run.status) && !workingElsewhere && <AutoRefresh quiet intervalMs={20000} />}
+          {canControl && !active && !(["canceled", "failed"].includes(run.status) && workingElsewhere) && (
             <form action={restartRun.bind(null, projectId, runId)} data-testid="restart-run">
               <SubmitButton pendingText="Restarting…">{["canceled", "failed"].includes(run.status) ? "↻ Start it again" : workingElsewhere ? "↻ Restart this run here" : "↻ Restart this run"}</SubmitButton>
             </form>

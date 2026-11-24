@@ -678,8 +678,8 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 
 /* Live badges on the project menu's Runs item: green = steps working now, amber = waiting for you, red = problems. */
 .pn-item { position: relative; }
-.pn-badges { position: absolute; top: -9px; right: -6px; display: inline-flex; gap: 2px; pointer-events: none; }
-.pn-badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; font-size: 11px; line-height: 17px; font-weight: 700; color: #fff; text-align: center;
+.pn-badges { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: inline-flex; gap: 2px; pointer-events: none; }
+.pn-badge { min-width: 17px; height: 17px; padding: 0 6px; border-radius: 9px; font-size: 10.5px; line-height: 17px; white-space: nowrap; font-weight: 700; color: #fff; text-align: center;
   box-shadow: 0 0 0 2px var(--surface, #fff); }
 .pn-badge-ok { background: #16a34a; animation: pn-pulse 2s ease-in-out infinite; }
 .pn-badge-wait { background: #d97706; }
@@ -699,3 +699,21 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .runs-list .run-row.going { border-left: 4px solid #16a34a; }
 .runs-list .run-row.held { border-left: 4px solid #d97706; }
 @media (max-width: 700px) { .runs-list .run-row { grid-template-columns: 1fr; } }
+
+/* The run's state at a glance: a large light beside its name (green pulsing = working, amber = stopped or paused,
+   red = canceled or failed, blue = completed) and the state in words. */
+.run-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.run-title h1 { margin: 0; }
+.run-light { width: 14px; height: 14px; border-radius: 50%; display: inline-block; flex: none; background: #94a3b8; }
+.run-title .run-light { width: 22px; height: 22px; }
+.run-light-running, .run-light-pending { background: #16a34a; animation: run-glow 1.6s ease-in-out infinite; }
+.run-light-paused, .run-light-stopped { background: #d97706; }
+.run-light-canceled, .run-light-failed { background: #dc2626; }
+.run-light-completed { background: #2563eb; }
+@keyframes run-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,.45); } 50% { box-shadow: 0 0 0 8px rgba(22,163,74,0); } }
+@media (prefers-reduced-motion: reduce) { .run-light-running, .run-light-pending { animation: none; } }
+.run-state { font-weight: 750; font-size: 15px; padding: 4px 12px; border-radius: 999px; background: #e2e8f0; color: #334155; }
+.run-state-running, .run-state-pending { background: var(--ok-bg); color: var(--ok); }
+.run-state-paused, .run-state-stopped { background: var(--warn-bg); color: var(--warn); }
+.run-state-canceled, .run-state-failed { background: var(--error-bg); color: var(--danger); }
+.run-state-completed { background: #e6eefc; color: #1e4fa8; }

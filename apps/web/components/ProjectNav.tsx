@@ -37,9 +37,9 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
       {top.map((t) => <Link key={t.href} href={t.href} className="pn-item" aria-current={here(t.href) ? "page" : undefined}>{t.label}
         {t.label === "Runs" && badges && (badges.running > 0 || badges.problems > 0 || (badges.waiting ?? 0) > 0 || badges.active_runs > 0) && (
           <span className="pn-badges" data-testid="runs-badges">
-            {(badges.running > 0 || badges.active_runs > 0) && <span className="pn-badge pn-badge-ok" title={`${badges.running} step(s) being worked on in ${badges.active_runs} run(s)`}>{badges.running || badges.active_runs}</span>}
-            {(badges.waiting ?? 0) > 0 && <span className="pn-badge pn-badge-wait" title={`${badges.waiting} result(s) waiting for your approval`}>{badges.waiting}</span>}
-            {badges.problems > 0 && <span className="pn-badge pn-badge-bad" title={`${badges.problems} step(s) could not finish`}>{badges.problems}</span>}
+            {badges.active_runs > 0 && <span className="pn-badge pn-badge-ok" title={`${badges.active_runs} run(s) going, working on ${badges.running} step(s) now`}>{badges.active_runs === 1 ? "running" : `${badges.active_runs} running`}</span>}
+            {(badges.waiting ?? 0) > 0 && <span className="pn-badge pn-badge-wait" title={`${badges.waiting} result(s) waiting for your approval`}>{badges.waiting} to approve</span>}
+            {badges.problems > 0 && <span className="pn-badge pn-badge-bad" title={`${badges.problems} step(s) could not finish`}>{badges.problems} problem{badges.problems > 1 ? "s" : ""}</span>}
           </span>)}
       </Link>)}
       {groups.map((g) => {
