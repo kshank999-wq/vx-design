@@ -7,6 +7,8 @@ test("layer requirement comes from the latest guidance that names one", () => {
   assert.equal(requiredLayersFromNotes(["Guidance from the owner/team: switch this board to 4 layers"]), 4);
   assert.equal(requiredLayersFromNotes(["use a 4-layer board", "actually go back to 2 layers"]), 2);
   assert.equal(requiredLayersFromNotes(["move U3 closer to J1"]), null);
+  assert.equal(requiredLayersFromNotes(["Use a 4-layer board. The 2-layer attempts left too many connections unrouted."]), 4,
+               "the instruction comes first; a later mention of the old layer count is not the instruction");
 });
 
 test("profile for a layer count", () => {

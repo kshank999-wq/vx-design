@@ -61,7 +61,9 @@ export const verificationExecutor: Executor = {
         summary: `Upstream tool checks: ${ctxData.checks.length} recorded, ${failed.length} failing` + (failed.length ? ` (${failed.slice(0, 5).map((c) => `${c.taskKey} ${c.kind}`).join(", ")})` : ""),
         artifact_version_id: stored.versionId, tool_name: "vx-review", tool_version: REVIEW_PROMPT_VERSION },
     ];
-    if (review) validations.push({ kind: "other", result: must.length ? "fail" : should.length ? "warning" : "pass", evidence_category: "unverified_assumption",
+    // The review is a judgement for a person to act on (its must-fix items go to the owner through reviewReason), not a
+    // tool check that failed: recorded as a warning, so the step finishes and hands it over instead of crashing.
+    if (review) validations.push({ kind: "other", result: must.length || should.length ? "warning" : "pass", evidence_category: "unverified_assumption",
       summary: `Design review: ${must.length} must-fix, ${should.length} should-fix, ${review.findings.length - must.length - should.length} note(s)`,
       details: { findings: review.findings }, artifact_version_id: stored.versionId, tool_name: "vx-review", tool_version: REVIEW_PROMPT_VERSION });
     if (failed.length) {

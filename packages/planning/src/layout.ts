@@ -69,8 +69,10 @@ export interface LayoutInput {
 export function requiredLayersFromNotes(notes: string[]): number | null {
   let got: number | null = null;
   for (const n of notes) {
-    const m = [...n.matchAll(/\b(2|4|6)[- ]?(?:layers?|copper layers?)\b/gi)];
-    if (m.length) got = Number(m[m.length - 1]![1]);
+    // Within one note the first layer count is the instruction ("use a 4-layer board; the 2-layer attempts failed");
+    // across notes the latest note wins.
+    const m = /\b(2|4|6)[- ]?(?:layers?|copper layers?)\b/i.exec(n);
+    if (m) got = Number(m[1]);
   }
   return got;
 }
