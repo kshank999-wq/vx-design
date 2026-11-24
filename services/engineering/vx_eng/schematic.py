@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import __version__
 from .circuit import Circuit
-from .library import Library
+from .library import FOOTPRINT_DIR, Library
 from .sexpr import Sym, dumps
 
 SCH_VERSION = 20251024  # KiCad 10 schematic format
@@ -28,6 +28,26 @@ SHEETS = [("A5", 210.0, 148.0), ("A4", 297.0, 210.0), ("A3", 420.0, 297.0), ("A2
 MARGIN = 25.4
 NS = uuid.UUID("6f1c2d3e-4b5a-4c6d-8e9f-a0b1c2d3e4f5")
 
+
+
+_BOM_EXCLUDED: dict[str, bool] = {}
+
+
+def _footprint_excluded_from_bom(footprint: str | None) -> bool:
+    """Whether a library footprint ("Lib:Name") is marked exclude_from_bom in its .kicad_mod attributes."""
+    if not footprint or ":" not in footprint:
+        return False
+    if footprint not in _BOM_EXCLUDED:
+        lib, name = footprint.split(":", 1)
+        path = FOOTPRINT_DIR / f"{lib}.pretty" / f"{name}.kicad_mod"
+        try:
+            text = path.read_text(errors="replace")
+            import re
+            m = re.search(r"\(attr([^()]*)\)", text)
+            _BOM_EXCLUDED[footprint] = bool(m and "exclude_from_bom" in m.group(1))
+        except OSError:
+            _BOM_EXCLUDED[footprint] = False
+    return _BOM_EXCLUDED[footprint]
 
 def _snap(v: float) -> float:
     return round(round(v / GRID) * GRID, 4)
@@ -107,9 +127,13 @@ def build(circuit: Circuit, lib: Library, out_dir: Path) -> dict:
             pin_at[f"{ref}.{p.number}"] = (round(x + p.at[0], 4), round(y - p.at[1], 4), (p.angle + 180) % 360)
         x0, y0, x1, y1 = lib.unit_bbox(lib_id, unit)
         hidden_ref = ref.startswith("#")
+        # The parts list follows the footprint: library footprints for things that are not bought (a Tag-Connect
+        # pad, a test point, a fiducial) are marked "exclude from BOM", and the symbol must say the same or the
+        # board fails the schematic-parity check.
+        in_bom = not hidden_ref and not _footprint_excluded_from_bom(footprint)
         inst = [
             Sym("symbol"), [Sym("lib_id"), lib_id], [Sym("at"), x, y, 0], [Sym("unit"), unit],
-            [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("no" if hidden_ref else "yes")],
+            [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes" if in_bom else "no")],
             [Sym("on_board"), Sym("no" if hidden_ref else "yes")], [Sym("dnp"), Sym("no")],
             [Sym("uuid"), uid(f"sym/{ref}/{unit}")],
             *_ref_value(ref, value, x, y, (x0, y0, x1, y1), _pin_sides(lib, lib_id, unit), hidden_ref),
