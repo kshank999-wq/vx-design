@@ -12,6 +12,7 @@ import { DictateButton } from "@/components/VoiceTools";
 import { RunChat } from "@/components/RunChat";
 import { RunsSide } from "@/components/RunsSide";
 import { stepSuggestions } from "@/lib/step-suggestions";
+import { estimateProgress, typicalSeconds } from "@/lib/step-progress";
 import { runLabel, runNumbers } from "@/lib/run-label";
 
 interface Report {
@@ -93,6 +94,10 @@ export default async function RunPage({ params, searchParams }: {
   const aiUsd = (costs ?? []).filter((c) => c.kind === "ai_tokens").reduce((s, c) => s + Number(c.cost_usd), 0);
   const computeUsd = (costs ?? []).filter((c) => c.kind !== "ai_tokens").reduce((s, c) => s + Number(c.cost_usd), 0);
   const liveExecs = (execs ?? []).filter((e) => e.status === "running");
+  // How long finished steps of each kind usually take in this project, for the progress estimates.
+  const { data: doneRows } = liveExecs.length ? await supabase.from("executions").select("started_at, finished_at, tasks(discipline)")
+    .eq("project_id", projectId).eq("status", "succeeded").order("created_at", { ascending: false }).limit(400) : { data: [] };
+  const typical = typicalSeconds((doneRows ?? []).map((r) => ({ discipline: (r.tasks as unknown as { discipline: string } | null)?.discipline ?? "", started_at: r.started_at, finished_at: r.finished_at })));
   const waiting = (tasks ?? []).filter((t) => t.status === "awaiting_approval");
   const pendingApproval = new Map((approvals ?? []).filter((a) => a.status === "pending").map((a) => [a.task_id, a]));
   const outputsOf = (taskId: string) => (versions ?? []).filter((v) => v.produced_by_task_id === taskId
@@ -201,7 +206,11 @@ export default async function RunPage({ params, searchParams }: {
                   <span className="live-clock"><ElapsedClock since={e.started_at ?? run.created_at} /></span>
                   <span><strong>{t?.title ?? keyOf.get(e.task_id)}</strong> <span className="mono muted small">{t?.key}</span>
                     <span className="muted small"> · {(t?.discipline ?? "").replace("_", " ")} · {engineering.has(e.worker_id) ? "engineering worker" : "worker"}{e.attempt > 1 ? ` · attempt ${e.attempt}` : ""}</span>
-                    {lastLog.get(e.id) && <span className="live-step">{lastLog.get(e.id)}</span>}</span>
+                    {lastLog.get(e.id) && <span className="live-step">{lastLog.get(e.id)}</span>}
+                    {(() => { const pr = estimateProgress({ discipline: t?.discipline ?? "", startedAt: e.started_at, lastLog: lastLog.get(e.id) ?? null, typical: typical.get(t?.discipline ?? "") });
+                      return (<span className="step-progress" data-testid="step-progress" title="An estimate from how long steps like this usually take and, for steps that work in rounds, which round it is on.">
+                        <span className={`step-bar${pr.slow ? " slow" : ""}`}><span style={{ width: `${pr.pct}%` }} /></span>
+                        <span className="small muted">{pr.label} (estimate)</span></span>); })()}</span>
                 </li>); })}</ul>
             )}
             <div className="live-spend">

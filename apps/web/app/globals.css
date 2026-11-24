@@ -738,3 +738,12 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .q-ask-you { margin: 0 0 6px; }
 .q-ask-reply { background: #eef4ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 8px 12px; }
 .q-ask-reply p { margin: 0 0 8px; }
+
+/* Estimated progress of a step being worked on. */
+.step-progress { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.step-bar { flex: 1 1 220px; max-width: 420px; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+.step-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22c55e, #16a34a); transition: width .6s ease; }
+.step-bar.slow > span { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.strip-bar { display: inline-block; vertical-align: middle; width: 56px; height: 6px; margin: 0 4px; border-radius: 999px; background: #d1fae5; overflow: hidden; }
+.strip-bar > span { display: block; height: 100%; background: #16a34a; }
+.strip-bar.slow > span { background: #d97706; }

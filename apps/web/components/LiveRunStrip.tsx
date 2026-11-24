@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 interface Live {
   run: { id: string; name: string | null; number?: number | null; status: string; stop_reason: string | null; ai_max: number; ai_spent: number } | null;
-  working?: { key: string; title: string; started_at: string | null; step: string | null }[];
+  working?: { key: string; title: string; started_at: string | null; step: string | null; pct?: number; slow?: boolean }[];
   waiting?: number;
   questions?: number;
 }
@@ -57,6 +57,7 @@ export function LiveRunStrip({ projectId }: { projectId: string }) {
         <strong>{run.number ? `Run ${run.number} ` : "Design run "}{run.status === "paused" ? "paused" : !active ? "stopped" : working.length ? "working" : "in progress"}</strong>
         {working.length > 0 && <> · {working.map((w, i) => (
           <span key={w.key} className="live-strip-task">{i ? ", " : ""}{w.title} <span className="mono">{mmss(w.started_at, now)}</span>
+            {w.pct != null && <span className={`strip-bar${w.slow ? " slow" : ""}`} title={`about ${w.pct}% (estimate)`}><span style={{ width: `${w.pct}%` }} /></span>}
             {w.step && working.length === 1 && <span className="live-strip-step"> — {w.step.slice(0, 140)}</span>}</span>))}</>}
         {active && !working.length && run.status !== "paused" && <span className="muted"> · between tasks</span>}
       </span>

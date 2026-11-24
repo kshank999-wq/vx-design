@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { estimateProgress, typicalSeconds } from "@/lib/step-progress";
 
 /**
  * What is happening in a project right now, for the live strip under the project menu: the active run (or none),
@@ -24,19 +25,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     problems: (problemRows ?? []).filter((t) => t.status === "failed" || /^interrupted /.test(t.blocker_reason ?? "")).length };
   if (!run) return NextResponse.json({ run: null, questions: questions ?? 0, badges });
   const [{ data: execs }, { data: waiting }, { data: costs }] = await Promise.all([
-    supabase.from("executions").select("id, task_id, started_at, tasks(key, title)").eq("run_id", run.id).eq("status", "running"),
+    supabase.from("executions").select("id, task_id, started_at, tasks(key, title, discipline)").eq("run_id", run.id).eq("status", "running"),
     supabase.from("tasks").select("id").eq("plan_id", run.plan_id).eq("status", "awaiting_approval"),
     supabase.from("cost_events").select("cost_usd, kind").eq("run_id", run.id),
   ]);
   const ids = (execs ?? []).map((e) => e.id);
   const { data: logs } = ids.length ? await supabase.from("execution_logs").select("execution_id, message").in("execution_id", ids).order("id", { ascending: false }).limit(50) : { data: [] };
+  const { data: doneRows } = ids.length ? await supabase.from("executions").select("started_at, finished_at, tasks(discipline)")
+    .eq("project_id", projectId).eq("status", "succeeded").order("created_at", { ascending: false }).limit(400) : { data: [] };
+  const typical = typicalSeconds((doneRows ?? []).map((r) => ({ discipline: (r.tasks as unknown as { discipline: string } | null)?.discipline ?? "", started_at: r.started_at, finished_at: r.finished_at })));
   const last = new Map<string, string>();
   for (const l of logs ?? []) if (!last.has(l.execution_id)) last.set(l.execution_id, l.message);
   return NextResponse.json({
     run: { id: run.id, name: run.name, number: (await supabase.rpc("run_number", { p_run: run.id })).data ?? null, status: run.status, stop_reason: run.stop_reason, ai_max: Number(run.max_ai_spend_usd),
            ai_spent: (costs ?? []).filter((c) => c.kind === "ai_tokens").reduce((n, c) => n + Number(c.cost_usd), 0) },
-    working: (execs ?? []).map((e) => { const t = e.tasks as unknown as { key: string; title: string } | null;
-      return { key: t?.key ?? "", title: t?.title ?? "", started_at: e.started_at, step: last.get(e.id) ?? null }; }),
+    working: (execs ?? []).map((e) => { const t = e.tasks as unknown as { key: string; title: string; discipline: string } | null;
+      const pr = estimateProgress({ discipline: t?.discipline ?? "", startedAt: e.started_at, lastLog: last.get(e.id) ?? null, typical: typical.get(t?.discipline ?? "") });
+      return { key: t?.key ?? "", title: t?.title ?? "", started_at: e.started_at, step: last.get(e.id) ?? null, pct: pr.pct, slow: pr.slow }; }),
     waiting: (waiting ?? []).length,
     questions: questions ?? 0,
     badges: { ...badges, waiting: (waiting ?? []).length },
