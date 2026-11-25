@@ -118,3 +118,16 @@ When the product has a screen, the enclosure step designs the casing around it, 
 The fit check measures every part, every board and the screen against both halves. If something collides, the step
 names it and tries again. Sizes come from the display's datasheet or the step's brief; check them on the enclosure page,
 and say in the chat if the screen or a board should sit somewhere else.
+
+---
+
+## Listening instead of reading
+Every screen has a **speaker button** at the top right. It reads the page aloud, one block at a time, and highlights the
+block being read. You can pause, go back one, skip ahead and change the speed. To hear just one part, select that text
+first, then press the button. It uses your browser's own voice, so it is free and nothing leaves your computer.
+
+## Approving a plan
+Before **Submit for approval** and **Approve as baseline**, the plan page shows **What you are approving**: the steps
+that changed (what they were and what they are now), the steps added or removed compared with the plan in use, and which
+steps a run will do again. Unchanged finished steps are reused, not paid for twice. Submitting does not start any work:
+after approval, start a run from the same page.
