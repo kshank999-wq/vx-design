@@ -182,14 +182,28 @@ def _prism(face, offset: float, z0: float, z1: float):
 
 
 def _taper(face, off0: float, z0: float, off1: float, z1: float):
-    """A solid lofted between the outline offset by off0 at z0 and by off1 at z1 (straight, ruled sides)."""
+    """A solid whose outline is offset by off0 at z0 and by off1 at z1, with straight drafted sides.
+
+    Built as one drafted extrusion of the z0 outline (OCCT's draft prism keeps the same edges top and bottom), which
+    later booleans handle reliably. Lofting between two separately offset outlines gave faces that the hollowing cuts
+    then failed on silently; it stays only as a fallback."""
     cq = _cq()
+    h = z1 - z0
     w0 = face.outerWire().offset2D(off0, "arc")[0].translate(cq.Vector(0, 0, z0))
-    w1 = face.outerWire().offset2D(off1, "arc")[0].translate(cq.Vector(0, 0, z1))
+    solid = None
     try:
-        solid = cq.Solid.makeLoft([w0, w1], True)
-    except Exception:   # noqa: BLE001 - offsets with different edge counts: smooth loft instead
-        solid = cq.Solid.makeLoft([w0, w1], False)
+        angle = math.degrees(math.atan2(off0 - off1, h))      # positive draft narrows upward
+        solid = cq.Solid.extrudeLinear(w0, [], cq.Vector(0, 0, h), angle)
+        if not solid.isValid() or solid.Volume() <= 0:
+            solid = None
+    except Exception:   # noqa: BLE001 - fall back to a loft below
+        solid = None
+    if solid is None:
+        w1 = face.outerWire().offset2D(off1, "arc")[0].translate(cq.Vector(0, 0, z1))
+        try:
+            solid = cq.Solid.makeLoft([w0, w1], True)
+        except Exception:   # noqa: BLE001 - offsets with different edge counts: smooth loft instead
+            solid = cq.Solid.makeLoft([w0, w1], False)
     if not solid.isValid() or solid.Volume() <= 0:
         raise kicad.KicadError("the geometry kernel could not build a drafted wall; try a little less draft or a larger edge gap")
     return solid
@@ -245,7 +259,8 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
         def inner_at(z: float) -> float: return s_in - abs(z - split) * k
         outer = _prism(face, s_in + w, floor_bottom, top_outer)            # bounding box for the openings
         base = _checked_cut(_taper(face, inner_at(floor_bottom) + w, floor_bottom, s_in + w, split),
-                            _taper(face, inner_at(floor_top), floor_top, s_in + k, split + 1))
+                            _taper(face, inner_at(floor_top), floor_top, s_in + k, split + 1),
+                            "the inside of the drafted base", "try a little less draft or a larger edge gap")
         # The lid and its lip in one go: the lid's outer shell plus the lip's outer face, minus one cavity whose wall is
         # the lid's inside continued down through the lip (fewer booleans: OCCT dropped the top when fusing a separate lip).
         c = proc.fit_clearance_mm
@@ -256,7 +271,8 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
         if lip_h > 0:
             # Overlaps the still-solid shell a little (touching faces can stay two solids).
             shell = _fuse(shell, _taper(face, s_in + lip_m - lip_h * k, split - lip_h, s_in + lip_m + 0.3 * k, split + 0.3))
-        lid = _checked_cut(shell, _taper(face, s_in + (lip_h + 1) * k, split - lip_h - 1, inner_at(top_inner), top_inner))
+        lid = _checked_cut(shell, _taper(face, s_in + (lip_h + 1) * k, split - lip_h - 1, inner_at(top_inner), top_inner),
+                           "the inside of the drafted lid", "try a little less draft or a larger edge gap")
         lip_out = 0.0   # molded parts use the stepped joint below
     else:
         outer = _prism(face, g + w, floor_bottom, top_outer)
@@ -270,7 +286,8 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
     # thinning slightly downward), and the base wall is stepped at the top to take it.
     if lip_h > 0 and spec.draft_deg > 0:
         # The base wall is stepped at the top to take the lid's lip.
-        base = _checked_cut(base, _taper(face, s_in + lip_m + c - lip_h * k, split - lip_h, s_in + lip_m + c + k, split + 1))
+        base = _checked_cut(base, _taper(face, s_in + lip_m + c - lip_h * k, split - lip_h, s_in + lip_m + c + k, split + 1),
+                            "the step in the base wall for the lid's lip", "try a slightly thicker wall")
         lip_t = lip_m
     elif lip_h > 0:
         up = min(lip_t, top_inner - split)     # the ledge stops at the lid's top (OCCT drops overlapping slabs)
@@ -327,10 +344,10 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
             else:
                 box = _box(cb.xmin - m, cb.xmax + m, cb.ymin - m, cb.ymax + m, split - 1, top_outer + 1)
                 opening_facts.append({"ref": o.ref, "kind": "top", "shape": "rect", "width_mm": _r(cb.xlen + 2 * m), "depth_mm": _r(cb.ylen + 2 * m)})
-        cuts.append(box)
-    for box in cuts:
-        base = _checked_cut(base, box)
-        lid = _checked_cut(lid, box)
+        cuts.append((o.ref, box))
+    for (ref, box) in cuts:
+        base = _checked_cut(base, box, f"the opening for {ref}")
+        lid = _checked_cut(lid, box, f"the opening for {ref}")
     # Sanity check on the geometry kernel: base and lid stay on their side of the split, and the walls,
     # floor and top add up to the outer prism minus the cavity (before bosses, lip and openings).
     bz, lz = base.BoundingBox(), lid.BoundingBox()
@@ -345,15 +362,17 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
             "holes": hole_d, "openings": opening_facts}
 
 
-def _checked_cut(part, tool):
-    """Cut, then confirm material was actually removed where the tool overlapped (OCCT can fail silently)."""
+def _checked_cut(part, tool, what: str = "an opening", hint: str = "adjust its size or position slightly"):
+    """Cut, then confirm material was actually removed where the tool overlapped (OCCT can fail silently). A failed cut
+    is tried again with a small fuzzy tolerance before giving up; the error names what was being cut."""
     before = part.Volume()
-    out = part.cut(tool)
-    removed = before - out.Volume()
-    left = out.intersect(tool).Volume() if removed < 1e-6 else 0.0
-    if removed < 1e-6 and left > 1e-3:
-        raise kicad.KicadError("the geometry kernel failed to cut an opening; adjust its size or position slightly")
-    return out
+    for tol in (None, 1e-4, 1e-3):
+        out = part.cut(tool) if tol is None else part.cut(tool, tol=tol)
+        removed = before - out.Volume()
+        left = out.intersect(tool).Volume() if removed < 1e-6 else 0.0
+        if not (removed < 1e-6 and left > 1e-3):
+            return out
+    raise kicad.KicadError(f"the geometry kernel failed to cut {what}; {hint}")
 
 
 def _nearest_side(cb, ob) -> str:
