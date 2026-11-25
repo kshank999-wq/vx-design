@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { fail, requireUser } from "@/lib/auth";
+import { checkPlanAgainstConcepts } from "@/lib/chat";
 
 const RISK = ["low", "medium", "high", "critical"];
 
@@ -36,7 +37,17 @@ export async function updateTask(projectId: string, planId: string, taskId: stri
 
 export async function submitPlan(projectId: string, planId: string) {
   const path = `/projects/${projectId}/plans/${planId}`;
-  const { supabase } = await requireUser();
+  const { supabase, userId } = await requireUser();
+  // The first time a plan is submitted, the agent checks it against the concepts and mock-ups. Differences hold the
+  // submission so they are settled first; submitting again goes ahead.
+  const { data: checked } = await supabase.from("project_messages").select("id").eq("project_id", projectId).eq("data->>concept_check_plan", planId).limit(1);
+  if (!checked?.length) {
+    const r = await checkPlanAgainstConcepts(supabase, userId, projectId, planId);
+    if (!r.error && r.found > 0) {
+      revalidatePath(path);
+      redirect(`${path}?notice=${encodeURIComponent(`Not submitted yet: the agent found ${r.found} difference(s) between this plan and the concepts or mock-ups. Read them in the chat (bottom right, or the Workspace), then press "Yes, update the plan" to fix them, or submit again to go ahead as it is.`)}`);
+    }
+  }
   const { error } = await supabase.rpc("submit_plan", { p_plan_id: planId });
   if (error) fail(path, error);
   revalidatePath(path);

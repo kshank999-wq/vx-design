@@ -95,3 +95,9 @@ is injection molded now, not aluminium"), the agent:
 3. proposes the **updated plan** and asks "Is this correct?".
 Press **Yes, update the plan** to draft the new plan version (review and approve it on the plan page), or **No, carry on** to
 resume as before.
+
+### Plans are checked against the concepts and mock-ups
+The first time a plan is submitted for approval, the design agent reads every step's brief against the frozen concept look,
+the design freeze, the requirements and the mock-ups. If anything disagrees (a material, a construction method, a part, a
+shape or a size), the plan is not submitted yet: the differences and a proposed plan update appear in the chat with **Yes,
+update the plan**. Settle them, or submit again to go ahead as it is.
