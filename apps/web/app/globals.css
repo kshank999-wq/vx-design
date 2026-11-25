@@ -778,3 +778,18 @@ main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(
 .read-aloud-label { font-size: 13px; color: var(--muted, #667); margin-right: 4px; }
 .read-aloud-btn svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .reading-now { background: rgba(255, 214, 102, .35); outline: 2px solid rgba(255, 184, 0, .7); outline-offset: 2px; border-radius: 4px; }
+
+/* Read more: clamped text that opens in place. */
+.read-more { display: block; }
+.read-more-text { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.read-more-text[data-open] { display: block; overflow: visible; }
+.read-more-btn { background: none; border: 0; padding: 2px 0; color: var(--accent, #1d4ed8); font-weight: 600; cursor: pointer; font-size: 0.92em; }
+.read-more-btn:hover { text-decoration: underline; }
+/* Proposed plan updates: their own section. */
+.plan-proposals { border-left: 4px solid #d97706; }
+.plan-proposals > .list > li { padding: 10px 0; border-top: 1px solid var(--line, #e3e8ef); }
+.plan-change-closed { margin: 4px 0 0; }
+.plan-change-done { background: color-mix(in srgb, #16a34a 8%, transparent); border-color: color-mix(in srgb, #16a34a 40%, transparent); }
+/* Workspace: next steps list. */
+.next-steps { margin: 0 0 12px; padding-left: 20px; }
+.next-steps li { margin: 4px 0; }

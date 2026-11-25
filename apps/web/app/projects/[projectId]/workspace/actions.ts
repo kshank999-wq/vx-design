@@ -58,7 +58,7 @@ export async function draftPlanChange(projectId: string, messageId: number) {
   try { changed = [change, ...more].reduce((ts, c) => applyPlanChange(ts, c), payloadTasks); } catch (e) { fail(path, `The change cannot be applied: ${(e as Error).message}.`); }
   const { data: newId, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: {
     summary: plan.summary, supervision_mode: plan.supervision_mode, assumptions: plan.assumptions, deferred: plan.deferred, revised_from_id: plan.id, inputs: plan.inputs ?? [],
-    generator: { ...(plan.generator as object ?? {}), revised_from_version: plan.version, chat_message_id: String(messageId), chat_change: change, chat_more_changes: more },
+    generator: { ...(plan.generator as object ?? {}), revision: undefined, revised_from_version: plan.version, chat_message_id: String(messageId), chat_change: change, chat_more_changes: more },
     tasks: changed,
   } });
   if (error) fail(path, error);
@@ -102,9 +102,21 @@ export async function approvePassed(projectId: string) {
 
 
 /** "No, carry on": the member keeps the current plan; the runs paused for this message resume. */
+/** "Not needed": the proposed plan change is turned down, on every screen. */
+export async function declinePlanChange(projectId: string, messageId: number) {
+  const path = `/projects/${projectId}/workspace`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("plan_proposal_decisions").insert({ message_id: messageId, project_id: projectId, decision: "declined" });
+  if (error && error.code !== "23505") fail(path, error);
+  revalidatePath(`/projects/${projectId}`, "layout");
+  redirect(`${path}?notice=${encodeURIComponent("Marked as not needed: the plan stays as it is.")}`);
+}
+
 export async function carryOnAfterChat(projectId: string, messageId: number) {
   const path = `/projects/${projectId}/workspace`;
   const { supabase } = await requireUser();
+  // Carrying on also closes the proposal everywhere.
+  await supabase.from("plan_proposal_decisions").insert({ message_id: messageId, project_id: projectId, decision: "declined" });
   const { data: msg } = await supabase.from("project_messages").select("data").eq("id", messageId).eq("project_id", projectId).maybeSingle();
   const runs = ((msg?.data as { paused_runs?: string[] } | null)?.paused_runs ?? []);
   let resumed = 0;

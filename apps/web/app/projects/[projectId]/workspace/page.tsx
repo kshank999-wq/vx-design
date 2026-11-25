@@ -9,6 +9,9 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
 import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
+import { PlanProposals } from "@/components/PlanProposals";
+import { ReadMore } from "@/components/ReadMore";
+import { proposalStates } from "@/lib/plan-proposals";
 import { approvePassed, decideFromWorkspace, sendMessage } from "./actions";
 import { PlainSummary } from "@/components/PlainSummary";
 import { ReadAloud } from "@/components/VoiceTools";
@@ -87,8 +90,10 @@ export default async function WorkspacePage({ params, searchParams }: {
   const canDraft = role === "owner" || role === "engineer";
   const chatCost = role !== "client" ? estimate(await costHistory(supabase, projectId), "chat") : null;
   // Plans already drafted from a chat message, so the button turns into a link.
-  const { data: chatPlans } = canDraft ? await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null) : { data: [] };
-  const drafted = new Map((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
+  const proposals = await proposalStates(supabase, projectId, (messages ?? []) as { id: number; author_kind: string; created_at: string; data: unknown }[]);
+  // The mock-ups and sketches given as inputs: they are the concept until concept rounds are made.
+  const { data: mockups } = await supabase.from("project_references").select("ref_no, kind, title").eq("project_id", projectId)
+    .in("kind", ["mockup", "sketch", "render", "photo", "drawing"]).order("ref_no");
   const canDecide = ["owner", "reviewer", "client"].includes(role);
   const approvalFor = new Map(ctx.approvals.map((a) => [a.task_id, a]));
   const outputsOf = (key: string) => ctx.outputs.filter((o) => o.task_key === key);
@@ -158,7 +163,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                 {d.suggested_requirement_change && (
                   <div className="small warn-text">Suggested requirement change, for the team to review: {d.suggested_requirement_change}</div>
                 )}
-                {m.author_kind === "assistant" && <PlanChangeCard projectId={projectId} messageId={m.id} data={d as ChangeData} draftedPlanId={drafted.get(String(m.id)) ?? null} canDraft={!!canDraft} />}
+                {m.author_kind === "assistant" && <PlanChangeCard projectId={projectId} messageId={m.id} data={d as ChangeData} state={proposals[String(m.id)] ?? null} canDraft={!!canDraft} />}
                 {!!d.references?.length && (
                   <div className="small">{d.references.filter((r) => outputName.has(r)).map((r) => (
                     <Link key={r} href={href(r)} className="ref">{outputName.get(r)!.split("/").pop()}</Link>
@@ -201,29 +206,41 @@ export default async function WorkspacePage({ params, searchParams }: {
           </>
         ) : (
           <div data-testid="overview">
+            {role !== "client" && <PlanProposals supabase={supabase} projectId={projectId} canDraft={!!canDraft} />}
             <h3>Overview</h3>
             {ctx.plan ? (
               <>
-                <p>{ctx.plan.summary}</p>
+                <ReadMore text={ctx.plan.summary ?? ""} lines={3} />
                 <div className="progress" aria-label={`${done} of ${ctx.tasks.length} tasks done`}>
                   <span style={{ width: `${ctx.tasks.length ? (100 * done) / ctx.tasks.length : 0}%` }} />
                 </div>
                 <p className="small muted">{done} of {ctx.tasks.length} steps done · {ctx.approvals.length} waiting for approval · {ctx.requirements.length} requirements</p>
               </>
             ) : <p className="muted">The team is still turning the specification into a plan. Results will appear here as work completes.</p>}
-            <h3>Results</h3>
+            {(() => {
+              // The next steps of the plan, in order: what the run does next.
+              const next = ctx.tasks.filter((t) => ["running", "validating", "ready", "blocked", "failed", "awaiting_approval"].includes(t.status)).slice(0, 6);
+              return next.length > 0 && (<>
+                <h3>Next steps <span className="muted small">(in plan order)</span></h3>
+                <ol className="next-steps small" data-testid="next-steps">{next.map((t) => (
+                  <li key={t.id}><strong>{t.title}</strong> <span className="muted">· {t.status === "running" || t.status === "validating" ? "working now" : t.status === "awaiting_approval" ? "waiting for your approval" : t.status === "failed" ? "could not finish" : t.status === "blocked" ? "waiting on earlier steps" : "up next"}</span></li>))}</ol>
+              </>);
+            })()}
+            <h3>Finished work <span className="muted small">(what each finished step produced; open one to see it)</span></h3>
             <div className="tiles">
               <Link href={href("concepts")} className="tile" data-testid="concepts-tile">
                 <strong>Concepts</strong>
-                <span className="small">{c.freeze ? `Design frozen: ${c.freeze.name}` : c.rounds.length ? `${c.rounds.length} round(s); no design freeze yet` : "No concepts yet: ask for a first round"}</span>
-                <span className={`pill pill-${c.freeze ? "complete" : "awaiting_approval"}`}>{c.freeze ? "frozen" : conceptsBusy ? "generating" : "open"}</span>
+                <span className="small">{c.freeze ? `Design frozen: ${c.freeze.name}`
+                  : (mockups ?? []).length ? <>Yes, your mock-up is the concept: {(mockups ?? []).map((m) => `REF-${m.ref_no} ${m.title ?? m.kind}`).join("; ")}. The plan and the casing are already checked against it. Open this and press "Freeze REF-{(mockups ?? [])[0]!.ref_no} as the concept" to record it as the decided look; AI concept variations are optional.</>
+                  : c.rounds.length ? `${c.rounds.length} round(s); no design freeze yet` : "No concepts yet: add a mock-up on Inputs, or ask for a first round"}</span>
+                <span className={`pill pill-${c.freeze ? "complete" : "awaiting_approval"}`}>{c.freeze ? "frozen" : conceptsBusy ? "generating" : (mockups ?? []).length ? "mock-up: freeze it" : "open"}</span>
               </Link>
               {ctx.tasks.filter((t) => mainOutput(t.key)).map((t) => {
                 const o = mainOutput(t.key)!;
                 return (
                   <Link key={t.id} href={href(o.id)} className="tile">
                     <strong>{t.title}</strong>
-                    <span className="small">{t.plain_summary ?? o.summary ?? o.name}</span>
+                    <span className="small"><ReadMore text={t.plain_summary ?? o.summary ?? o.name} lines={6} /></span>
                     <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status === "committed" ? "approved" : "for review"}</span>
                   </Link>
                 );

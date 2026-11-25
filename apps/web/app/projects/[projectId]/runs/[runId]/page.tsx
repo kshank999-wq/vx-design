@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { proposalStates } from "@/lib/plan-proposals";
+import { ReadMore } from "@/components/ReadMore";
 import { SectionTabs } from "@/components/SectionTabs";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -138,8 +140,7 @@ export default async function RunPage({ params, searchParams }: {
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
   const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body, data").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
   // Plans already drafted from a chat message, so its "Yes, update the plan" becomes a link to the draft.
-  const { data: chatPlans } = await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null);
-  const draftedFromChat = Object.fromEntries((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
+  const proposals = await proposalStates(supabase, projectId, chatMsgs ?? []);
   const chatSteps = [
     ...failed.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "could not finish" })),
     ...critical.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "critical risk" })),
@@ -188,8 +189,8 @@ export default async function RunPage({ params, searchParams }: {
             <span className="live-clock small">{pausedOn.some((p) => p.id === t.id) ? "paused" : "next"}</span>
             <span><strong>{t.title}</strong> <span className="mono muted small">{t.key}</span>
               <span className="muted small"> · {t.discipline.replace("_", " ")}{t.attempts ? ` · ${t.attempts} attempt${t.attempts > 1 ? "s" : ""} so far` : ""}</span>
-              {t.description && <span className="live-goal" data-testid="live-goal"><strong>{pausedOn.some((p) => p.id === t.id) ? "What it was doing:" : "What it will do:"}</strong> {t.description.length > 320 ? `${t.description.slice(0, 320)}…` : t.description}</span>}
-              {g.length > 0 && <span className="live-goal live-guided"><strong>Following your guidance:</strong> {g[0]!.note.slice(0, 240)}{g[0]!.note.length > 240 ? "…" : ""}</span>}</span>
+              {t.description && <span className="live-goal" data-testid="live-goal"><ReadMore label={<strong>{pausedOn.some((p) => p.id === t.id) ? "What it was doing:" : "What it will do:"}</strong>} text={t.description} lines={3} /></span>}
+              {g.length > 0 && <span className="live-goal live-guided"><ReadMore label={<strong>Following your guidance:</strong>} text={g[0]!.note} lines={2} /></span>}</span>
           </li>);
       })}</ul>
     </div>
@@ -199,7 +200,7 @@ export default async function RunPage({ params, searchParams }: {
     <main className="run-page">
       <div className="run-chat-col">
         <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
-          action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} drafted={draftedFromChat} canDraft={canControl} />
+          action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} proposals={proposals} canDraft={canControl} />
       </div>
       <div className="run-main">
       <p className="crumbs">
@@ -246,9 +247,9 @@ export default async function RunPage({ params, searchParams }: {
                   <span><strong>{t?.title ?? keyOf.get(e.task_id)}</strong> <span className="mono muted small">{t?.key}</span>
                     <span className="muted small"> · {(t?.discipline ?? "").replace("_", " ")} · {engineering.has(e.worker_id) ? "engineering worker" : "worker"}{e.attempt > 1 ? ` · attempt ${e.attempt}` : ""}</span>
                     {lastLog.get(e.id) && <span className="live-step">{lastLog.get(e.id)}</span>}
-                    {t?.description && <span className="live-goal" data-testid="live-goal"><strong>What it is doing:</strong> {t.description.length > 320 ? `${t.description.slice(0, 320)}…` : t.description}</span>}
+                    {t?.description && <span className="live-goal" data-testid="live-goal"><ReadMore label={<strong>What it is doing:</strong>} text={t.description} lines={3} /></span>}
                     {(() => { const g = (liveGuidance ?? []).filter((n) => n.task_id === e.task_id);
-                      return g.length > 0 && <span className="live-goal live-guided" data-testid="live-guidance"><strong>Following your guidance:</strong> {g[0]!.note.slice(0, 240)}{g[0]!.note.length > 240 ? "…" : ""}{g.length > 1 ? ` (and ${g.length - 1} earlier note${g.length > 2 ? "s" : ""})` : ""}</span>; })()}
+                      return g.length > 0 && <span className="live-goal live-guided" data-testid="live-guidance"><ReadMore label={<strong>Following your guidance:</strong>} text={g[0]!.note + (g.length > 1 ? ` (and ${g.length - 1} earlier note${g.length > 2 ? "s" : ""})` : "")} lines={2} /></span>; })()}
                     {(() => { const pr = estimateProgress({ discipline: t?.discipline ?? "", startedAt: e.started_at, lastLog: lastLog.get(e.id) ?? null, typical: typical.get(t?.discipline ?? "") });
                       return (<span className="step-progress" data-testid="step-progress" title="An estimate from how long steps like this usually take and, for steps that work in rounds, which round it is on.">
                         <span className={`step-bar${pr.slow ? " slow" : ""}`}><span style={{ width: `${pr.pct}%` }} /></span>

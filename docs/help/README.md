@@ -131,3 +131,20 @@ Before **Submit for approval** and **Approve as baseline**, the plan page shows 
 that changed (what they were and what they are now), the steps added or removed compared with the plan in use, and which
 steps a run will do again. Unchanged finished steps are reused, not paid for twice. Submitting does not start any work:
 after approval, start a run from the same page.
+
+## Proposed plan updates
+When the design agent suggests changing the plan (from something you said in the chat, or from comparing the plan with your
+concepts and mock-ups), the suggestion appears in the chat **and** in its own **Proposed plan updates** section at the top of
+the Workspace and on the Questions page. It is one decision wherever you make it:
+- **Yes, update the plan** makes a new draft plan version; nothing changes until you approve it;
+- **Not needed** (or **No, carry on** when the work was paused for it) closes it;
+- once a plan is approved after a suggestion was made, the suggestion is **out of date** and leaves the section (the chat
+  keeps a one-line note), so an old idea can never undo a newer decision.
+
+## Long text
+Long descriptions (what a step is doing, your guidance, summaries) show the first few lines with **Read more** to open
+the rest in place.
+
+## Your mock-up is the concept
+A mock-up added on Inputs is used as the concept: the plan and the casing are checked against it. To record it as the
+decided look, open Concepts and press **Freeze REF-n as the concept**. AI concept variations are optional.

@@ -211,9 +211,11 @@ try {
   assert.equal(dep.depends_on_task_id, newTasks[0].id);
   assert.equal((await admin.from("plans").select("status").eq("id", powerTask.plan_id).single()).data.status, "approved", "the running plan is unchanged");
   await page.goto(`${BASE}/projects/${project.id}/workspace`);
-  await page.getByTestId("plan-change").last().getByRole("link", { name: /Drafted as a new plan version/ }).waitFor();
+  await page.getByTestId("plan-change").last().getByRole("link", { name: /Drafted as plan v\d+ \(draft\)/ }).waitFor();
+  // It is also listed in its own section, the same decision as in the chat.
+  assert.match(await page.getByTestId("plan-proposals").innerText(), /Proposed plan updates \(1\)[\s\S]*Drafted as plan v\d+/);
   await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
-  assert.match(await cpage.getByTestId("plan-change").last().innerText(), /The project owner or an engineer decides/);
+  assert.match(await cpage.getByTestId("plan-change").last().innerText(), /Drafted as plan v\d+\. The project owner or an engineer decides/);
   assert.equal(await cpage.getByTestId("plan-change").last().getByRole("button").count(), 0, "clients cannot draft plan changes");
   await shot(page, "plan-change-drafted");
   console.log("✓ a plan change from the chat became a draft plan version; the approved plan is unchanged");
