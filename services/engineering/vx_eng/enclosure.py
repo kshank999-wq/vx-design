@@ -365,12 +365,15 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
 def _checked_cut(part, tool, what: str = "an opening", hint: str = "adjust its size or position slightly"):
     """Cut, then confirm material was actually removed where the tool overlapped (OCCT can fail silently). A failed cut
     is tried again with a small fuzzy tolerance before giving up; the error names what was being cut."""
-    before = part.Volume()
+    # A correct cut leaves no material inside the tool. OCCT can fail completely (nothing removed) or partly (some
+    # faces cut, a slab left behind), so what is left inside the tool is measured, not just whether anything went.
+    expected = part.intersect(tool).Volume()
+    if expected < 1e-6:
+        return part                              # the tool does not reach this part (an opening only through the lid)
     for tol in (None, 1e-4, 1e-3):
         out = part.cut(tool) if tol is None else part.cut(tool, tol=tol)
-        removed = before - out.Volume()
-        left = out.intersect(tool).Volume() if removed < 1e-6 else 0.0
-        if not (removed < 1e-6 and left > 1e-3):
+        left = out.intersect(tool).Volume()
+        if left <= max(1e-3, expected * 1e-4):
             return out
     raise kicad.KicadError(f"the geometry kernel failed to cut {what}; {hint}")
 

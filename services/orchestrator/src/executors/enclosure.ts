@@ -107,7 +107,11 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
             const zip = join(work, "project.zip");
             await writeFile(zip, await db.downloadBytes(board.source.storagePath));
             const builds = new Map<number, { dir: string; result: EnclosureResult }>();
-            const r = await generateEnclosure(board.input, ctx.model, async (design, round) => {
+            let lastDesign: EnclosureDesign | null = null;
+            let r: Awaited<ReturnType<typeof generateEnclosure>>;
+            try {
+            r = await generateEnclosure(board.input, ctx.model, async (design, round) => {
+              lastDesign = design;
               const dir = join(work, `round-${round}`);
               // Molded parts get at least the draft their route needs, whatever the model chose.
               const result = await buildEnclosure(tools, zip, { ...design, draft_deg: Math.max(design.draft_deg ?? 0, board.draft?.deg ?? 0) }, dir);
@@ -118,6 +122,16 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
               await ctx.log(`enclosure round ${round}: ${check.ok ? "fits; process rules met" : `${check.problems.length} problem(s) at ${check.stage}`}`,
                             { round, problems: check.problems.slice(0, 20), warnings: check.warnings.slice(0, 20) }, check.ok ? "info" : "warn");
             });
+            } catch (e) {
+              // A design that never passed is kept (with the board it was built around) so it can be replayed without
+              // the model when the failure looks like the tool's, not the design's.
+              if (e instanceof EnclosureDesignError && lastDesign) {
+                const path = `${task.project_id}/attempts/${ctx.exec.id}/enclosure-design.json`;
+                await db.upload(path, new TextEncoder().encode(JSON.stringify({ design: lastDesign, board: board.source }, null, 2)), "application/json");
+                await ctx.log(`kept the last enclosure design for replay: ${path}`, { kept: path });
+              }
+              throw e;
+            }
             const { dir, result } = builds.get(r.rounds)!;
             r.design.draft_deg = Math.max(r.design.draft_deg ?? 0, board.draft?.deg ?? 0);   // record the draft actually built
             const stash: Partial<Record<FileKey, Stashed>> = {};
