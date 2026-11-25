@@ -61,6 +61,7 @@ FASTENER_HOLES: dict[str, dict[str, tuple[float, float]]] = {
 }
 SIDES = ("left", "right", "front", "back")
 LIP_HEIGHT_MM = 2.0
+DISPLAY_GASKET_MM = 0.8         # between the screen and the bezel: a foam or silicone gasket holds the screen against it
 SPLIT_ABOVE_BOARD_MM = 2.5
 MIN_MOLDED_LIP_MM = 0.8
 
@@ -76,6 +77,32 @@ class Opening:
 
 
 @dataclass
+class Display:
+    """The screen the casing is built around: its module outline and thickness, and the bezel opening over its active
+    area. Centre in board coordinates (X right, Y up from the main board's top-left corner)."""
+    width_mm: float
+    height_mm: float
+    thickness_mm: float
+    opening_w_mm: float
+    opening_h_mm: float
+    center_x_mm: float
+    center_y_mm: float
+    opening_dx_mm: float = 0.0     # opening centre relative to the module centre
+    opening_dy_mm: float = 0.0
+
+
+@dataclass
+class ExtraBoard:
+    """Another board inside the same casing, in the main board's plane, as a block (outline x tallest part)."""
+    name: str
+    width_mm: float
+    height_mm: float
+    part_height_mm: float
+    center_x_mm: float
+    center_y_mm: float
+
+
+@dataclass
 class EnclosureSpec:
     process: str
     material: str
@@ -88,6 +115,9 @@ class EnclosureSpec:
     # Draft on the side walls (degrees) for parts that will be injection molded: walls flare toward the split so the
     # base and the lid each release from their mold. 0 keeps straight walls (prints, machining).
     draft_deg: float = 0.0
+    # A casing designed around a screen (and more boards): the outline covers them all and the lid is the front bezel.
+    display: Display | None = None
+    extra_boards: list[ExtraBoard] = field(default_factory=list)
 
     @staticmethod
     def from_json(d: dict[str, Any]) -> "EnclosureSpec":
@@ -100,6 +130,12 @@ class EnclosureSpec:
                               size_mm=o.get("size_mm"), margin_mm=float(o.get("margin_mm") if o.get("margin_mm") is not None else 0.5))
                       for o in d.get("openings") or []],
             draft_deg=min(max(float(d.get("draft_deg") or 0), 0.0), 10.0),
+            display=(Display(**{k: float(v) for k, v in d["display"].items() if k in Display.__dataclass_fields__ and v is not None})
+                     if isinstance(d.get("display"), dict) else None),
+            extra_boards=[ExtraBoard(name=str(b.get("name") or f"board {i + 1}"), width_mm=float(b["width_mm"]), height_mm=float(b["height_mm"]),
+                                     part_height_mm=float(b.get("part_height_mm") or 5), center_x_mm=float(b["center_x_mm"]),
+                                     center_y_mm=float(b["center_y_mm"]))
+                          for i, b in enumerate(d.get("extra_boards") or [])],
         )
 
 
@@ -166,17 +202,90 @@ def export_solids(project_dir: Path, pcb: str, refs: list[str], env: dict[str, s
 # --- Geometry ------------------------------------------------------------------------------------
 
 def _outline_face(board):
-    """The board's top face outline (outer wire) as a planar face at Z = 0."""
+    """The board's top face outline (outer wire) as a planar face at Z = 0, with arcs replaced by short straight segments.
+
+    Solids built from the STEP outline's arcs (and their offsets) made OCCT booleans between them silently do nothing on
+    real boards (a cavity cut left the base or lid solid); straight segments keep every later cut and fuse reliable."""
     cq = _cq()
     top = max(board.Faces(), key=lambda f: (f.Center().z, f.Area()))
-    wire = top.outerWire()
-    return cq.Face.makeFromWires(wire.translate(cq.Vector(0, 0, -top.Center().z)))
+    return _polygon_face(top.outerWire(), -top.Center().z)
+
+
+def _wire_points(wire, per_mm: float = 2.0) -> list[tuple[float, float]]:
+    """The wire's points in order around it: straight edges by their ends, curves sampled every 1/per_mm mm. Walks the
+    wire with its edge orientation (an edge's own start can be the wire's end of that edge)."""
+    cq = _cq()
+    from OCP.BRepTools import BRepTools_WireExplorer
+    from OCP.TopAbs import TopAbs_REVERSED
+    pts: list[tuple[float, float]] = []
+    exp = BRepTools_WireExplorer(wire.wrapped)
+    while exp.More():
+        e = cq.Edge(exp.Current())
+        rev = exp.Current().Orientation() == TopAbs_REVERSED
+        n = 1 if e.geomType() == "LINE" else max(4, min(48, int(e.Length() * per_mm)))
+        for i in range(n):
+            p = e.positionAt(1 - i / n if rev else i / n)
+            if not pts or abs(p.x - pts[-1][0]) + abs(p.y - pts[-1][1]) > 1e-4:
+                pts.append((p.x, p.y))
+        exp.Next()
+    if len(pts) > 1 and abs(pts[0][0] - pts[-1][0]) + abs(pts[0][1] - pts[-1][1]) <= 1e-4:
+        pts.pop()
+    return pts
+
+
+def _polygon_face(wire, dz: float = 0.0):
+    cq = _cq()
+    return cq.Face.makeFromWires(cq.Wire.makePolygon([cq.Vector(x, y, 0) for x, y in _wire_points(wire)], close=True))
+
+
+def _offset_wire(face, off: float):
+    """The face's outline grown (or shrunk, off < 0) by off mm, as a straight-segment wire at Z = 0. Computed in 2D with
+    shapely: OCCT's own offset of a many-segment polygon often returned nothing."""
+    cq = _cq()
+    from shapely.geometry import Polygon
+    poly = Polygon(_wire_points(face.outerWire())).buffer(0)
+    if off:
+        poly = poly.buffer(off, join_style="round", quad_segs=4)
+    if poly.geom_type != "Polygon" or poly.is_empty:
+        raise kicad.KicadError(f"the outline cannot be offset by {off} mm (the casing is too small for that edge gap or wall)")
+    coords = list(poly.exterior.coords)[:-1]
+    return cq.Wire.makePolygon([cq.Vector(x, y, 0) for x, y in coords], close=True)
+
+
+def _rect_face(x0: float, x1: float, y0: float, y1: float, r: float = 3.0):
+    """A rounded rectangle (corners as short segments) at Z = 0: the casing outline when it is built around a screen."""
+    cq = _cq()
+    r = max(0.0, min(r, (x1 - x0) / 2 - 0.01, (y1 - y0) / 2 - 0.01))
+    pts = []
+    for cx, cy, a0 in ((x1 - r, y0 + r, -90), (x1 - r, y1 - r, 0), (x0 + r, y1 - r, 90), (x0 + r, y0 + r, 180)):
+        for i in range(7):
+            a = math.radians(a0 + 15 * i)
+            pts.append(cq.Vector(cx + r * math.cos(a), cy + r * math.sin(a), 0))
+    return cq.Face.makeFromWires(cq.Wire.makePolygon(pts, close=True))
+
+
+def stack_bodies(spec: "EnclosureSpec", board, comps: dict[str, Any], facts: dict[str, Any]) -> dict[str, Any]:
+    """The display module and the other boards as solids, for the casing and its fit checks: other boards sit in the main
+    board's plane; the display sits in front of everything, its back face top_clearance above the tallest part."""
+    cq = _cq()
+    t = facts["thickness_mm"]
+    out: dict[str, Any] = {}
+    for b in spec.extra_boards:
+        out[f"board:{b.name}"] = cq.Solid.makeBox(b.width_mm, b.height_mm, t + b.part_height_mm,
+                                                  cq.Vector(b.center_x_mm - b.width_mm / 2, b.center_y_mm - b.height_mm / 2, 0))
+    if spec.display:
+        d = spec.display
+        tops = [t, *(c.BoundingBox().zmax for c in comps.values()), *(s.BoundingBox().zmax for s in out.values())]
+        z0 = max(tops) + spec.top_clearance_mm
+        out["DISPLAY"] = cq.Solid.makeBox(d.width_mm, d.height_mm, d.thickness_mm,
+                                          cq.Vector(d.center_x_mm - d.width_mm / 2, d.center_y_mm - d.height_mm / 2, z0))
+    return out
 
 
 def _prism(face, offset: float, z0: float, z1: float):
     """The outline offset outward by `offset`, extruded from z0 to z1."""
     cq = _cq()
-    wire = face.outerWire().offset2D(offset, "arc")[0] if offset else face.outerWire()
+    wire = _offset_wire(face, offset) if offset else face.outerWire()
     base = cq.Face.makeFromWires(wire.translate(cq.Vector(0, 0, z0)))
     return cq.Solid.extrudeLinear(base, cq.Vector(0, 0, z1 - z0))
 
@@ -189,7 +298,7 @@ def _taper(face, off0: float, z0: float, off1: float, z1: float):
     then failed on silently; it stays only as a fallback."""
     cq = _cq()
     h = z1 - z0
-    w0 = face.outerWire().offset2D(off0, "arc")[0].translate(cq.Vector(0, 0, z0))
+    w0 = _offset_wire(face, off0).translate(cq.Vector(0, 0, z0))
     solid = None
     try:
         angle = math.degrees(math.atan2(off0 - off1, h))      # positive draft narrows upward
@@ -199,7 +308,7 @@ def _taper(face, off0: float, z0: float, off1: float, z1: float):
     except Exception:   # noqa: BLE001 - fall back to a loft below
         solid = None
     if solid is None:
-        w1 = face.outerWire().offset2D(off1, "arc")[0].translate(cq.Vector(0, 0, z1))
+        w1 = _offset_wire(face, off1).translate(cq.Vector(0, 0, z1))
         try:
             solid = cq.Solid.makeLoft([w0, w1], True)
         except Exception:   # noqa: BLE001 - offsets with different edge counts: smooth loft instead
@@ -233,8 +342,15 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
     face = _outline_face(board)
     bb = board.BoundingBox()
     opened_top = {o.ref for o in spec.openings if o.kind == "top"}
-    enclosed_tops = [c.BoundingBox().zmax for r, c in comps.items() if r not in opened_top]
+    enclosed_tops = [c.BoundingBox().zmax for r, c in comps.items() if r not in opened_top and r != "DISPLAY"]
     top_inner = max([t, *enclosed_tops]) + spec.top_clearance_mm
+    display = comps.get("DISPLAY")
+    if display is not None:
+        # Built around the screen: the outline covers the display and every board; the lid (front bezel) rests just
+        # above the display, and its opening is cut over the active area below.
+        boxes = [bb, *(c.BoundingBox() for r, c in comps.items() if r == "DISPLAY" or r.startswith("board:"))]
+        face = _rect_face(min(b.xmin for b in boxes), max(b.xmax for b in boxes), min(b.ymin for b in boxes), max(b.ymax for b in boxes))
+        top_inner = display.BoundingBox().zmax + DISPLAY_GASKET_MM
     split = min(t + SPLIT_ABOVE_BOARD_MM, top_inner - 0.5)
     floor_top = -spec.standoff_height_mm
     floor_bottom = floor_top - spec.wall_mm
@@ -244,8 +360,8 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
     # Built additively (slabs and rings extruded from the outline, then fused). Cutting one prism through
     # another, or a shell with a box, failed silently in OCCT and left a closed box.
     def ring(outer_off: float, inner_off: float, z0: float, z1: float):
-        ow = face.outerWire().offset2D(outer_off, "arc")[0].translate(cq.Vector(0, 0, z0))
-        iw = face.outerWire().offset2D(inner_off, "arc")[0].translate(cq.Vector(0, 0, z0))
+        ow = _offset_wire(face, outer_off).translate(cq.Vector(0, 0, z0))
+        iw = _offset_wire(face, inner_off).translate(cq.Vector(0, 0, z0))
         return cq.Solid.extrudeLinear(cq.Face.makeFromWires(ow, [iw]), cq.Vector(0, 0, z1 - z0))
 
     cavity = _prism(face, g, floor_top, top_inner)
@@ -345,6 +461,12 @@ def build(spec: EnclosureSpec, board, comps: dict[str, Any], facts: dict[str, An
                 box = _box(cb.xmin - m, cb.xmax + m, cb.ymin - m, cb.ymax + m, split - 1, top_outer + 1)
                 opening_facts.append({"ref": o.ref, "kind": "top", "shape": "rect", "width_mm": _r(cb.xlen + 2 * m), "depth_mm": _r(cb.ylen + 2 * m)})
         cuts.append((o.ref, box))
+    if display is not None and spec.display:
+        d, db = spec.display, display.BoundingBox()
+        cx, cy = d.center_x_mm + d.opening_dx_mm, d.center_y_mm + d.opening_dy_mm
+        bezel = _box(cx - d.opening_w_mm / 2, cx + d.opening_w_mm / 2, cy - d.opening_h_mm / 2, cy + d.opening_h_mm / 2, db.zmax - 0.01, top_outer + 1)
+        cuts.append(("the display (bezel opening)", bezel))
+        opening_facts.append({"ref": "DISPLAY", "kind": "bezel", "width_mm": _r(d.opening_w_mm), "height_mm": _r(d.opening_h_mm)})
     for (ref, box) in cuts:
         base = _checked_cut(base, box, f"the opening for {ref}")
         lid = _checked_cut(lid, box, f"the opening for {ref}")
@@ -486,7 +608,8 @@ def enclosure_facts(project_dir: Path) -> dict[str, Any]:
                           "extent_mm": {"x": [_r(cb.xmin), _r(cb.xmax)], "y": [_r(cb.ymin), _r(cb.ymax)]},
                           "nearest_edge": side, "edge_distance_mm": _r(edges[side])})
         parts.append(entry)
-    return {"ok": True, "board": {"width_mm": _r(bb.xlen), "height_mm": _r(bb.ylen), "thickness_mm": facts["thickness_mm"]},
+    return {"ok": True, "board": {"width_mm": _r(bb.xlen), "height_mm": _r(bb.ylen), "thickness_mm": facts["thickness_mm"],
+                                  "extent_mm": {"x": [_r(bb.xmin), _r(bb.xmax)], "y": [_r(bb.ymin), _r(bb.ymax)]}},
             "holes": facts["holes"], "parts": parts,
             "processes": {k: {"label": v.label, "min_wall_mm": v.min_wall_mm, "fastenings": list(v.fastenings),
                               "min_inner_radius_mm": v.min_inner_radius_mm, "build_mm": list(v.build_mm)} for k, v in PROCESSES.items()},
@@ -519,6 +642,7 @@ def build_enclosure(project_dir: Path, spec_json: dict[str, Any], out: Path) -> 
                 "problems": [_problem("opening", f"opening for {r}, which is not a component on the board") for r in unknown]}
     pcbmod.fetch_models(pcbnew.LoadBoard(str(project_dir / pcb)))     # library models into the cache
     board, comps = export_solids(project_dir, pcb, [p["ref"] for p in facts["parts"] if p["has_model"]], pcbmod._kicad_env())
+    comps.update(stack_bodies(spec, board, comps, facts))
     built = build(spec, board, comps, facts)
     report = check(spec, built, board, comps, facts)
 

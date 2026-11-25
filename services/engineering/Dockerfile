@@ -20,6 +20,7 @@ RUN --mount=type=secret,id=extra_ca,required=false \
  && $VX_VENV/bin/pip install --no-cache-dir \
       kikit==1.8.1 \
       cadquery==2.8.0 \
+      shapely==2.2.0 \
       skidl==3.0.0 \
       kicad-python==0.8.0
 

@@ -101,3 +101,20 @@ The first time a plan is submitted for approval, the design agent reads every st
 the design freeze, the requirements and the mock-ups. If anything disagrees (a material, a construction method, a part, a
 shape or a size), the plan is not submitted yet: the differences and a proposed plan update appear in the chat with **Yes,
 update the plan**. Settle them, or submit again to go ahead as it is.
+
+---
+
+## Enclosures
+
+### A casing built around the screen
+When the product has a screen, the enclosure step designs the casing around it, not just around one board:
+
+- the **front bezel** (the lid) has an opening over the screen's active area, and a small gap behind it for a gasket that
+  holds the screen in place;
+- the **back shell** (the base) holds the main board on standoffs, with the other boards placed beside it;
+- the outline covers the screen and every board, with rounded corners, and the walls are drafted when the casing will be
+  injection molded, so the printed prototype already has the molded shape.
+
+The fit check measures every part, every board and the screen against both halves. If something collides, the step
+names it and tries again. Sizes come from the display's datasheet or the step's brief; check them on the enclosure page,
+and say in the chat if the screen or a board should sit somewhere else.

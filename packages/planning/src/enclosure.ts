@@ -9,7 +9,7 @@ import { ProgressTracker } from "./progress.ts";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 import type { BriefAcceptanceTest, BriefRequirement, BriefUpstream } from "./brief.ts";
 
-export const ENCLOSURE_PROMPT_VERSION = "enclosure-v3";
+export const ENCLOSURE_PROMPT_VERSION = "enclosure-v4";
 export const MAX_ENCLOSURE_REPAIRS = 3;
 
 export const EnclosureDesign = z.object({
@@ -29,6 +29,24 @@ export const EnclosureDesign = z.object({
     size_mm: z.number().nullable().describe("round top openings: diameter (e.g. a light hole), or null to fit the part"),
     margin_mm: z.number().describe("Clearance around the part in the opening"),
   })),
+  display: z.object({
+    width_mm: z.number().describe("Display module outline width (the LCM or panel, not the cover glass if the casing holds the glass)"),
+    height_mm: z.number(),
+    thickness_mm: z.number().describe("Module thickness including the backlight"),
+    opening_w_mm: z.number().describe("Bezel opening width: the active area plus the margin the datasheet gives"),
+    opening_h_mm: z.number(),
+    center_x_mm: z.number().describe("Module centre, in board coordinates"),
+    center_y_mm: z.number(),
+    opening_dx_mm: z.number().describe("Opening centre offset from the module centre (0 when the active area is centred)"),
+    opening_dy_mm: z.number(),
+  }).nullable().describe("The screen the casing is built around, or null for a housing around the board alone. With a display the lid is the front bezel: the casing covers the display and every board, and the bezel opening is cut over the active area"),
+  extra_boards: z.array(z.object({
+    name: z.string().describe("The other board's task key or name"),
+    width_mm: z.number(), height_mm: z.number(),
+    part_height_mm: z.number().describe("Tallest part above that board"),
+    center_x_mm: z.number().describe("Centre in board coordinates (in the main board's plane)"),
+    center_y_mm: z.number(),
+  })).describe("The other boards inside the same casing, placed beside the main board; empty when there are none"),
   rationale: z.string(),
   assumptions: z.array(z.string()),
   open_questions: z.array(z.string()),
@@ -36,7 +54,7 @@ export const EnclosureDesign = z.object({
 export type EnclosureDesign = z.infer<typeof EnclosureDesign>;
 
 export interface EnclosureFacts {
-  board: { width_mm: number; height_mm: number; thickness_mm: number };
+  board: { width_mm: number; height_mm: number; thickness_mm: number; extent_mm?: { x: number[]; y: number[] } };
   holes: { ref: string; x: number; y: number; size: string }[];
   parts: { ref: string; value: string; side: string; has_model: boolean; height_above_board_mm?: number; bottom_z_mm?: number;
            nearest_edge?: string; edge_distance_mm?: number }[];
@@ -74,6 +92,8 @@ The housing is generated around the board's real outline and every part's 3D mod
 - top openings go through the lid: windows for tall headers or displays, round light holes for LEDs (give a diameter), button holes.
 The lid sits above the tallest part without a top opening plus the top clearance.
 
+When the product has a screen (a display module in the requirements, the upstream outputs or the task brief), design the casing around it: give display (module size and thickness, bezel opening, where it sits over the boards) and extra_boards (every other board named in the project, placed beside the main board in its plane, not overlapping it). The casing outline then covers the display and all boards, the display sits in front of the tallest part plus the top clearance, the lid becomes the front bezel with the opening over the active area, and the base is the back shell. Take the sizes from the display datasheet or brief; if the brief gives a bezel opening, use it. Positions are in board coordinates (the main board's extent is given). Without a screen set display to null.
+
 Choose the process and material from the requirements (default FDM PETG for a first prototype), a wall at or above the process minimum, standoffs tall enough to clear through-hole pins below the board and to take the fastener, and a fastening the process supports (heat-set inserts or thread-forming screws in prints, tapped holes in aluminium). If the project lists manufacturing routes for the enclosure base or lid, prototype with that process and material (map SLS or MJF nylon to "sls"; a cast or machined plastic prototype is out of scope here: choose the closest print and say so in the assumptions). When the production route is injection molding, set draft_deg to at least the draft the project states (the material's minimum, more for textured finishes) so the printed prototype already has the molded part's geometry: the side walls flare toward the split, the bosses taper, and the lid locates with a stepped lip joint, which needs a wall of at least 1.8 mm. Keep the walls a uniform thickness and avoid thick solid sections; say what else will change for molding (ribs, gates) in the assumptions. Otherwise set draft_deg to 0.
 
 Record assumptions (e.g. an enclosure style you chose because none was specified) and open questions.`;
@@ -91,7 +111,8 @@ export function renderEnclosurePrompt(input: EnclosureInput): string {
   const notes = input.reviewNotes.length ? `\n\nA reviewer returned the previous enclosure with these notes; address them:\n${input.reviewNotes.map((n) => `- ${n}`).join("\n")}` : "";
   return `Project: ${input.projectContext}\n\nTask: ${input.task.title} (${input.task.key})\n${input.task.description ?? ""}\n\n` +
     `Requirements:\n${reqs}\n\nAcceptance tests:\n${tests}\n\n` +
-    `Board: ${f.board.width_mm} x ${f.board.height_mm} mm, ${f.board.thickness_mm} mm thick; mounting holes: ` +
+    `Board: ${f.board.width_mm} x ${f.board.height_mm} mm, ${f.board.thickness_mm} mm thick` +
+    (f.board.extent_mm ? ` (board coordinates: X right, Y up; it spans x ${f.board.extent_mm.x.join(" to ")}, y ${f.board.extent_mm.y.join(" to ")})` : "") + `; mounting holes: ` +
     `${f.holes.map((h) => `${h.ref} ${h.size} at (${h.x}, ${h.y})`).join(", ") || "none"}\n\nParts (3D extents from the board's models):\n${parts}\n\n` +
     `Processes:\n${Object.entries(f.processes).map(([k, p]) => `- ${k}: ${p.label}; minimum wall ${p.min_wall_mm} mm; fastenings ${p.fastenings.join(", ")}` +
       (p.min_inner_radius_mm ? `; inner corner radius at least ${p.min_inner_radius_mm} mm (equals the edge gap)` : "") +
@@ -132,7 +153,7 @@ export async function generateEnclosure(
 /** Offline stand-in for the fixture board (LDO+LED): labelled, not derived from your requirements. */
 export const OFFLINE_FIXTURE_ENCLOSURE: EnclosureDesign = {
   process: "fdm", material: "PETG", wall_mm: 2, edge_gap_mm: 0.5, top_clearance_mm: 2, standoff_height_mm: 6,
-  fastening: "heat_set_insert", draft_deg: 0,
+  fastening: "heat_set_insert", draft_deg: 0, display: null, extra_boards: [],
   openings: [
     { kind: "top", ref: "J1", side: null, shape: "rect", size_mm: null, margin_mm: 0.5 },
     { kind: "top", ref: "D1", side: null, shape: "round", size_mm: 2.5, margin_mm: 0.5 },
