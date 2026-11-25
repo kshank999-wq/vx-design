@@ -61,7 +61,7 @@ export default async function RunPage({ params, searchParams }: {
   if (!run) notFound();
 
   const [{ data: tasks }, { data: execs }, { data: costs }, { data: me }, { data: activeRuns }, { data: workers }] = await Promise.all([
-    supabase.from("tasks").select("id, key, title, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary, deferred_at, deferred_note, budget_override_usd, skipped_at, skipped_note")
+    supabase.from("tasks").select("id, key, title, description, discipline, status, attempts, blocker_reason, risk_level, assigned_worker, position, plain_summary, deferred_at, deferred_note, budget_override_usd, skipped_at, skipped_note")
       .eq("plan_id", run.plan_id).order("position"),
     supabase.from("executions").select("id, task_id, attempt, status, worker_id, checkpoint_seq, resumed_from_id, started_at, finished_at, heartbeat_at, error, summary, compute_seconds")
       .eq("run_id", runId).order("created_at"),
@@ -143,6 +143,16 @@ export default async function RunPage({ params, searchParams }: {
     ...waiting.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting for you" })),
     ...heldBlocked.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "waiting on something" })),
   ];
+  // The chat beside the run can address any step that is working or still to come, not only the ones in trouble.
+  for (const t of tasks ?? []) {
+    if (chatSteps.some((c) => c.id === t.id) || t.status === "complete") continue;
+    chatSteps.push({ id: t.id, key: t.key, title: t.title, why: t.status === "running" ? "working now" : "still to come" });
+  }
+  // What each working step is for, and the guidance it follows, shown under it.
+  const liveTaskIds = liveExecs.map((e) => e.task_id);
+  const { data: liveGuidance } = liveTaskIds.length
+    ? await supabase.from("task_guidance").select("task_id, note, created_at").in("task_id", liveTaskIds).order("created_at", { ascending: false })
+    : { data: [] as { task_id: string; note: string; created_at: string }[] };
   const canContinue = canControl && !active && !(activeRuns ?? []).length && (runnable.length > 0 || waiting.length > 0 || failed.length > 0 || critical.length > 0)
     && !["canceled", "failed"].includes(run.status);
   // Ready work that no online worker can execute (e.g. schematic tasks without the KiCad worker).
@@ -160,10 +170,10 @@ export default async function RunPage({ params, searchParams }: {
 
   return (
     <main className="run-page">
-      <RunsSide projectId={projectId} currentRunId={runId}
-        runs={(projectRuns ?? []).map((r) => ({ id: r.id, name: label(r), status: r.status, stop_reason: r.stop_reason, spent: r.id === runId ? aiUsd + computeUsd : null, created_at: r.created_at, plan_version: (r.plans as unknown as { version: number } | null)?.version ?? null }))}
-        tasks={(tasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status, deferred_at: t.deferred_at, skipped_at: t.skipped_at, blocker_reason: t.blocker_reason }))}
-        live={(liveAll ?? []).map((e) => ({ task_id: e.task_id, run_id: e.run_id, title: (e.tasks as unknown as { title: string } | null)?.title ?? "A step" }))} />
+      <div className="run-chat-col">
+        <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
+          action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} />
+      </div>
       <div className="run-main">
       <p className="crumbs">
         <Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{(run.projects as { name: string }).name}</Link> /{" "}
@@ -207,6 +217,9 @@ export default async function RunPage({ params, searchParams }: {
                   <span><strong>{t?.title ?? keyOf.get(e.task_id)}</strong> <span className="mono muted small">{t?.key}</span>
                     <span className="muted small"> · {(t?.discipline ?? "").replace("_", " ")} · {engineering.has(e.worker_id) ? "engineering worker" : "worker"}{e.attempt > 1 ? ` · attempt ${e.attempt}` : ""}</span>
                     {lastLog.get(e.id) && <span className="live-step">{lastLog.get(e.id)}</span>}
+                    {t?.description && <span className="live-goal" data-testid="live-goal"><strong>What it is doing:</strong> {t.description.length > 320 ? `${t.description.slice(0, 320)}…` : t.description}</span>}
+                    {(() => { const g = (liveGuidance ?? []).filter((n) => n.task_id === e.task_id);
+                      return g.length > 0 && <span className="live-goal live-guided" data-testid="live-guidance"><strong>Following your guidance:</strong> {g[0]!.note.slice(0, 240)}{g[0]!.note.length > 240 ? "…" : ""}{g.length > 1 ? ` (and ${g.length - 1} earlier note${g.length > 2 ? "s" : ""})` : ""}</span>; })()}
                     {(() => { const pr = estimateProgress({ discipline: t?.discipline ?? "", startedAt: e.started_at, lastLog: lastLog.get(e.id) ?? null, typical: typical.get(t?.discipline ?? "") });
                       return (<span className="step-progress" data-testid="step-progress" title="An estimate from how long steps like this usually take and, for steps that work in rounds, which round it is on.">
                         <span className={`step-bar${pr.slow ? " slow" : ""}`}><span style={{ width: `${pr.pct}%` }} /></span>
@@ -313,8 +326,6 @@ export default async function RunPage({ params, searchParams }: {
         };
         return (
           <div className="run-help">
-          <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
-            action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} />
           <section className="card todo" id="what-to-do" data-testid="what-to-do">
             <h2>What you need to do</h2>
             {!failed.length && !critical.length && !waiting.length && !(openQuestions ?? 0) && !heldBlocked.length && <p>{active || workingElsewhere ? "Nothing needs fixing: the work is going." : "Nothing needs fixing. Continue the run when you are ready."}</p>}
@@ -537,6 +548,10 @@ export default async function RunPage({ params, searchParams }: {
         </>) },
       ]} />
       </div>
+      <RunsSide projectId={projectId} currentRunId={runId}
+        runs={(projectRuns ?? []).map((r) => ({ id: r.id, name: label(r), status: r.status, stop_reason: r.stop_reason, spent: r.id === runId ? aiUsd + computeUsd : null, created_at: r.created_at, plan_version: (r.plans as unknown as { version: number } | null)?.version ?? null }))}
+        tasks={(tasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status, deferred_at: t.deferred_at, skipped_at: t.skipped_at, blocker_reason: t.blocker_reason }))}
+        live={(liveAll ?? []).map((e) => ({ task_id: e.task_id, run_id: e.run_id, title: (e.tasks as unknown as { title: string } | null)?.title ?? "A step" }))} />
     </main>
   );
 }

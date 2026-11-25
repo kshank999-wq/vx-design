@@ -72,3 +72,14 @@ allowance; when it is used up, runs stop until the 1st or until an administrator
 ### The badges on "Runs"
 Above **Runs** in the project menu: **running** (green) = a run is working; **N to approve** (amber) = results waiting
 for your approval; **N problems** (red) = steps that could not finish.
+
+### Talking to the design agent
+The chat is on every project page: on the run page it is the left column; elsewhere press **Ask the design agent**
+in the bottom-right corner (it remembers whether you left it open). Use it to ask what something means, or to make a
+comment the design work should follow. On the run page, pick a step under **About** to give that step guidance: its
+next attempt follows it, and the step shows **Following your guidance** while it works.
+
+### What a working step is doing
+Under each step being worked on, **What it is doing** says what the step was asked to produce, and **Following your
+guidance** shows the latest guidance it is using. If either looks wrong (for example a frame material you changed),
+say so in the chat with that step selected, or press **Pause**.

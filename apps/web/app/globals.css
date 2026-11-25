@@ -654,7 +654,7 @@ tr:target { outline: 3px solid #f79009; outline-offset: -3px; background: color-
 .continue-all button[type=submit] { font-size: 16px; padding: 10px 18px; }
 
 /* Run page: the runs side menu beside the run. */
-main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) 240px; gap: 20px; align-items: start; }
 .run-main { min-width: 0; }
 .runs-side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; background: var(--card, #fff); border: 1px solid var(--border, #e3e8ef);
   border-radius: 12px; padding: 12px; font-size: 0.9rem; }
@@ -747,3 +747,20 @@ main.run-page { max-width: 1480px; display: grid; grid-template-columns: 240px m
 .strip-bar { display: inline-block; vertical-align: middle; width: 56px; height: 6px; margin: 0 4px; border-radius: 999px; background: #d1fae5; overflow: hidden; }
 .strip-bar > span { display: block; height: 100%; background: #16a34a; }
 .strip-bar.slow > span { background: #d97706; }
+
+/* The design agent's chat on every project page: a corner button that opens a panel. */
+.chat-dock { position: fixed; right: 16px; bottom: 16px; z-index: 60; }
+.chat-dock-button { box-shadow: 0 6px 20px rgba(15, 23, 42, .18); }
+.chat-dock-panel { width: min(420px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 120px)); display: flex; flex-direction: column; gap: 6px;
+  overflow: hidden; box-shadow: 0 12px 40px rgba(15, 23, 42, .25); }
+.chat-dock-log { flex: 1 1 auto; overflow: auto; min-height: 80px; margin: 0; }
+@media (max-width: 600px) { .chat-dock { right: 8px; bottom: 8px; } }
+
+/* Run page: the chat in the left column, always there during a run. */
+.run-chat-col { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+.run-chat-col .run-chat { margin: 0; }
+.run-help { display: block; }
+.live-goal { display: block; margin-top: 4px; font-size: 13px; color: var(--fg); }
+.live-guided { color: var(--ok); }
+@media (max-width: 1300px) { main.run-page { grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); } main.run-page > .runs-side { grid-column: 1 / -1; position: static; max-height: none; } }
+@media (max-width: 900px) { main.run-page { grid-template-columns: 1fr; } .run-chat-col { position: static; max-height: none; order: 2; } }
