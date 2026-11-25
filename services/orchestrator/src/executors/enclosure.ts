@@ -47,12 +47,29 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
       const work = await mkdtemp(join(tmpdir(), `vx-enc-${ctx.exec.id.slice(0, 8)}-`));
       try {
         const board = await ctx.step("context", async () => {
-          const v = await db.upstreamVersion(task.id, "kicad-project", ["pcb_layout"]);
-          if (!v) return null;
+          // A product can have several boards upstream (main carrier, daughter boards, a small sensor board). The housing
+          // is built around the largest; the others are named to the model so it leaves room for them. Boards that are
+          // the same routed board passed down a chain of layout steps appear once.
+          const candidates = await db.upstreamVersions(task.id, "kicad-project", ["pcb_layout"]);
+          if (!candidates.length) return null;
+          const measured: { v: (typeof candidates)[number]; facts: Awaited<ReturnType<typeof enclosureFacts>>; area: number }[] = [];
+          for (const [n, c] of candidates.entries()) {
+            const z = join(work, `board-${n}.zip`);
+            await writeFile(z, await db.downloadBytes(c.storagePath));
+            const f = await enclosureFacts(tools, z);
+            if (!f.ok) continue;
+            const b = (f as { board?: { width_mm: number; height_mm: number } }).board;
+            measured.push({ v: c, facts: f, area: b ? b.width_mm * b.height_mm : 0 });
+          }
+          if (!measured.length) throw new Error("board facts: none of the upstream boards could be read");
+          measured.sort((a, b) => b.area - a.area);
+          const { v, facts } = measured[0]!;
           const zip = join(work, "project.zip");
           await writeFile(zip, await db.downloadBytes(v.storagePath));
-          const facts = await enclosureFacts(tools, zip);
-          if (!facts.ok) throw new Error(`board facts: ${facts.error}`);
+          const others = measured.slice(1).map((m) => {
+            const b = (m.facts as { board?: { width_mm: number; height_mm: number } }).board;
+            return `${m.v.taskKey}${b ? ` (${b.width_mm} x ${b.height_mm} mm)` : ""}`;
+          });
           const [project, reqs, upstream, notes, design, routes] = await Promise.all([
             db.project(task.project_id), db.taskRequirements(task.id), db.upstreamOutputs(task.id), db.reviewNotes(task.id),
             db.upstreamJson(task.id, "design"), db.partRouteLines(task.project_id),
@@ -62,7 +79,9 @@ export function enclosureExecutor(tools: EngineeringTools): Executor {
           const input: EnclosureInput = {
             projectContext: `${project.name}${project.description ? `: ${project.description}` : ""}` +
               (routes.length ? `\n\nManufacturing routes:\n${routes.map((r) => `- ${r}`).join("\n")}` : "") +
-              (draft.deg ? `\n\nDraft: ${draft.why}, so the walls need at least ${draft.deg}° of draft (draft_deg).` : ""),
+              (draft.deg ? `\n\nDraft: ${draft.why}, so the walls need at least ${draft.deg}° of draft (draft_deg).` : "") +
+              `\n\nThe housing is built around ${v.taskKey}, the largest board.` +
+              (others.length ? ` The product also has these boards, which mount inside the same housing: ${others.join("; ")}. Leave room for them (top clearance, standoff height, openings) and say in assumptions where each goes.` : ""),
             task: { key: task.key, title: task.title, description: task.description },
             requirements: reqs.map((r) => ({ refCode: r.ref_code, kind: r.kind, priority: r.priority, text: r.text })),
             acceptanceTests: task.acceptance_tests.map((a) => ({ id: a.id, description: a.description, method: a.method })),
