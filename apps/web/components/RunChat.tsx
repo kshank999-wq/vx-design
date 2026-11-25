@@ -1,24 +1,28 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { DictateButton, ReadAloud } from "@/components/VoiceTools";
+import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
 
 export interface RunChatStep { id: string; key: string; title: string; why: string }
-interface Msg { id: number; author_kind: string; body: string }
+interface Msg { id: number; author_kind: string; body: string; data?: unknown }
 
 /** The run page's chat: ask the design agent, or give a step guidance for its next attempt. */
-export function RunChat({ projectId, steps, messages, selected, action, canWrite }: {
+export function RunChat({ projectId, steps, messages, selected, action, canWrite, drafted = {}, canDraft = false }: {
   projectId: string; steps: RunChatStep[]; messages: Msg[]; selected: string | null;
-  action: (form: FormData) => void | Promise<void>; canWrite: boolean;
+  action: (form: FormData) => void | Promise<void>; canWrite: boolean; drafted?: Record<string, string>; canDraft?: boolean;
 }) {
   return (
     <aside className="card run-chat" id="run-chat" data-testid="run-chat" aria-label="Chat with the design agent">
       <h2>Talk to the design agent</h2>
-      <p className="small muted">Ask what went wrong, or tell a step how to do it differently. Guidance for a step is saved with it and its next attempt follows it.</p>
+      <p className="small muted">Ask what went wrong, give a step guidance, or give <strong>new orders</strong>. New information (a decision, a change of
+        direction) pauses the run: the agent compares it with the plan, the concepts and the mock-ups, lists any differences and proposes the
+        updated plan for you to confirm before anything continues.</p>
       <ol className="chat run-chat-log">
         {[...messages].reverse().map((m) => (
           <li key={m.id} className={`msg msg-${m.author_kind}`}>
             <div className="msg-body">{m.body}</div>
             {m.author_kind === "assistant" && <div className="msg-tools"><ReadAloud text={m.body} /></div>}
+            {m.author_kind === "assistant" && !!m.data && <PlanChangeCard projectId={projectId} messageId={m.id} data={m.data as ChangeData} draftedPlanId={drafted[String(m.id)] ?? null} canDraft={canDraft} />}
           </li>
         ))}
         {!messages.length && <li className="muted small">No messages yet.</li>}

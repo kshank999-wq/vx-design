@@ -4,16 +4,17 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChatForm } from "@/components/ChatForm";
 import { ReadAloud } from "@/components/VoiceTools";
+import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
 
-interface Msg { id: number; author_kind: string; body: string }
+interface Msg { id: number; author_kind: string; body: string; data?: unknown }
 
 /**
  * The design agent's chat on every project page: a button in the corner that opens a panel with the latest
  * conversation and a box to ask or comment (typed or dictated). Hidden on the pages that already show the chat
  * (the workspace and the run pages). Open or closed is remembered for the browser session.
  */
-export function ChatDock({ projectId, messages, action }: {
-  projectId: string; messages: Msg[]; action: (form: FormData) => void | Promise<void>;
+export function ChatDock({ projectId, messages, action, drafted = {}, canDraft = false }: {
+  projectId: string; messages: Msg[]; action: (form: FormData) => void | Promise<void>; drafted?: Record<string, string>; canDraft?: boolean;
 }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
@@ -33,6 +34,7 @@ export function ChatDock({ projectId, messages, action }: {
               <li key={m.id} className={`msg msg-${m.author_kind}`}>
                 <div className="msg-body">{m.body.replace(/^\[about question [0-9a-f-]{36}\]\s*/, "")}</div>
                 {m.author_kind === "assistant" && <div className="msg-tools"><ReadAloud text={m.body} /></div>}
+                {m.author_kind === "assistant" && !!m.data && <PlanChangeCard projectId={projectId} messageId={m.id} data={m.data as ChangeData} draftedPlanId={drafted[String(m.id)] ?? null} canDraft={canDraft} />}
               </li>))}
             {!messages.length && <li className="muted small">No messages yet.</li>}
           </ol>

@@ -136,7 +136,10 @@ export default async function RunPage({ params, searchParams }: {
   const nums = runNumbers(projectRuns ?? []);
   const label = (r: { id: string; name: string | null }) => runLabel(nums.get(r.id), r.name);
   const { count: openQuestions } = await supabase.from("project_questions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "open");
-  const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
+  const { data: chatMsgs } = await supabase.from("project_messages").select("id, author_kind, body, data").eq("project_id", projectId).order("id", { ascending: false }).limit(8);
+  // Plans already drafted from a chat message, so its "Yes, update the plan" becomes a link to the draft.
+  const { data: chatPlans } = await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null);
+  const draftedFromChat = Object.fromEntries((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
   const chatSteps = [
     ...failed.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "could not finish" })),
     ...critical.map((t) => ({ id: t.id, key: t.key, title: t.title, why: "critical risk" })),
@@ -150,6 +153,13 @@ export default async function RunPage({ params, searchParams }: {
   }
   // What each working step is for, and the guidance it follows, shown under it.
   const liveTaskIds = liveExecs.map((e) => e.task_id);
+  // When nothing is being worked on (paused, between steps, stopped): the steps it stopped in the middle of and the ones
+  // that come next, each with what it is for, so the page still says what the run is doing.
+  const latestExec = new Map<string, { status: string; error: string | null }>();
+  for (const e of execs ?? []) latestExec.set(e.task_id, { status: e.status, error: e.error });
+  const pausedOn = (tasks ?? []).filter((t) => t.status !== "complete" && latestExec.get(t.id)?.status === "interrupted");
+  const upcoming = [...pausedOn, ...runnable.filter((t) => !pausedOn.some((p) => p.id === t.id))].slice(0, 4);
+  liveTaskIds.push(...upcoming.map((t) => t.id));
   const { data: liveGuidance } = liveTaskIds.length
     ? await supabase.from("task_guidance").select("task_id, note, created_at").in("task_id", liveTaskIds).order("created_at", { ascending: false })
     : { data: [] as { task_id: string; note: string; created_at: string }[] };
@@ -168,11 +178,28 @@ export default async function RunPage({ params, searchParams }: {
   const urlOf = new Map<string | null, string | undefined>((signed ?? []).map((s) => [s.path, s.signedUrl ?? undefined]));
   const artifactName = (v: { artifacts: unknown }) => (v.artifacts as { name: string }).name;
 
+  const UpcomingSteps = () => (
+    <div className="upcoming" data-testid="upcoming-steps">
+      <p className="small"><strong>{run.status === "paused" ? "Paused. When resumed it carries on with:" : active ? "Next up:" : "When the run continues, it carries on with:"}</strong></p>
+      <ul className="live-tasks">{upcoming.map((t) => {
+        const g = (liveGuidance ?? []).filter((n) => n.task_id === t.id);
+        return (
+          <li key={t.id} data-testid="upcoming-step">
+            <span className="live-clock small">{pausedOn.some((p) => p.id === t.id) ? "paused" : "next"}</span>
+            <span><strong>{t.title}</strong> <span className="mono muted small">{t.key}</span>
+              <span className="muted small"> · {t.discipline.replace("_", " ")}{t.attempts ? ` · ${t.attempts} attempt${t.attempts > 1 ? "s" : ""} so far` : ""}</span>
+              {t.description && <span className="live-goal" data-testid="live-goal"><strong>{pausedOn.some((p) => p.id === t.id) ? "What it was doing:" : "What it will do:"}</strong> {t.description.length > 320 ? `${t.description.slice(0, 320)}…` : t.description}</span>}
+              {g.length > 0 && <span className="live-goal live-guided"><strong>Following your guidance:</strong> {g[0]!.note.slice(0, 240)}{g[0]!.note.length > 240 ? "…" : ""}</span>}</span>
+          </li>);
+      })}</ul>
+    </div>
+  );
+
   return (
     <main className="run-page">
       <div className="run-chat-col">
         <RunChat projectId={projectId} steps={chatSteps} messages={[...(chatMsgs ?? [])].reverse()} selected={guide ?? null}
-          action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} />
+          action={sendRunGuidance.bind(null, projectId, actRun)} canWrite={role !== "viewer"} drafted={draftedFromChat} canDraft={canControl} />
       </div>
       <div className="run-main">
       <p className="crumbs">
@@ -188,6 +215,8 @@ export default async function RunPage({ params, searchParams }: {
         <div className="row">
           {/* The page refreshes itself only while this run is working (or has not written its report yet). */}
           {live && !["canceled", "failed"].includes(run.status) && !workingElsewhere && <AutoRefresh quiet intervalMs={20000} />}
+          {canControl && run.status === "running" && <form action={controlRun.bind(null, projectId, runId, "pause")} data-testid="pause-run"><SubmitButton variant="secondary" pendingText="Pausing…">⏸ Pause</SubmitButton></form>}
+          {canControl && run.status === "paused" && <form action={controlRun.bind(null, projectId, runId, "resume")} data-testid="resume-run"><SubmitButton pendingText="Resuming…">▶ Resume</SubmitButton></form>}
           {canControl && !active && !(["canceled", "failed"].includes(run.status) && workingElsewhere) && (
             <form action={restartRun.bind(null, projectId, runId)} data-testid="restart-run">
               <SubmitButton pendingText="Restarting…">{["canceled", "failed"].includes(run.status) ? "↻ Start it again" : workingElsewhere ? "↻ Restart this run here" : "↻ Restart this run"}</SubmitButton>
@@ -226,6 +255,7 @@ export default async function RunPage({ params, searchParams }: {
                         <span className="small muted">{pr.label} (estimate)</span></span>); })()}</span>
                 </li>); })}</ul>
             )}
+            {liveExecs.length === 0 && upcoming.length > 0 && <UpcomingSteps />}
             <div className="live-spend">
               <span className="small">AI spend <strong>${aiUsd.toFixed(2)}</strong> of ${aiMax.toFixed(2)}</span>
               <span className="live-bar"><span style={{ width: `${share * 100}%`, background: share >= 0.8 ? "var(--danger, #b42318)" : undefined }} /></span>
@@ -254,6 +284,7 @@ export default async function RunPage({ params, searchParams }: {
         <input name="ai" type="number" min={Number(run.max_ai_spend_usd)} defaultValue={Number(run.max_ai_spend_usd) * 2} style={{ width: "6em" }} aria-label="New AI budget" />
         <input type="hidden" name="compute" value={Number(run.max_compute_spend_usd)} />
         <SubmitButton pendingText="…">Raise budget and continue</SubmitButton></form></>}</p>}
+      {!active && !superseded && upcoming.length > 0 && <section className="card upcoming-card"><UpcomingSteps /></section>}
       {superseded && (
         <p className="banner banner-warn" data-testid="older-run">{workingElsewhere ? <>The work is going on in {label(workingElsewhere)} right now. </> : <>This is an earlier run. Work continues in the latest one. </>}
           <Link className="btn" href={`/projects/${projectId}/runs/${superseded.id}`}>{workingElsewhere ? "Open the run that is working →" : "Open the latest run →"}</Link>

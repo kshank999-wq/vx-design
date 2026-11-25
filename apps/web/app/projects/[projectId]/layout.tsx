@@ -11,8 +11,10 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const [{ data: project }, { data: me }, { data: msgs }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
-    supabase.from("project_messages").select("id, author_kind, body").eq("project_id", projectId).order("id", { ascending: false }).limit(8),
+    supabase.from("project_messages").select("id, author_kind, body, data").eq("project_id", projectId).order("id", { ascending: false }).limit(8),
   ]);
+  const { data: chatPlans } = await supabase.from("plans").select("id, generator").eq("project_id", projectId).not("generator->>chat_message_id", "is", null);
+  const drafted = Object.fromEntries((chatPlans ?? []).map((p) => [String((p.generator as { chat_message_id?: string }).chat_message_id), p.id as string]));
   if (!project || !me || me.role === "client") return <>{children}</>;
   const b = `/projects/${projectId}`;
   const staff = me.role !== "viewer";
@@ -27,5 +29,5 @@ export default async function ProjectLayout({ children, params }: { children: Re
     { label: "Prove", items: [{ href: `${b}/validation`, label: "Validation" }, { href: `${b}/compliance`, label: "Compliance" }, { href: `${b}/lifecycle`, label: "Lifecycle" }] },
   ];
   return <><ProjectNav base={b} name={project.name} groups={groups} /><LiveRunStrip projectId={projectId} />{children}
-    <ChatDock projectId={projectId} messages={msgs ?? []} action={sendMessage.bind(null, projectId, null)} /></>;
+    <ChatDock projectId={projectId} messages={msgs ?? []} action={sendMessage.bind(null, projectId, null)} drafted={drafted} canDraft={me.role === "owner" || me.role === "engineer"} /></>;
 }

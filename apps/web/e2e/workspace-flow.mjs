@@ -199,8 +199,8 @@ try {
   await page.getByRole("button", { name: "Send" }).click();
   const card = page.getByTestId("plan-change").last();
   await card.waitFor();
-  assert.match(await card.innerText(), new RegExp(`Proposed plan change: Add a task: "Drop test of the enclosure", after ${powerTask.key}`));
-  await card.getByRole("button", { name: "Draft this plan change" }).click();
+  assert.match(await card.innerText(), /Proposed plan update[\s\S]*Add "Drop test of the enclosure"/);
+  await card.getByRole("button", { name: "✓ Yes, update the plan" }).click();
   await page.getByText(/Draft plan v\d+ made from the chat/).waitFor();
   const { data: plans } = await admin.from("plans").select("id, version, status, generator").eq("project_id", project.id).order("version");
   const draft = plans.at(-1);
@@ -211,9 +211,9 @@ try {
   assert.equal(dep.depends_on_task_id, newTasks[0].id);
   assert.equal((await admin.from("plans").select("status").eq("id", powerTask.plan_id).single()).data.status, "approved", "the running plan is unchanged");
   await page.goto(`${BASE}/projects/${project.id}/workspace`);
-  await page.getByTestId("plan-change").last().getByRole("link", { name: "Drafted as a plan version" }).waitFor();
+  await page.getByTestId("plan-change").last().getByRole("link", { name: /Drafted as a new plan version/ }).waitFor();
   await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
-  assert.match(await cpage.getByTestId("plan-change").last().innerText(), /The team can draft it/);
+  assert.match(await cpage.getByTestId("plan-change").last().innerText(), /The project owner or an engineer decides/);
   assert.equal(await cpage.getByTestId("plan-change").last().getByRole("button").count(), 0, "clients cannot draft plan changes");
   await shot(page, "plan-change-drafted");
   console.log("✓ a plan change from the chat became a draft plan version; the approved plan is unchanged");

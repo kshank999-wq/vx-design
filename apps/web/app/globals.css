@@ -764,3 +764,9 @@ main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(
 .live-guided { color: var(--ok); }
 @media (max-width: 1300px) { main.run-page { grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); } main.run-page > .runs-side { grid-column: 1 / -1; position: static; max-height: none; } }
 @media (max-width: 900px) { main.run-page { grid-template-columns: 1fr; } .run-chat-col { position: static; max-height: none; order: 2; } }
+
+/* The agent's proposed plan update under its message: differences, changes, and the decision. */
+.plan-change-card { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--warn-bg); border: 1px solid #f5d08a; font-size: 13px; }
+.plan-change-card ul { margin: 4px 0 8px 18px; padding: 0; }
+.upcoming { margin: 8px 0; }
+.upcoming-card { margin: 12px 0; }

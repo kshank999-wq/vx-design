@@ -27,9 +27,12 @@ export async function draftPlanChange(projectId: string, messageId: number) {
   const path = `/projects/${projectId}/workspace`;
   const { supabase } = await requireUser();
   const { data: msg } = await supabase.from("project_messages").select("id, author_kind, data").eq("id", messageId).eq("project_id", projectId).maybeSingle();
-  const parsed = msg?.author_kind === "assistant" ? PlanChange.safeParse((msg.data as { suggested_plan_change?: unknown } | null)?.suggested_plan_change) : null;
+  const md = (msg?.data ?? null) as { suggested_plan_change?: unknown; more_plan_changes?: unknown[] } | null;
+  const parsed = msg?.author_kind === "assistant" ? PlanChange.safeParse(md?.suggested_plan_change) : null;
   if (!parsed?.success) fail(path, "That message has no plan change to draft.");
   const change = parsed.data;
+  // The same new information can change several tasks: all of them go into the one new draft.
+  const more = (md?.more_plan_changes ?? []).map((c) => PlanChange.safeParse(c)).filter((r) => r.success).map((r) => r.data!);
   const { data: already } = await supabase.from("plans").select("id").eq("project_id", projectId).eq("generator->>chat_message_id", String(messageId)).maybeSingle();
   if (already) redirect(`/projects/${projectId}/plans/${already.id}?notice=${encodeURIComponent("This change was already drafted.")}`);
   const { data: plan } = await supabase.from("plans").select("*").eq("project_id", projectId).in("status", ["draft", "awaiting_approval", "approved"])
@@ -52,10 +55,10 @@ export async function draftPlanChange(projectId: string, messageId: number) {
     requirement_refs: (reqs ?? []).filter((r) => r.task_id === t.id).map((r) => (r.requirements as unknown as { ref_code: string }).ref_code).sort(),
   }));
   let changed: PlanTaskPayload[];
-  try { changed = applyPlanChange(payloadTasks, change); } catch (e) { fail(path, `The change cannot be applied: ${(e as Error).message}.`); }
+  try { changed = [change, ...more].reduce((ts, c) => applyPlanChange(ts, c), payloadTasks); } catch (e) { fail(path, `The change cannot be applied: ${(e as Error).message}.`); }
   const { data: newId, error } = await supabase.rpc("create_plan_version", { p_project_id: projectId, p_payload: {
     summary: plan.summary, supervision_mode: plan.supervision_mode, assumptions: plan.assumptions, deferred: plan.deferred, revised_from_id: plan.id, inputs: plan.inputs ?? [],
-    generator: { ...(plan.generator as object ?? {}), revised_from_version: plan.version, chat_message_id: String(messageId), chat_change: change },
+    generator: { ...(plan.generator as object ?? {}), revised_from_version: plan.version, chat_message_id: String(messageId), chat_change: change, chat_more_changes: more },
     tasks: changed,
   } });
   if (error) fail(path, error);
@@ -97,3 +100,18 @@ export async function approvePassed(projectId: string) {
   redirect(`${path}?notice=${encodeURIComponent(`${approved} result(s) approved; the work continues.` + (held.length ? ` Held for a closer look: ${held.join(", ")}.` : ""))}`);
 }
 
+
+/** "No, carry on": the member keeps the current plan; the runs paused for this message resume. */
+export async function carryOnAfterChat(projectId: string, messageId: number) {
+  const path = `/projects/${projectId}/workspace`;
+  const { supabase } = await requireUser();
+  const { data: msg } = await supabase.from("project_messages").select("data").eq("id", messageId).eq("project_id", projectId).maybeSingle();
+  const runs = ((msg?.data as { paused_runs?: string[] } | null)?.paused_runs ?? []);
+  let resumed = 0;
+  for (const id of runs) {
+    const { error } = await supabase.rpc("control_run", { p_run_id: id, p_action: "resume" });
+    if (!error) resumed++;
+  }
+  revalidatePath(path);
+  redirect(`${path}?notice=${encodeURIComponent(resumed ? "Carrying on with the current plan: the work has resumed." : "Nothing was paused for this message.")}`);
+}

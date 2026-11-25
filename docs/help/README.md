@@ -83,3 +83,15 @@ next attempt follows it, and the step shows **Following your guidance** while it
 Under each step being worked on, **What it is doing** says what the step was asked to produce, and **Following your
 guidance** shows the latest guidance it is using. If either looks wrong (for example a frame material you changed),
 say so in the chat with that step selected, or press **Pause**.
+
+### Pausing and giving new orders
+**⏸ Pause** and **▶ Resume** are next to the run's status at the top of the run page. While a run is paused (or stopped),
+the panel still says what it was doing and what it carries on with next, with each step's brief.
+
+To give new orders, write them in the chat. When your message carries new information or a decision (for example "the frame
+is injection molded now, not aluminium"), the agent:
+1. pauses the work, so nothing more is built on the old plan;
+2. compares it with every step's brief, the requirements, the concepts and the mock-ups, and lists the **differences found**;
+3. proposes the **updated plan** and asks "Is this correct?".
+Press **Yes, update the plan** to draft the new plan version (review and approve it on the plan page), or **No, carry on** to
+resume as before.

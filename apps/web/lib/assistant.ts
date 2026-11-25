@@ -21,7 +21,7 @@ export interface ProjectContext {
   project: { id: string; name: string; description: string | null };
   requirements: { ref_code: string; status: string; kind: string; text: string }[];
   plan: { version: number; summary: string | null } | null;
-  tasks: { id: string; key: string; title: string; discipline: string; status: string; blocker_reason: string | null; stage: string; plain_summary: string | null }[];
+  tasks: { id: string; key: string; title: string; discipline: string; status: string; blocker_reason: string | null; stage: string; plain_summary: string | null; description?: string | null }[];
   approvals: { task_id: string; reason: string; requested_at: string }[];
   outputs: { id: string; name: string; version: number; status: string; summary: string | null; task_key: string | null; created_at: string }[];
   checks: { task_key: string | null; kind: string; result: string; summary: string }[];
@@ -32,6 +32,8 @@ export interface ProjectContext {
   concepts: {
     rounds: { round_no: number; status: string; direction: string; variants: { name: string; status: string; cmf: string | null }[] }[];
     freeze: { name: string; envelope: { length_mm: number; width_mm: number; height_mm: number }; cmf: string | null; frozen_at: string } | null;
+    /** What the frozen concept looks like, described from its image (shape, materials, finish), when known. */
+    look?: string | null;
   };
   /** Knowledge base hits for the current question (shared library plus this project's own sources). */
   knowledge: KnowledgeHit[];
@@ -59,7 +61,7 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
     .eq("status", "approved").maybeSingle();
   const results = await Promise.all([
     supabase.from("requirements").select("ref_code, status, kind, text").eq("project_id", projectId).neq("status", "rejected").order("ref_code").limit(120),
-    plan ? supabase.from("tasks").select("id, key, title, discipline, status, blocker_reason, stage, plain_summary, created_at").eq("plan_id", plan.id).order("created_at")
+    plan ? supabase.from("tasks").select("id, key, title, discipline, status, blocker_reason, stage, plain_summary, description, created_at").eq("plan_id", plan.id).order("created_at")
          : Promise.resolve({ data: [] as never[] }),
     supabase.from("approvals").select("task_id, reason, requested_at").eq("project_id", projectId).eq("status", "pending")
       .not("task_id", "is", null).order("requested_at"),
@@ -72,11 +74,12 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
     supabase.from("concept_rounds").select("round_no, status, direction, concept_variants!concept_variants_round_id_fkey(name, status, cmf, ordinal)").eq("project_id", projectId)
       .order("round_no", { ascending: false }).limit(10),
     supabase.from("current_design_freeze").select("envelope, cmf, frozen_at, concept_variants(name)").eq("project_id", projectId).maybeSingle(),
+    supabase.from("design_looks").select("description, created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   // A failed query must not read as "nothing to show": the checklist and the assistant would both mislead.
   const failed = results.find((r) => "error" in r && r.error);
   if (failed && "error" in failed) throw new Error(`Could not load the project: ${failed.error!.message}`);
-  const [{ data: reqs }, { data: tasks }, { data: approvals }, { data: outputs }, { data: checks }, { data: messages }, { data: standards }, { data: rounds }, { data: freeze }] = results;
+  const [{ data: reqs }, { data: tasks }, { data: approvals }, { data: outputs }, { data: checks }, { data: messages }, { data: standards }, { data: rounds }, { data: freeze }, { data: look }] = results;
   return {
     project,
     requirements: reqs ?? [],
@@ -101,6 +104,7 @@ export async function loadContext(supabase: Supabase, projectId: string): Promis
       freeze: freeze ? { name: (freeze.concept_variants as unknown as { name: string }).name,
                          envelope: freeze.envelope as { length_mm: number; width_mm: number; height_mm: number },
                          cmf: (freeze.cmf as { summary?: string } | null)?.summary ?? null, frozen_at: freeze.frozen_at } : null,
+      look: (look as { description?: string } | null)?.description ?? null,
     },
     knowledge: [],
   };
@@ -114,6 +118,12 @@ export const AssistantAnswer = z.object({
   citations: z.array(z.string()).describe("Refs (K1, K2, ...) of the KNOWLEDGE entries the answer relies on. Empty if none."),
   suggested_plan_change: PlanChange.nullable()
     .describe("If the member asks to add, change or remove a piece of work in the plan, that one change for the team to draft; else null."),
+  more_plan_changes: z.array(PlanChange)
+    .describe("Further changes to other tasks that the same new information needs (the plan is updated with all of them together). Empty if none."),
+  new_information: z.boolean()
+    .describe("True when the member's message carries new information or a decision that changes what the plan, its task briefs, the requirements or the concept say (not for questions)."),
+  discrepancies: z.array(z.string())
+    .describe("Where the plan's task briefs or requirements disagree with the member's new information, the concept look or the mock-ups, one short line each naming the task or requirement. Empty if none."),
 });
 export type AssistantAnswer = z.infer<typeof AssistantAnswer>;
 
@@ -128,7 +138,12 @@ You cannot change the project. Approvals are made with the Approve / Return butt
 If the member asks for a change in what the product must do, restate it in suggested_requirement_change: the engineering team
 reviews it before it becomes a requirement. If the member asks to add, change or remove a piece of work (a task) in the plan,
 describe that one change in suggested_plan_change, using task keys from TASKS: the team turns it into a new draft plan version,
-reviewed and approved like any plan, so say that it is a proposal, not done. Put the ids of outputs worth opening in references; only ids from OUTPUTS.
+reviewed and approved like any plan, so say that it is a proposal, not done.
+When the member gives new information or a decision (new_information = true): compare it with every task brief in TASKS, the
+REQUIREMENTS and the CONCEPTS look, and list each disagreement in discrepancies (also where a brief disagrees with the concept
+look or mock-ups even if the member did not mention it). Put every task that must change in suggested_plan_change and
+more_plan_changes (the full brief, rewritten, in description). The work is paused while the member decides: end the answer with
+the updated plan in plain words and ask "Is this correct?" so they can confirm before anything continues. Put the ids of outputs worth opening in references; only ids from OUTPUTS.
 For standards, regulations and component facts, rely on KNOWLEDGE and STANDARDS FOR THIS PROJECT, and list the K refs you used
 in citations. Say when an edition is unconfirmed, when a source is unverified, and when only the reference is held (no text):
 then point to the official source rather than describing its contents from memory. A standard in the registry is not
@@ -157,7 +172,8 @@ export function contextText(ctx: ProjectContext): string {
   for (const r of ctx.requirements) lines.push(`- ${r.ref_code} [${r.kind}, ${r.status}] ${r.text.slice(0, 300)}`);
   lines.push(ctx.plan ? `\nAPPROVED PLAN v${ctx.plan.version}: ${ctx.plan.summary ?? ""}` : "\nAPPROVED PLAN: none yet");
   lines.push("TASKS (in plan order):");
-  for (const t of ctx.tasks) lines.push(`- ${t.key} "${t.title}" [${t.discipline}] status=${t.status}${t.blocker_reason ? ` blocker: ${t.blocker_reason}` : ""}`);
+  for (const t of ctx.tasks) lines.push(`- ${t.key} "${t.title}" [${t.discipline}] status=${t.status}${t.blocker_reason ? ` blocker: ${t.blocker_reason}` : ""}` +
+    (t.description && t.status !== "complete" ? `\n    brief: ${t.description.replace(/\s+/g, " ").slice(0, 400)}` : ""));
   lines.push("\nWAITING FOR APPROVAL:");
   for (const a of ctx.approvals) lines.push(`- ${taskKey.get(a.task_id) ?? a.task_id}: ${a.reason}`);
   if (!ctx.approvals.length) lines.push("- nothing");
@@ -166,6 +182,7 @@ export function contextText(ctx: ProjectContext): string {
   lines.push("\nCHECKS (newest first):");
   for (const c of ctx.checks.slice(0, 30)) lines.push(`- ${c.task_key ?? "?"} ${c.kind}: ${c.result} — ${c.summary}`);
   lines.push("\nCONCEPTS (generated images for choosing a look; concept, not CAD):");
+  if (ctx.concepts.look) lines.push(`- The frozen look, as described from its image: ${ctx.concepts.look.slice(0, 1200)}`);
   const f = ctx.concepts.freeze;
   lines.push(f ? `- DESIGN FREEZE: "${f.name}", envelope ${f.envelope.length_mm} x ${f.envelope.width_mm} x ${f.envelope.height_mm} mm${f.cmf ? `, ${f.cmf}` : ""}`
                : "- no design freeze yet");
@@ -214,7 +231,8 @@ export function offlineAnswer(ctx: ProjectContext, question: string): AssistantA
   if (change) parts.unshift(`Proposed plan change for the team: ${change.action === "add_task" ? `add a task "${change.title}"` : `remove ${change.task_key} ("${change.title}")`}. `
     + "It becomes a new draft plan version only when the team drafts it, and is approved like any plan.");
   return { answer: parts.join("\n\n"), references: latest.map((o) => o.id), suggested_requirement_change: null,
-           citations: refs.map((_, i) => `K${i + 1}`), suggested_plan_change: change };
+           citations: refs.map((_, i) => `K${i + 1}`), suggested_plan_change: change, more_plan_changes: [],
+           new_information: !!change, discrepancies: [] };
 }
 
 /**
@@ -266,7 +284,9 @@ export async function answer(ctx: ProjectContext, question: string, onText?: (de
   const known = new Set(ctx.outputs.map((o) => o.id));
   const keys = new Set(ctx.tasks.map((t) => t.key));
   const change = output.suggested_plan_change;
+  const okChange = (c: PlanChange) => (c.action === "add_task" ? !c.after_key || keys.has(c.after_key) : keys.has(c.task_key ?? ""));
   return { ...output, references: output.references.filter((r) => known.has(r)).slice(0, 6),
+           more_plan_changes: (output.more_plan_changes ?? []).filter(okChange),
            // A change naming a task that is not in the plan is dropped rather than shown as actionable.
            suggested_plan_change: change && (change.action === "add_task" ? !change.after_key || keys.has(change.after_key) : keys.has(change.task_key ?? "")) ? change : null,
            citations: resolveCitations(ctx, output.citations), label: usage.model, offline: false };

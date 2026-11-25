@@ -8,13 +8,14 @@ import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
 import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
-import { approvePassed, decideFromWorkspace, draftPlanChange, sendMessage } from "./actions";
+import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
+import { approvePassed, decideFromWorkspace, sendMessage } from "./actions";
 import { PlainSummary } from "@/components/PlainSummary";
 import { ReadAloud } from "@/components/VoiceTools";
 import { ChatForm } from "@/components/ChatForm";
 import { CostHint } from "@/components/CostHint";
 import { costHistory, estimate } from "@/lib/cost-estimate";
-import { describePlanChange, type PlanChange } from "@vx/planning";
+import { type PlanChange } from "@vx/planning";
 
 export const maxDuration = 120;
 
@@ -157,13 +158,7 @@ export default async function WorkspacePage({ params, searchParams }: {
                 {d.suggested_requirement_change && (
                   <div className="small warn-text">Suggested requirement change, for the team to review: {d.suggested_requirement_change}</div>
                 )}
-                {d.suggested_plan_change && (
-                  <div className="small warn-text" data-testid="plan-change">Proposed plan change: {describePlanChange(d.suggested_plan_change)}.
-                    {drafted.get(String(m.id)) ? <> <Link href={`/projects/${projectId}/plans/${drafted.get(String(m.id))}`}>Drafted as a plan version</Link>.</>
-                      : canDraft ? <form action={draftPlanChange.bind(null, projectId, m.id)} className="inline">{" "}<SubmitButton variant="secondary" pendingText="Drafting…">Draft this plan change</SubmitButton></form>
-                      : " The team can draft it as a new plan version."}
-                  </div>
-                )}
+                {m.author_kind === "assistant" && <PlanChangeCard projectId={projectId} messageId={m.id} data={d as ChangeData} draftedPlanId={drafted.get(String(m.id)) ?? null} canDraft={!!canDraft} />}
                 {!!d.references?.length && (
                   <div className="small">{d.references.filter((r) => outputName.has(r)).map((r) => (
                     <Link key={r} href={href(r)} className="ref">{outputName.get(r)!.split("/").pop()}</Link>
