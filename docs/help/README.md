@@ -148,3 +148,24 @@ the rest in place.
 ## Your mock-up is the concept
 A mock-up added on Inputs is used as the concept: the plan and the casing are checked against it. To record it as the
 decided look, open Concepts and press **Freeze REF-n as the concept**. AI concept variations are optional.
+
+## The design viewer (Workspace)
+The middle of the Workspace is a viewer with tabs, like a CAD tool:
+- **Files**: everything the steps made, grouped by step;
+- **Schematic**: each board's circuit drawing (zoom with + and −, drag to move);
+- **Layout**: each routed board from the top and the bottom;
+- **3D view**: each board with its parts, plus the **casing put together** (see-through lid, so you can see how the screen,
+  the boards and the parts fit) and the **casing laid open**;
+- **Concepts**: your mock-up and any concept rounds.
+Pick the board with the buttons under the tabs. Work in progress shows too, labelled "work in progress, not checked yet",
+so you can watch a board or the casing take shape; "accepted" means its checks passed and it was approved.
+
+## Badges and alerts
+The project menu shows what needs you: **plan vN: submit / approve** on Overview, **N plan updates** on Workspace,
+**running / paused / stopped / N to approve / N problems** on Runs, and the number of open questions on Questions.
+When something new comes up while you are on the site (a run stops, a result waits for approval, a new question), a note
+appears in the bottom-right corner. Press **🔔 Turn on alerts** once to also get desktop notifications.
+
+## Out-of-date plan drafts
+A draft made before a newer plan was approved is marked **Out of date: do not approve this draft**, because approving it
+would undo the newer plan's changes. Press **Discard this draft** to remove it. The Overview shows the **plan in use**.

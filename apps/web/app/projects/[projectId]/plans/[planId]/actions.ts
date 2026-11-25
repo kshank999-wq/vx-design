@@ -53,6 +53,16 @@ export async function submitPlan(projectId: string, planId: string) {
   revalidatePath(path);
 }
 
+/** Removes a draft nobody will approve (for example one made before a newer plan was approved). */
+export async function discardPlan(projectId: string, planId: string) {
+  const path = `/projects/${projectId}/plans/${planId}`;
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("discard_plan_draft", { p_plan: planId });
+  if (error) fail(path, error);
+  revalidatePath(`/projects/${projectId}`, "layout");
+  redirect(`/projects/${projectId}?tab=plans&notice=${encodeURIComponent("The out-of-date draft was discarded.")}`);
+}
+
 export async function decidePlan(projectId: string, planId: string, approve: boolean, form: FormData) {
   const path = `/projects/${projectId}/plans/${planId}`;
   const { supabase } = await requireUser();

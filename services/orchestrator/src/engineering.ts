@@ -275,7 +275,7 @@ export interface EnclosureResult {
   missing_models?: string[];
   mass_g?: Record<string, number>;
   board?: { parts_checked: string[]; parts: number };
-  files?: Partial<Record<"base_step" | "lid_step" | "base_stl" | "lid_stl" | "assembly_step" | "exploded_glb" | "base_top_svg" |
+  files?: Partial<Record<"base_step" | "lid_step" | "base_stl" | "lid_stl" | "assembly_step" | "exploded_glb" | "assembled_glb" | "base_top_svg" |
                          "base_front_svg" | "lid_top_svg" | "lid_front_svg" | "report", string>>;
 }
 

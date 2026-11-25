@@ -132,7 +132,10 @@ try {
   await shot(cpage, "client-answers");
   await cpage.goto(`${BASE}/projects/${project.id}/workspace`);
   console.log("✓ plain summary on the approval, and the client answered a question");
-  assert.match(await cpage.getByTestId("overview").innerText(), /0 of 1 steps done · 1 waiting for approval/);
+  assert.match(await cpage.getByTestId("next-steps").innerText(), /waiting for your approval/);
+  // The design viewer: tabs like a CAD tool, with the files the steps made.
+  await cpage.getByTestId("design-viewer").getByRole("link", { name: "Files", exact: true }).click();
+  await cpage.getByTestId("viewer-files").waitFor();
   await shot(cpage, "client-workspace");
   console.log("✓ client joined through the invitation and sees the checklist with the approval stop");
 
@@ -181,7 +184,7 @@ try {
   assert.equal((await task()).status, "complete");
   const { data: versions } = await admin.from("artifact_versions").select("status").eq("produced_by_task_id", (await task()).id);
   assert.deepEqual(versions.map((v) => v.status), ["committed"]);
-  assert.match(await cpage.getByTestId("overview").innerText(), /1 of 1 steps done · 0 waiting for approval/);
+  assert.equal(await cpage.getByTestId("next-steps").count(), 0, "nothing left to do");
   assert.match(await cpage.getByTestId("checklist").getByTestId("plain-summary").textContent(), /is finished[\s\S]*See the full technical explanation/);
   await shot(cpage, "client-approved");
   const { data: audit } = await admin.from("audit_events").select("event_type, actor_id").eq("project_id", project.id).eq("event_type", "task.approved");

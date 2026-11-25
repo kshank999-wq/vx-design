@@ -116,7 +116,14 @@ export default async function ProjectPage({ params, searchParams }: {
       <div className="tiles overview-tiles" data-testid="overview-tiles">
         <Link className="tile" href={`/projects/${projectId}?tab=documents`}><strong>{(docs ?? []).length}</strong> specification document(s)<span className="muted small">{(docs ?? []).filter((d) => d.extraction_status === "done").length} extracted</span></Link>
         <Link className="tile" href={`/projects/${projectId}?tab=requirements`}><strong>{counts.total - counts.rejected}</strong> requirement(s)<span className="muted small">{counts.confirmed} confirmed · {counts.ambiguous} ambiguous</span></Link>
-        <Link className="tile" href={latestPlan ? `/projects/${projectId}/plans/${latestPlan.id}` : `/projects/${projectId}?tab=plans`}><strong>{latestPlan ? `v${latestPlan.version}` : "—"}</strong> latest plan<span className="muted small">{latestPlan ? STATUS_LABEL[latestPlan.status] ?? latestPlan.status : "not generated yet"}</span></Link>
+        {(() => {
+          // The plan the work runs on, not merely the newest version (a newer draft may be out of date).
+          const inUse = (plans ?? []).find((p) => p.status === "approved");
+          const shown = inUse ?? latestPlan;
+          const newer = inUse ? (plans ?? []).filter((p) => p.version > inUse.version && ["draft", "awaiting_approval"].includes(p.status)) : [];
+          return <Link className="tile" href={shown ? `/projects/${projectId}/plans/${shown.id}` : `/projects/${projectId}?tab=plans`}><strong>{shown ? `v${shown.version}` : "—"}</strong> {inUse ? "plan in use" : "latest plan"}
+            <span className="muted small">{shown ? STATUS_LABEL[shown.status] ?? shown.status : "not generated yet"}{newer.length ? ` · newer draft v${newer.map((p) => p.version).join(", v")} (see Plans)` : ""}</span></Link>;
+        })()}
         <Link className="tile" href={`/projects/${projectId}?tab=plans`}><strong>{(runs ?? []).length}</strong> run(s)<span className="muted small">{(runs ?? [])[0] ? `last: ${(runs ?? [])[0]!.status}` : "none yet"}</span></Link>
       </div>
       <p className="card small" data-testid="inputs-link"><Link href={`/projects/${projectId}/inputs`} className="btn btn-primary">Project inputs</Link>{" "}

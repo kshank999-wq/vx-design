@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { estimateProgress, typicalSeconds } from "@/lib/step-progress";
+import { hasProposal, proposalStates } from "@/lib/plan-proposals";
 
 /**
  * What is happening in a project right now, for the live strip under the project menu: the active run (or none),
@@ -21,9 +22,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     supabase.from("executions").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("status", "running"),
     run ? supabase.from("tasks").select("status, blocker_reason").eq("plan_id", run.plan_id).is("deferred_at", null).in("status", ["failed", "blocked"]) : Promise.resolve({ data: [] as { status: string; blocker_reason: string | null }[] }),
   ]);
-  const badges = { active_runs: activeIds.length, running: runningSteps ?? 0,
+  const badges: Record<string, unknown> & { active_runs: number } = { active_runs: activeIds.length, running: runningSteps ?? 0,
     paused_runs: (runs ?? []).filter((r) => r.status === "paused").length,
     problems: (problemRows ?? []).filter((t) => t.status === "failed" || /^interrupted /.test(t.blocker_reason ?? "")).length };
+  // For the other menu items: open questions, plan updates the agent proposed that need a decision, and a plan
+  // version that needs submitting or approving (drafts made before the approved plan are out of date and left out).
+  const [{ data: plans }, { data: msgs }] = await Promise.all([
+    supabase.from("plans").select("id, version, status, created_at, approved_at").eq("project_id", projectId).order("version", { ascending: false }).limit(20),
+    supabase.from("project_messages").select("id, author_kind, data, created_at").eq("project_id", projectId).eq("author_kind", "assistant").order("id", { ascending: false }).limit(150),
+  ]);
+  const baseline = (plans ?? []).find((p) => p.status === "approved");
+  const pending = (plans ?? []).find((p) => ["draft", "awaiting_approval"].includes(p.status)
+    && !(baseline?.approved_at && new Date(baseline.approved_at) > new Date(p.created_at)) && (!baseline || p.version > baseline.version));
+  const states = await proposalStates(supabase, projectId, (msgs ?? []).filter((m) => hasProposal(m.data)));
+  Object.assign(badges, {
+    questions: questions ?? 0,
+    proposals: Object.values(states).filter((x) => x.state === "open").length,
+    plan: pending ? { id: pending.id, version: pending.version, state: pending.status === "draft" ? "submit" : "approve" } : null,
+    stopped: run && ["stopped", "failed"].includes(run.status) ? { id: run.id, reason: run.stop_reason } : null,
+  });
   if (!run) return NextResponse.json({ run: null, questions: questions ?? 0, badges });
   const [{ data: execs }, { data: waiting }, { data: costs }] = await Promise.all([
     supabase.from("executions").select("id, task_id, started_at, tasks(key, title, discipline)").eq("run_id", run.id).eq("status", "running"),

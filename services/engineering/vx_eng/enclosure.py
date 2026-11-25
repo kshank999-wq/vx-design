@@ -666,16 +666,31 @@ def build_enclosure(project_dir: Path, spec_json: dict[str, Any], out: Path) -> 
         asm.add(solid, name=ref, color=cq.Color(0.2, 0.2, 0.2, 1))
     asm.export(str(out / "enclosure-assembly.step"))
     files["assembly_step"] = "enclosure-assembly.step"
+    def body_color(ref: str):
+        if ref == "DISPLAY":
+            return cq.Color(0.05, 0.08, 0.16, 1)          # the screen: dark glass
+        if ref.startswith("board:"):
+            return cq.Color(0.12, 0.5, 0.25, 1)           # the other boards
+        return cq.Color(0.15, 0.15, 0.15, 1)
     # Lid set beside the base (not above it), so the board, standoffs and the lid's openings are all visible.
     exploded = cq.Assembly(name="exploded")
     shift = built["outer_bb"].xlen + 10.0
     exploded.add(built["base"], name="base", color=cq.Color(0.55, 0.6, 0.66, 1))
     exploded.add(board, name="board", color=cq.Color(0.1, 0.45, 0.2, 1))
     for ref, solid in comps.items():
-        exploded.add(solid, name=ref, color=cq.Color(0.15, 0.15, 0.15, 1))
+        exploded.add(solid, name=ref, color=body_color(ref))
     exploded.add(built["lid"].translate(cq.Vector(shift, 0, 0)), name="lid", color=cq.Color(0.62, 0.68, 0.75, 1))
     exploded.export(str(out / "enclosure-exploded.glb"))
     files["exploded_glb"] = "enclosure-exploded.glb"
+    # Put together: the lid in place and see-through, so how the screen, boards and casing fit shows at a glance.
+    together = cq.Assembly(name="assembled")
+    together.add(built["base"], name="base", color=cq.Color(0.55, 0.6, 0.66, 1))
+    together.add(board, name="board", color=cq.Color(0.1, 0.45, 0.2, 1))
+    for ref, solid in comps.items():
+        together.add(solid, name=ref, color=body_color(ref))
+    together.add(built["lid"], name="lid", color=cq.Color(0.62, 0.68, 0.75, 0.35))
+    together.export(str(out / "enclosure-assembled.glb"))
+    files["assembled_glb"] = "enclosure-assembled.glb"
 
     proc = PROCESSES[spec.process]
     ob = built["outer_bb"]

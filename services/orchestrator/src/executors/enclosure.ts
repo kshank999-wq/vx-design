@@ -19,6 +19,7 @@ import { briefExecutor } from "./brief.ts";
 type FileKey = keyof NonNullable<EnclosureResult["files"]>;
 const FILES: { key: FileKey; suffix: string; kind: string; type: string }[] = [
   { key: "exploded_glb", suffix: "enclosure-3d", kind: "enclosure", type: "model/gltf-binary" },
+  { key: "assembled_glb", suffix: "enclosure-assembled-3d", kind: "enclosure", type: "model/gltf-binary" },
   { key: "base_step", suffix: "base-step", kind: "step", type: "model/step" },
   { key: "lid_step", suffix: "lid-step", kind: "step", type: "model/step" },
   { key: "base_stl", suffix: "base-stl", kind: "stl", type: "model/stl" },

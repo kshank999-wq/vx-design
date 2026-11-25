@@ -10,7 +10,8 @@ import { loadContext, type Citation } from "@/lib/assistant";
 import { requireUser } from "@/lib/auth";
 import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
 import { PlanProposals } from "@/components/PlanProposals";
-import { ReadMore } from "@/components/ReadMore";
+import { DesignViewer } from "@/components/DesignViewer";
+import { ScrollToBottom } from "@/components/ScrollToBottom";
 import { proposalStates } from "@/lib/plan-proposals";
 import { approvePassed, decideFromWorkspace, sendMessage } from "./actions";
 import { PlainSummary } from "@/components/PlainSummary";
@@ -38,10 +39,10 @@ interface MessageData {
 
 export default async function WorkspacePage({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ view?: string; error?: string; notice?: string }>;
+  searchParams: Promise<{ view?: string; tab?: string; board?: string; error?: string; notice?: string }>;
 }) {
   const { projectId } = await params;
-  const { view, error, notice } = await searchParams;
+  const { view, tab, board: boardParam, error, notice } = await searchParams;
   const { supabase, userId } = await requireUser();
   const ctx = await loadContext(supabase, projectId);
   if (!ctx) notFound();
@@ -131,7 +132,7 @@ export default async function WorkspacePage({ params, searchParams }: {
           const runActive = !!lastRun && ["pending", "running", "paused"].includes(lastRun.status);
           const steps: { key: string; label: string; state: "done" | "now" | "you" | "todo"; detail: string; href: string }[] = [
             { key: "inputs", label: "Inputs", state: reqs.length ? (open ? "you" : "done") : "now", detail: reqs.length ? (open ? `${open} requirement(s) to confirm` : `${reqs.length} requirements`) : "add specifications", href: `${P}/inputs` },
-            { key: "concept", label: "Concept", state: c.freeze ? "done" : "you", detail: c.freeze ? `frozen: ${c.freeze.name}` : "freeze the mock-up or a concept", href: href("concepts") },
+            { key: "concept", label: "Concept", state: c.freeze ? "done" : "you", detail: c.freeze ? `frozen: ${c.freeze.name}` : (mockups ?? []).length ? `your mock-up REF-${mockups![0]!.ref_no} is the concept: freeze it` : "freeze the mock-up or a concept", href: `/projects/${projectId}/workspace?tab=concepts` },
             { key: "plan", label: "Plan", state: ctx.plan ? "done" : latest ? "you" : "todo", detail: ctx.plan ? `v${ctx.plan.version} approved` : latest ? `v${latest.version} ${latest.status.replace("_", " ")}: approve it` : "not made yet", href: latest ? `${P}/plans/${latest.id}` : `${P}?tab=plans` },
             { key: "design", label: "Design run", state: !ctx.tasks.length ? "todo" : doneN === ctx.tasks.length ? "done" : runActive ? "now" : "you", detail: ctx.tasks.length ? `${doneN} of ${ctx.tasks.length} done${runActive ? ", running" : lastRun ? `, ${lastRun.status}` : ", not started"}` : "after the plan", href: lastRun ? `${P}/runs/${lastRun.id}` : `${P}/runs` },
             { key: "approvals", label: "Your approvals", state: waitingN || openQs.length ? "you" : "done", detail: [waitingN ? `${waitingN} waiting` : "", openQs.length ? `${openQs.length} question(s)` : ""].filter(Boolean).join(", ") || "none waiting", href: openQs.length && !waitingN ? `${P}/questions` : "#approvals" },
@@ -181,79 +182,41 @@ export default async function WorkspacePage({ params, searchParams }: {
             );
           })}
           {!messages?.length && <li className="muted small">Ask about progress, a report, or what needs your approval.</li>}
+          <ScrollToBottom count={(messages ?? []).length} />
         </ol>
         <ChatForm projectId={projectId} action={sendMessage.bind(null, projectId, selected ? selected.id : null)} />
         <CostHint e={chatCost} what="each question" />
       </section>
 
-      <section className="ws-view card panel" aria-label="Results">
+      <section className="ws-view card panel" aria-label="Design viewer">
         <h2 className="panel-head panel-head-blue">Design viewer</h2>
-        {showConcepts ? (
+        {role !== "client" && <PlanProposals supabase={supabase} projectId={projectId} canDraft={!!canDraft} />}
+        {selected ? (
           <>
             <div className="row spread">
-              <Link href={href()}>← Overview</Link>
-              <Link href={`/projects/${projectId}/concepts`} target="_blank">Open in a new tab</Link>
-            </div>
-            <iframe className="ws-frame" src={`/projects/${projectId}/concepts?embed=1`} title="Concepts" data-testid="concepts-viewer" />
-          </>
-        ) : selected ? (
-          <>
-            <div className="row spread">
-              <Link href={href()}>← Overview</Link>
+              <Link href={href()}>← Back to the viewer</Link>
               <Link href={`/projects/${projectId}/artifacts/${selected.id}`} target="_blank">Open in a new tab</Link>
             </div>
             <iframe className="ws-frame" src={`/projects/${projectId}/artifacts/${selected.id}?embed=1`} title={selected.name} data-testid="viewer" />
           </>
         ) : (
-          <div data-testid="overview">
-            {role !== "client" && <PlanProposals supabase={supabase} projectId={projectId} canDraft={!!canDraft} />}
-            <h3>Overview</h3>
-            {ctx.plan ? (
-              <>
-                <ReadMore text={ctx.plan.summary ?? ""} lines={3} />
-                <div className="progress" aria-label={`${done} of ${ctx.tasks.length} tasks done`}>
-                  <span style={{ width: `${ctx.tasks.length ? (100 * done) / ctx.tasks.length : 0}%` }} />
-                </div>
-                <p className="small muted">{done} of {ctx.tasks.length} steps done · {ctx.approvals.length} waiting for approval · {ctx.requirements.length} requirements</p>
-              </>
-            ) : <p className="muted">The team is still turning the specification into a plan. Results will appear here as work completes.</p>}
-            {(() => {
-              // The next steps of the plan, in order: what the run does next.
-              const next = ctx.tasks.filter((t) => ["running", "validating", "ready", "blocked", "failed", "awaiting_approval"].includes(t.status)).slice(0, 6);
-              return next.length > 0 && (<>
-                <h3>Next steps <span className="muted small">(in plan order)</span></h3>
-                <ol className="next-steps small" data-testid="next-steps">{next.map((t) => (
-                  <li key={t.id}><strong>{t.title}</strong> <span className="muted">· {t.status === "running" || t.status === "validating" ? "working now" : t.status === "awaiting_approval" ? "waiting for your approval" : t.status === "failed" ? "could not finish" : t.status === "blocked" ? "waiting on earlier steps" : "up next"}</span></li>))}</ol>
-              </>);
-            })()}
-            <h3>Finished work <span className="muted small">(what each finished step produced; open one to see it)</span></h3>
-            <div className="tiles">
-              <Link href={href("concepts")} className="tile" data-testid="concepts-tile">
-                <strong>Concepts</strong>
-                <span className="small">{c.freeze ? `Design frozen: ${c.freeze.name}`
-                  : (mockups ?? []).length ? <>Yes, your mock-up is the concept: {(mockups ?? []).map((m) => `REF-${m.ref_no} ${m.title ?? m.kind}`).join("; ")}. The plan and the casing are already checked against it. Open this and press "Freeze REF-{(mockups ?? [])[0]!.ref_no} as the concept" to record it as the decided look; AI concept variations are optional.</>
-                  : c.rounds.length ? `${c.rounds.length} round(s); no design freeze yet` : "No concepts yet: add a mock-up on Inputs, or ask for a first round"}</span>
-                <span className={`pill pill-${c.freeze ? "complete" : "awaiting_approval"}`}>{c.freeze ? "frozen" : conceptsBusy ? "generating" : (mockups ?? []).length ? "mock-up: freeze it" : "open"}</span>
-              </Link>
-              {ctx.tasks.filter((t) => mainOutput(t.key)).map((t) => {
-                const o = mainOutput(t.key)!;
-                return (
-                  <Link key={t.id} href={href(o.id)} className="tile">
-                    <strong>{t.title}</strong>
-                    <span className="small"><ReadMore text={t.plain_summary ?? o.summary ?? o.name} lines={6} /></span>
-                    <span className={`pill pill-${o.status === "committed" ? "complete" : "awaiting_approval"}`}>{o.status === "committed" ? "approved" : "for review"}</span>
-                  </Link>
-                );
-              })}
-              {!ctx.outputs.length && <p className="muted small">No engineering results yet.</p>}
-            </div>
-          </div>
+          <DesignViewer supabase={supabase} projectId={projectId} base={`/projects/${projectId}/workspace`}
+            tab={(["files", "schematic", "layout", "3d", "concepts"] as const).find((t) => t === (showConcepts ? "concepts" : tab)) ?? "3d"} board={boardParam} />
         )}
       </section>
 
       <aside className="ws-checklist card panel" aria-label="Checklist" data-testid="checklist">
         <div className="row spread panel-head"><h2>Agent activity</h2>{live && <><AutoRefresh intervalMs={4000} quiet />
           <span className="ws-live" data-testid="ws-live"><span className="live-strip-dot" aria-hidden="true" />{ctx.tasks.some((t) => ["running", "validating"].includes(t.status)) ? "Working" : "Live"}</span></>}</div>
+        {(() => {
+          // The next steps of the plan, in order: what the run does next.
+          const next = ctx.tasks.filter((t) => ["running", "validating", "ready", "failed", "awaiting_approval"].includes(t.status)).slice(0, 5);
+          return next.length > 0 && (<div className="next-steps-box">
+            <h3 className="small">Next steps <span className="muted">(in plan order)</span></h3>
+            <ol className="next-steps small" data-testid="next-steps">{next.map((t) => (
+              <li key={t.id}><strong>{t.title}</strong> <span className="muted">· {t.status === "running" || t.status === "validating" ? "working now" : t.status === "awaiting_approval" ? "waiting for your approval" : t.status === "failed" ? "could not finish" : "up next"}</span></li>))}</ol>
+          </div>);
+        })()}
         {(() => {
           const now = ctx.tasks.filter((t) => ["running", "validating"].includes(t.status));
           const wait = ctx.tasks.filter((t) => t.status === "awaiting_approval");
@@ -337,7 +300,7 @@ export default async function WorkspacePage({ params, searchParams }: {
           <li className={`check check-${conceptStep}`} data-status={conceptStep} data-testid="concept-step">
             <span className="check-icon" aria-hidden>{ICON[conceptStep]}</span>
             <div>
-              <div><Link href={href("concepts")}>Concept and design freeze</Link></div>
+              <div><Link href={`/projects/${projectId}/workspace?tab=concepts`}>Concept and design freeze</Link></div>
               <div className="small muted">{c.freeze ? `Frozen: ${c.freeze.name}` : conceptsBusy ? "Generating concepts" : conceptsReady ? "Approval needed: choose a concept and freeze the design" : "Not started"}</div>
             </div>
           </li>

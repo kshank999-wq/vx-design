@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ProposalState } from "@/lib/plan-proposals";
+import { ScrollToBottom } from "@/components/ScrollToBottom";
 import { useEffect, useState } from "react";
 import { ChatForm } from "@/components/ChatForm";
 import { ReadAloud } from "@/components/VoiceTools";
@@ -38,6 +39,7 @@ export function ChatDock({ projectId, messages, action, proposals = {}, canDraft
                 {m.author_kind === "assistant" && !!m.data && <PlanChangeCard projectId={projectId} messageId={m.id} data={m.data as ChangeData} state={proposals[String(m.id)] ?? null} canDraft={canDraft} />}
               </li>))}
             {!messages.length && <li className="muted small">No messages yet.</li>}
+            <ScrollToBottom count={messages.length} />
           </ol>
           <ChatForm projectId={projectId} action={action} />
         </section>

@@ -99,7 +99,7 @@ try {
   await cpage.getByLabel("Message").fill("What concepts do we have?");
   await cpage.getByRole("button", { name: "Send" }).click();
   await cpage.locator(".msg-assistant").last().getByText(/Concepts are ready to compare \(round 1: Field Brick, Slim Clap, Grip Wedge\)/).waitFor();
-  await cpage.getByTestId("concepts-tile").click();
+  await cpage.getByTestId("design-viewer").getByRole("link", { name: "Concepts", exact: true }).click();
   await cpage.frameLocator("[data-testid=concepts-viewer]").getByTestId("round-1").waitFor();
   assert.equal(await cpage.frameLocator("[data-testid=concepts-viewer]").locator(".topbar").isVisible(), false);
   await shot(cpage, "workspace-concepts");
