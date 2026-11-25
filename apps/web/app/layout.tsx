@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Suspense } from "react";
 import { ScrollKeeper } from "@/components/ScrollKeeper";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ReadAloud } from "@/components/ReadAloud";
 import { TopNav } from "@/components/TopNav";
 import { signOut } from "./login/actions";
 import "./globals.css";
@@ -40,6 +41,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Link href="/projects" className="brand" aria-label="VX Design home"><img src="/logo.png" alt="VX Design" width={291} height={96} /></Link>
           <TopNav links={links} />
           <div className="top-actions">
+            <ReadAloud />
             <ThemeToggle />
             {email && <>
               <span className="top-sep" />

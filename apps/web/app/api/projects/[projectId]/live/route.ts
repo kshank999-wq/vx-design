@@ -22,6 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     run ? supabase.from("tasks").select("status, blocker_reason").eq("plan_id", run.plan_id).is("deferred_at", null).in("status", ["failed", "blocked"]) : Promise.resolve({ data: [] as { status: string; blocker_reason: string | null }[] }),
   ]);
   const badges = { active_runs: activeIds.length, running: runningSteps ?? 0,
+    paused_runs: (runs ?? []).filter((r) => r.status === "paused").length,
     problems: (problemRows ?? []).filter((t) => t.status === "failed" || /^interrupted /.test(t.blocker_reason ?? "")).length };
   if (!run) return NextResponse.json({ run: null, questions: questions ?? 0, badges });
   const [{ data: execs }, { data: waiting }, { data: costs }] = await Promise.all([

@@ -396,7 +396,7 @@ main.setup { max-width: 1340px; }
 .check-stage .check:first-child { border-top: 0; }
 
 /* Project menu (every project page) */
-.project-nav { position: sticky; top: 70px; z-index: 30; display: flex; align-items: center; gap: 2px; padding: 6px 24px; background: color-mix(in srgb, var(--surface) 92%, transparent);
+.project-nav { position: sticky; top: 70px; z-index: 30; display: flex; align-items: center; gap: 2px; padding: 16px 24px 6px; background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .pn-name { font-weight: 780; color: var(--fg); text-decoration: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; }
 .pn-sep { width: 1px; height: 20px; background: var(--line); margin: 0 6px; }
@@ -411,7 +411,7 @@ main.setup { max-width: 1340px; }
 .pn-menu a { padding: 8px 10px; border-radius: 7px; color: var(--fg); text-decoration: none; font-size: 14px; }
 .pn-menu a:hover, .pn-menu a[aria-current="page"] { background: var(--mint); color: var(--accent); }
 body:has(main.embed) .project-nav { display: none; }
-@media (max-width: 760px) { .project-nav { top: 56px; padding: 6px 10px; } .pn-name { display: none; } .pn-sep { display: none; } }
+@media (max-width: 760px) { .project-nav { top: 56px; padding: 15px 10px 6px; } .pn-name { display: none; } .pn-sep { display: none; } }
 .tabs button.tab { background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; font-weight: 650; font-size: 14px; color: var(--muted); cursor: pointer; }
 .tabs button.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .tabs button.tab[aria-selected="true"] .tab-count { background: var(--mint); color: var(--accent); }
@@ -678,7 +678,7 @@ main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(
 
 /* Live badges on the project menu's Runs item: green = steps working now, amber = waiting for you, red = problems. */
 .pn-item { position: relative; }
-.pn-badges { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: inline-flex; gap: 2px; pointer-events: none; }
+.pn-badges { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); display: inline-flex; gap: 2px; pointer-events: none; }
 .pn-badge { min-width: 17px; height: 17px; padding: 0 6px; border-radius: 9px; font-size: 10.5px; line-height: 17px; white-space: nowrap; font-weight: 700; color: #fff; text-align: center;
   box-shadow: 0 0 0 2px var(--surface, #fff); }
 .pn-badge-ok { background: #16a34a; animation: pn-pulse 2s ease-in-out infinite; }
@@ -770,3 +770,11 @@ main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(
 .plan-change-card ul { margin: 4px 0 8px 18px; padding: 0; }
 .upcoming { margin: 8px 0; }
 .upcoming-card { margin: 12px 0; }
+
+/* Read aloud: the player sits under the header's right side; the block being read is highlighted. */
+.read-aloud { position: fixed; top: 64px; right: 16px; z-index: 60; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: var(--surface, #fff); border: 1px solid var(--border, #d0d7e2); border-radius: 10px; padding: 6px 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .12); max-width: calc(100vw - 32px); }
+.read-aloud-label { font-size: 13px; color: var(--muted, #667); margin-right: 4px; }
+.read-aloud-btn svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.reading-now { background: rgba(255, 214, 102, .35); outline: 2px solid rgba(255, 184, 0, .7); outline-offset: 2px; border-radius: 4px; }

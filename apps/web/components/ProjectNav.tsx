@@ -23,7 +23,7 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
   }, []);
   useEffect(() => { for (const d of ref.current?.querySelectorAll("details[open]") ?? []) d.removeAttribute("open"); }, [path]);
   // Live numbers on the Runs item, from the status the live strip fetches every 20 s.
-  const [badges, setBadges] = useState<{ active_runs: number; running: number; problems: number; waiting?: number } | null>(null);
+  const [badges, setBadges] = useState<{ active_runs: number; running: number; problems: number; waiting?: number; paused_runs?: number } | null>(null);
   useEffect(() => {
     const on = (e: Event) => setBadges((e as CustomEvent).detail?.badges ?? null);
     window.addEventListener("vx-live", on);
@@ -37,7 +37,8 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
       {top.map((t) => <Link key={t.href} href={t.href} className="pn-item" aria-current={here(t.href) ? "page" : undefined}>{t.label}
         {t.label === "Runs" && badges && (badges.running > 0 || badges.problems > 0 || (badges.waiting ?? 0) > 0 || badges.active_runs > 0) && (
           <span className="pn-badges" data-testid="runs-badges">
-            {badges.active_runs > 0 && <span className="pn-badge pn-badge-ok" title={`${badges.active_runs} run(s) going, working on ${badges.running} step(s) now`}>{badges.active_runs === 1 ? "running" : `${badges.active_runs} running`}</span>}
+            {badges.active_runs > (badges.paused_runs ?? 0) && <span className="pn-badge pn-badge-ok" title={`${badges.active_runs - (badges.paused_runs ?? 0)} run(s) going, working on ${badges.running} step(s) now`}>{badges.active_runs - (badges.paused_runs ?? 0) === 1 ? "running" : `${badges.active_runs - (badges.paused_runs ?? 0)} running`}</span>}
+            {(badges.paused_runs ?? 0) > 0 && <span className="pn-badge pn-badge-wait" title="A run is paused: open it to resume">{badges.paused_runs === 1 ? "paused" : `${badges.paused_runs} paused`}</span>}
             {(badges.waiting ?? 0) > 0 && <span className="pn-badge pn-badge-wait" title={`${badges.waiting} result(s) waiting for your approval`}>{badges.waiting} to approve</span>}
             {badges.problems > 0 && <span className="pn-badge pn-badge-bad" title={`${badges.problems} step(s) could not finish`}>{badges.problems} problem{badges.problems > 1 ? "s" : ""}</span>}
           </span>)}
