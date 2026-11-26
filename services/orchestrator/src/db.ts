@@ -320,11 +320,20 @@ export class WorkerDb {
   }
 
   /** The everyday-language summary of an execution and the owner questions it raised (new ones only). */
-  async saveDigest(executionId: string, projectId: string, taskId: string, d: { summary: string; questions: { question: string; why: string; recommendation: string; options: string[] }[] }): Promise<void> {
+  async saveDigest(executionId: string, projectId: string, taskId: string, d: { summary: string; questions: { question: string; why: string; recommendation: string; options: string[] }[];
+                   file_requests?: { kind: string; mpn: string | null; manufacturer: string | null; title: string; why: string; where_to_look: string }[] }): Promise<void> {
     const { error } = await this.client.from("executions").update({ plain_summary: d.summary.slice(0, 2000) }).eq("id", executionId);
     if (error) throw new Error(`digest: ${error.message}`);
     const { error: et } = await this.client.from("tasks").update({ plain_summary: d.summary.slice(0, 2000) }).eq("id", taskId);
     if (et) throw new Error(`digest on task: ${et.message}`);
+    // Files the owner can download from a manufacturer's site: a to-do for them (one per part and kind).
+    for (const f of (d.file_requests ?? []).filter((x) => x.title.trim().length >= 3)) {
+      // A request already on the list (same part and kind) is a duplicate-key error: ignored.
+      await this.client.from("owner_file_tasks").insert({
+        project_id: projectId, task_id: taskId, kind: f.kind, mpn: f.mpn?.trim() || null, manufacturer: f.manufacturer?.trim() || null,
+        title: f.title.slice(0, 300), why: f.why.slice(0, 600), where_to_look: f.where_to_look.slice(0, 600),
+      });
+    }
     if (!d.questions.length) return;
     const { data: have } = await this.client.from("project_questions").select("question").eq("project_id", projectId);
     const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

@@ -7,7 +7,7 @@
 import { z } from "zod";
 import type { LanguageModel, Usage } from "./llm/model.ts";
 
-export const DIGEST_PROMPT_VERSION = "digest-v1";
+export const DIGEST_PROMPT_VERSION = "digest-v2";
 export const DIGEST_MODEL = "claude-haiku-5-5";
 
 export const TaskDigest = z.object({
@@ -18,6 +18,14 @@ export const TaskDigest = z.object({
     recommendation: z.string().describe("What VX Design recommends and will assume until answered"),
     options: z.array(z.string()).describe("2-4 short answer choices, the recommendation first"),
   })).max(3).describe("Only real owner decisions raised by this work; engineering details are VX Design's job, not questions. Usually none."),
+  file_requests: z.array(z.object({
+    kind: z.enum(["datasheet", "3d_model", "drawing", "other"]),
+    mpn: z.string().nullable().describe("The part number, exactly as in the parts list, or null for a non-part document"),
+    manufacturer: z.string().nullable(),
+    title: z.string().describe("The to-do in plain words, e.g. 'Get the electrical datasheet for the ELI101-IPHW display from Future Designs'"),
+    why: z.string().describe("One plain sentence: what it lets the team do or check"),
+    where_to_look: z.string().describe("Where the owner will find it: the manufacturer's product page and which section (Downloads, CAD models, Documents)"),
+  })).max(6).default([]).describe("Files this work needed but did not have and the owner can download from a manufacturer's website (datasheets, STEP 3D models, drawings). Not files already listed among the owner's inputs. Usually none."),
 });
 export type TaskDigest = z.infer<typeof TaskDigest>;
 
@@ -31,6 +39,8 @@ export interface DigestInput {
 }
 
 const SYSTEM = `You explain an engineering team's finished work to the product's owner, who is not an engineer. Write as a clear, friendly project lead: plain words, short sentences, no jargon (if a technical term is unavoidable, say what it means in a few words). Say what was done, what it means for the product (what it will do, cost, size, battery, look), and whether the automatic checks passed. Do not list files or check names.
+
+If this work lacked a document or file that a manufacturer publishes (a part's datasheet, its 3D STEP model, a mechanical drawing), and it is not among the owner's inputs listed in the product description, add it to file_requests so the owner can download it: say exactly which part and file, why it helps, and where on the manufacturer's site to find it. Never ask for a file the inputs already list.
 
 Then raise only the questions that are genuinely the owner's to decide (preferences, priorities, budget, markets, features) and that this work brought up; engineering choices are the team's and are never questions. Each needs a recommendation the team will follow until the owner answers. Do not repeat questions already answered. Most tasks raise none.`;
 
@@ -50,5 +60,5 @@ export async function digestTask(i: DigestInput, model: LanguageModel): Promise<
 /** Offline stand-in: the technical summary, labelled, and no questions. */
 export function offlineDigest(prompt: string): TaskDigest {
   const step = /Finished step: (.+?)(?: \([^)]*\))?$/m.exec(prompt)?.[1] ?? "This step";
-  return { summary: `Offline stand-in, not AI: "${step}" is finished and its automatic checks passed.`, questions: [] };
+  return { summary: `Offline stand-in, not AI: "${step}" is finished and its automatic checks passed.`, questions: [], file_requests: [] };
 }

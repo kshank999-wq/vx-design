@@ -835,3 +835,5 @@ main.plan-overview { max-width: 1400px; display: grid; grid-template-columns: mi
 .struck { text-decoration: line-through; opacity: .7; }
 .plan-archive li { padding-left: 10px; }
 @media (max-width: 900px) { main.plan-overview { grid-template-columns: 1fr; } .plan-changes { position: static; max-height: none; } }
+.file-tasks { border-left: 4px solid #16a34a; }
+.file-tasks .list > li { padding: 10px 0; border-top: 1px solid var(--line); }

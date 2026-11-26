@@ -67,7 +67,7 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
         {t.label === "Workspace" && (badges?.proposals ?? 0) > 0 && (
           <span className="pn-badges" data-testid="proposals-badge"><span className="pn-badge pn-badge-wait" title="Plan updates the design agent proposed: decide them at the top of the workspace">{badges!.proposals} plan update{badges!.proposals! > 1 ? "s" : ""}</span></span>)}
         {t.label === "Questions" && (badges?.questions ?? 0) > 0 && (
-          <span className="pn-badges" data-testid="questions-badge"><span className="pn-badge pn-badge-wait" title={`${badges!.questions} open question(s) for you`}>{badges!.questions}</span></span>)}
+          <span className="pn-badges" data-testid="questions-badge"><span className="pn-badge pn-badge-wait" title={`${badges!.questions} question(s) and file to-do(s) for you`}>{badges!.questions}</span></span>)}
         {t.label === "Runs" && badges && (badges.running > 0 || badges.problems > 0 || (badges.waiting ?? 0) > 0 || badges.active_runs > 0 || !!badges.stopped) && (
           <span className="pn-badges" data-testid="runs-badges">
             {badges.active_runs > (badges.paused_runs ?? 0) && <span className="pn-badge pn-badge-ok" title={`${badges.active_runs - (badges.paused_runs ?? 0)} run(s) going, working on ${badges.running} step(s) now`}>{badges.active_runs - (badges.paused_runs ?? 0) === 1 ? "running" : `${badges.active_runs - (badges.paused_runs ?? 0)} running`}</span>}

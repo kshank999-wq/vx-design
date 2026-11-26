@@ -298,7 +298,8 @@ export async function runExecution(exec: ExecutionRow, deps: RunExecutionDeps): 
       digest = await handle.step("digest", async () => {
         const [project, answered] = await Promise.all([db.project(task.project_id), db.answeredQuestions(task.project_id)]);
         const model = deps.offline ? deps.model : new ClaudeModel({ model: DIGEST_MODEL, effort: "low", maxTokens: 4000 });
-        const r = await digestTask({ project: project.name, task: { title: task.title, discipline: task.discipline, description: task.description },
+        // The owner's inputs come with the project, so file requests never ask for a file already given.
+        const r = await digestTask({ project: `${project.name}\n\n${(project.description ?? "").slice(0, 20000)}`, task: { title: task.title, discipline: task.discipline, description: task.description },
           summary: result.summary, checks: result.validations.map((v) => ({ kind: v.kind, result: v.result, summary: v.summary })),
           outputs: handle.textOutputs, answered }, model);
         await handle.chargeModelUsage([r.usage], "task_digest");
