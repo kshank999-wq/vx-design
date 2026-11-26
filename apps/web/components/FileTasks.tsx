@@ -1,47 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { SubmitButton } from "@/components/SubmitButton";
-import { closeFileTask } from "@/app/projects/[projectId]/questions/actions";
 
-const KIND: Record<string, string> = { datasheet: "Datasheet", "3d_model": "3D model (STEP)", drawing: "Drawing", other: "File" };
-const SEARCH: Record<string, string> = { datasheet: "datasheet pdf", "3d_model": "STEP 3D model download", drawing: "mechanical drawing pdf", other: "" };
-
-/**
- * "To do for you": files to download from manufacturers' websites (datasheets, 3D STEP models, drawings), asked for by
- * the design steps or missing for the important parts of the parts list. An item ticks itself off when a matching file is
- * uploaded on Inputs; it can also be marked done or not needed.
- */
-export async function FileTasks({ supabase, projectId, canEdit }: { supabase: SupabaseClient; projectId: string; canEdit: boolean }) {
-  if (canEdit) {
-    await supabase.rpc("refresh_owner_file_tasks", { p_project: projectId });
-    await addFromDesigns(supabase, projectId);
-  }
-  const { data: rows } = await supabase.from("owner_file_tasks").select("id, kind, mpn, manufacturer, title, why, where_to_look, created_at, tasks(title)")
-    .eq("project_id", projectId).eq("status", "open").order("created_at");
-  if (!rows?.length) return null;
-  return (
-    <section className="card file-tasks" id="to-do" data-testid="file-tasks">
-      <h2>To do for you <span className="muted small">({rows.length})</span></h2>
-      <p className="small muted">Files the design work needs that manufacturers publish on their websites. Download each one and upload it on
-        {" "}<a href={`/projects/${projectId}/inputs`}>Inputs</a> (add it to the part). The item ticks itself off when the file is there.</p>
-      <ol className="list">{rows.map((r) => {
-        const q = encodeURIComponent([r.mpn, r.manufacturer, SEARCH[r.kind] ?? ""].filter(Boolean).join(" "));
-        return (
-          <li key={r.id}>
-            <div className="row spread wrap"><strong>{r.title}</strong><span className="pill">{KIND[r.kind] ?? r.kind}</span></div>
-            {r.why && <div className="small">Why: {r.why}</div>}
-            {r.where_to_look && <div className="small muted">Where: {r.where_to_look}</div>}
-            {(r.tasks as unknown as { title: string } | null)?.title && <div className="small muted">Asked by the step "{(r.tasks as unknown as { title: string }).title}"</div>}
-            <div className="row tight wrap" style={{ marginTop: 6 }}>
-              {r.mpn && <a className="btn btn-small" href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noreferrer">Search the web for it ↗</a>}
-              <a className="btn btn-small" href={`/projects/${projectId}/inputs`}>Upload it on Inputs</a>
-              {canEdit && <form action={closeFileTask.bind(null, projectId, r.id, "done")}><SubmitButton variant="secondary">Done</SubmitButton></form>}
-              {canEdit && <form action={closeFileTask.bind(null, projectId, r.id, "not_needed")}><SubmitButton variant="secondary">Not needed</SubmitButton></form>}
-            </div>
-          </li>
-        );
-      })}</ol>
-    </section>
-  );
+/** Brings the to-do list up to date: ticks off items whose file was uploaded, adds the boards' important parts. */
+export async function refreshFileTasks(supabase: SupabaseClient, projectId: string) {
+  await supabase.rpc("refresh_owner_file_tasks", { p_project: projectId });
+  await addFromDesigns(supabase, projectId);
 }
 
 /** Important parts (connectors, chips, modules, crystals, switches, batteries, displays) of each board's newest circuit design. */

@@ -206,10 +206,13 @@ Then press **Approve and start the run**: the work carries on from there.
 The menu is in the order you work: Overview, Inputs, Plan, Questions, Runs, Workspace, AI usage.
 
 ## To do for you (files to download)
-Until the parts-supplier connections work, the design agent gives you a **To do for you** list at the top of **Questions**
-(its count is on the Questions badge): datasheets, 3D models (STEP files) and drawings that manufacturers publish on
+Until the parts-supplier connections work, the design agent gives you a **To do** list (its own menu item, after
+Questions, with its count on the badge): datasheets, 3D models (STEP files) and drawings that manufacturers publish on
 their websites. Each item says which part, why it helps, and where to look, with a **Search the web for it** button.
 Download the file, upload it on **Inputs** and add it to the part: the item ticks itself off. Items come from:
 - the design steps, when they needed a file they did not have;
 - the boards' important parts (connectors, chips, modules, crystals, switches, battery, display) without a real 3D model.
 Every design step also receives all your parts and files, so it never asks for a document you already gave.
+
+**Printing the to-do list:** press **🖨 Print checklist** on the To do page. The printout is headed with the project, the plan
+in use and the date, and each item has a tick box plus "Assigned to" and "Done on" lines, so you can hand items out.

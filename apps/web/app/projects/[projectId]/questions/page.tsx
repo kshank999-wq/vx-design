@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PlanProposals } from "@/components/PlanProposals";
-import { FileTasks } from "@/components/FileTasks";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -50,9 +49,8 @@ export default async function QuestionsPage({ params, searchParams }: {
   return (
     <main className="questions-page">
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{project.name}</Link> /</p>
-      <h1>Questions and to-dos for you</h1>
+      <h1>Questions for you</h1>
       <Banner error={error} notice={notice} />
-      {me && me.role !== "client" && <FileTasks supabase={supabase} projectId={projectId} canEdit={me.role === "owner" || me.role === "engineer"} />}
       {me && me.role !== "client" && <PlanProposals supabase={supabase} projectId={projectId} canDraft={me.role === "owner" || me.role === "engineer"} />}
       <p className="lead">Press 🔊 to hear a question read out, and 🎤 to speak your answer instead of typing it. These are decisions only you can make: preferences, priorities, budget and markets. <strong>The design work does not wait for them.</strong> Until you answer, VX Design follows its recommendation; every step after your answer uses what you chose.</p>
       {open.length > 0 ? (

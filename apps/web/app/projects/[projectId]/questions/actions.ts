@@ -60,13 +60,3 @@ export async function askAboutQuestion(projectId: string, questionId: string, fo
   revalidatePath(path);
   redirect(`${path}?notice=${encodeURIComponent("Answered below the question.")}#q-${questionId}`);
 }
-
-/** Ticks off a "To do for you" file item, or marks it not needed. */
-export async function closeFileTask(projectId: string, id: string, status: "done" | "not_needed") {
-  const path = `/projects/${projectId}/questions`;
-  const { supabase } = await requireUser();
-  const { error } = await supabase.from("owner_file_tasks").update({ status, closed_at: new Date().toISOString() }).eq("id", id).eq("project_id", projectId);
-  if (error) fail(path, error);
-  revalidatePath(`/projects/${projectId}`, "layout");
-  redirect(`${path}#to-do`);
-}

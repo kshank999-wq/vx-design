@@ -837,3 +837,32 @@ main.plan-overview { max-width: 1400px; display: grid; grid-template-columns: mi
 @media (max-width: 900px) { main.plan-overview { grid-template-columns: 1fr; } .plan-changes { position: static; max-height: none; } }
 .file-tasks { border-left: 4px solid #16a34a; }
 .file-tasks .list > li { padding: 10px 0; border-top: 1px solid var(--line); }
+
+/* To do page: one card per item; prints as a dated checklist. */
+.todo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.todo-meta { margin: 4px 0 0; color: var(--muted); }
+.todo-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.todo-item { display: flex; gap: 14px; background: var(--card, #fff); border: 1px solid var(--line); border-left: 6px solid #16a34a; border-radius: 10px; padding: 14px 16px; break-inside: avoid; scroll-margin-top: 150px; }
+.todo-check { flex: none; width: 22px; height: 22px; border: 2px solid #475569; border-radius: 4px; margin-top: 3px; }
+.todo-body { flex: 1; min-width: 0; }
+.todo-title { font-size: 17px; margin-bottom: 8px; }
+.todo-n { color: var(--muted); }
+.todo-facts { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin: 0 0 10px; font-size: 14px; }
+.todo-facts dt { color: var(--muted); font-weight: 600; }
+.todo-facts dd { margin: 0; overflow-wrap: anywhere; }
+.todo-assign { font-size: 14px; color: var(--muted); margin-bottom: 10px; display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.todo-line { display: inline-block; width: 180px; border-bottom: 1px solid #94a3b8; height: 1em; }
+.todo-line.short { width: 110px; }
+@media print {
+  .topbar, .project-nav, .live-strip, .chat-dock, .read-aloud, .toasts, .no-print, .banner { display: none !important; }
+  body { background: #fff !important; }
+  main.todo-page { max-width: none; padding: 0; }
+  .todo-item { border: 1px solid #999; border-left: 6px solid #444; box-shadow: none; }
+  .todo-head h1 { font-size: 22px; }
+  a { color: #000; text-decoration: none; }
+}
+/* Questions: each one clearly its own block. */
+.q-group { background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.q-group h2 { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.q-card { margin: 0 0 18px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(15, 23, 42, .06); border-left-width: 6px; }
+.q-card:last-child { margin-bottom: 4px; }

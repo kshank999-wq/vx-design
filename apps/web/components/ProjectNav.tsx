@@ -55,7 +55,7 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
   const [canNotify, setCanNotify] = useState(false);
   useEffect(() => { try { setCanNotify("Notification" in window && Notification.permission === "default"); } catch { /* none */ } }, []);
   // In the order people work: what we are making, the plan, the decisions it needs, the work, the results, the cost.
-  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/plan`, label: "Plan" }, { href: `${base}/questions`, label: "Questions" }, { href: `${base}/runs`, label: "Runs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/usage`, label: "AI usage" }];
+  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/plan`, label: "Plan" }, { href: `${base}/questions`, label: "Questions" }, { href: `${base}/todo`, label: "To do" }, { href: `${base}/runs`, label: "Runs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/usage`, label: "AI usage" }];
   return (
     <nav className="project-nav" aria-label="Project" ref={ref} data-testid="project-nav">
       <Link href={base} className="pn-name" title={name}>{name}</Link>
@@ -66,8 +66,10 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
             plan v{badges.plan.version}: {badges.plan.state === "submit" ? "submit" : "approve"}</span></span>)}
         {t.label === "Workspace" && (badges?.proposals ?? 0) > 0 && (
           <span className="pn-badges" data-testid="proposals-badge"><span className="pn-badge pn-badge-wait" title="Plan updates the design agent proposed: decide them at the top of the workspace">{badges!.proposals} plan update{badges!.proposals! > 1 ? "s" : ""}</span></span>)}
+        {t.label === "To do" && (badges?.todos ?? 0) > 0 && (
+          <span className="pn-badges" data-testid="todo-badge"><span className="pn-badge pn-badge-wait" title={`${badges!.todos} file(s) to get for the design`}>{badges!.todos}</span></span>)}
         {t.label === "Questions" && (badges?.questions ?? 0) > 0 && (
-          <span className="pn-badges" data-testid="questions-badge"><span className="pn-badge pn-badge-wait" title={`${badges!.questions} question(s) and file to-do(s) for you`}>{badges!.questions}</span></span>)}
+          <span className="pn-badges" data-testid="questions-badge"><span className="pn-badge pn-badge-wait" title={`${badges!.questions} open question(s) for you`}>{badges!.questions}</span></span>)}
         {t.label === "Runs" && badges && (badges.running > 0 || badges.problems > 0 || (badges.waiting ?? 0) > 0 || badges.active_runs > 0 || !!badges.stopped) && (
           <span className="pn-badges" data-testid="runs-badges">
             {badges.active_runs > (badges.paused_runs ?? 0) && <span className="pn-badge pn-badge-ok" title={`${badges.active_runs - (badges.paused_runs ?? 0)} run(s) going, working on ${badges.running} step(s) now`}>{badges.active_runs - (badges.paused_runs ?? 0) === 1 ? "running" : `${badges.active_runs - (badges.paused_runs ?? 0)} running`}</span>}
@@ -99,7 +101,7 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
 
 interface Badges {
   active_runs: number; running: number; problems: number; waiting?: number; paused_runs?: number;
-  questions?: number; proposals?: number; plan?: { id: string; version: number; state: "submit" | "approve" } | null;
+  questions?: number; todos?: number; proposals?: number; plan?: { id: string; version: number; state: "submit" | "approve" } | null;
   stopped?: { id: string; reason: string | null } | null;
 }
 
@@ -111,6 +113,7 @@ function alerts(before: Badges | null, now: Badges, base: string): { text: strin
   if (now.problems > before.problems) out.push({ text: `${now.problems - before.problems} step(s) could not finish`, href: `${base}/runs` });
   if ((now.waiting ?? 0) > (before.waiting ?? 0)) out.push({ text: `${(now.waiting ?? 0) - (before.waiting ?? 0)} result(s) waiting for your approval`, href: `${base}/runs` });
   if ((now.questions ?? 0) > (before.questions ?? 0)) out.push({ text: `${(now.questions ?? 0) - (before.questions ?? 0)} new question(s) for you`, href: `${base}/questions` });
+  if ((now.todos ?? 0) > (before.todos ?? 0)) out.push({ text: `${(now.todos ?? 0) - (before.todos ?? 0)} new file(s) to get on your to-do list`, href: `${base}/todo` });
   if ((now.proposals ?? 0) > (before.proposals ?? 0)) out.push({ text: "The design agent proposed a plan update", href: `${base}/workspace#plan-updates` });
   if (now.plan && now.plan.id !== before.plan?.id) out.push({ text: `Plan v${now.plan.version} needs you: ${now.plan.state === "submit" ? "submit it for approval" : "approve it"}`, href: `${base}/plan` });
   if ((now.paused_runs ?? 0) > (before.paused_runs ?? 0)) out.push({ text: "A run was paused", href: `${base}/runs` });

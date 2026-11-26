@@ -232,6 +232,21 @@ try {
   assert.equal(await cpage.getByTestId("plan-change").last().getByRole("button").count(), 0, "clients cannot draft plan changes");
   await shot(page, "plan-change-drafted");
   console.log("✓ a plan change from the chat became a draft plan version; the approved plan is unchanged");
+  // To do: its own page; each file to get is its own card; prints as a dated checklist with the project and plan.
+  assert.equal((await admin.from("owner_file_tasks").insert({ project_id: project.id, kind: "3d_model", mpn: "GS-12-1404", manufacturer: "Amphenol FCI",
+    title: "Get the 3D model (STEP file) for GS-12-1404 by Amphenol FCI", why: "J4 (display connector): exact casing fit.",
+    where_to_look: "The manufacturer's product page, under CAD models." })).error, null);
+  await page.goto(`${BASE}/projects/${project.id}/todo`);
+  assert.match(await page.getByTestId("todo-meta").innerText(), /Timecode slate.* · plan v\d+ · .*\d{4} · 1 open/);
+  assert.match(await page.getByTestId("todo-list").innerText(), /1\. Get the 3D model \(STEP file\) for GS-12-1404[\s\S]*Why[\s\S]*Where[\s\S]*Assigned to:/);
+  await page.getByTestId("todo-badge").waitFor();
+  await shot(page, "todo-page");
+  await page.emulateMedia({ media: "print" });
+  await shot(page, "todo-print");
+  await page.emulateMedia({ media: "screen" });
+  await page.getByTestId("todo-list").getByRole("button", { name: "✓ Done" }).click();
+  await page.getByText("Done or not needed (1)").waitFor();
+  console.log("✓ to-do page: item card, dated print header, done");
   console.log("\nWorkspace end-to-end flow passed.");
 } catch (e) {
   console.error("\n✗ Workspace end-to-end flow failed:", e.message);

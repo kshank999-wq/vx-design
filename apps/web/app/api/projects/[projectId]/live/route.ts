@@ -40,7 +40,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     && !(baseline?.approved_at && new Date(baseline.approved_at) > new Date(p.created_at)) && (!baseline || p.version > baseline.version));
   const states = await proposalStates(supabase, projectId, (msgs ?? []).filter((m) => hasProposal(m.data)));
   Object.assign(badges, {
-    questions: (questions ?? 0) + (fileTodos ?? 0),
+    questions: questions ?? 0,
+    todos: fileTodos ?? 0,
     proposals: Object.values(states).filter((x) => x.state === "open").length,
     // The owner approves in one step, so for them a draft is simply "to approve".
     plan: pending ? { id: pending.id, version: pending.version, state: pending.status === "draft" && myRole !== "owner" ? "submit" : "approve" } : null,
@@ -66,7 +67,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       const pr = estimateProgress({ discipline: t?.discipline ?? "", startedAt: e.started_at, lastLog: last.get(e.id) ?? null, typical: typical.get(t?.discipline ?? "") });
       return { key: t?.key ?? "", title: t?.title ?? "", started_at: e.started_at, step: last.get(e.id) ?? null, pct: pr.pct, slow: pr.slow }; }),
     waiting: (waiting ?? []).length,
-    questions: (questions ?? 0) + (fileTodos ?? 0),
+    questions: questions ?? 0,
+    todos: fileTodos ?? 0,
     badges: { ...badges, waiting: (waiting ?? []).length },
   }, { headers: { "Cache-Control": "no-store" } });
 }
