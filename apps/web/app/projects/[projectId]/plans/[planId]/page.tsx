@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
 import { ReadMore } from "@/components/ReadMore";
 import { proposalStates } from "@/lib/plan-proposals";
+import { reviewPlanImpact } from "@/lib/plan-impact";
 import { STAGE_NAME, STAGES, type Stage } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
@@ -79,8 +80,21 @@ export default async function PlanPage({ params, searchParams }: {
     ? await supabase.from("plans").select("id, version").eq("project_id", projectId).eq("status", "approved").neq("id", planId)
         .order("version", { ascending: false }).limit(1).maybeSingle()
     : { data: null };
-  const { data: baseTasks } = baseline ? await supabase.from("tasks").select("key, title, description").eq("plan_id", baseline.id) : { data: null };
-  const approval = baseTasks ? approvalSummary(tasks ?? [], baseTasks) : null;
+  // Removed, changed, new, and which steps are redone (the design agent reviews the ones that build on a change).
+  const { impact, error: impactError } = baseline && ["draft", "awaiting_approval"].includes(plan.status)
+    ? await reviewPlanImpact(supabase, projectId, planId) : { impact: null, error: null };
+  // What those steps cost the last time they were done, at the customer's price.
+  let redoPrice: number | null = null;
+  if (impact?.redoOrder.length && baseline) {
+    const keys = impact.redoOrder.map((r) => r.key);
+    const [{ data: prev }, { data: rate }] = await Promise.all([
+      supabase.from("tasks").select("id").eq("plan_id", baseline.id).in("key", keys),
+      supabase.rpc("project_billing_rate", { p_project: projectId }),
+    ]);
+    const ids = (prev ?? []).map((t) => t.id);
+    const { data: costs } = ids.length ? await supabase.from("cost_events").select("cost_usd").in("task_id", ids).eq("kind", "ai_tokens") : { data: [] };
+    redoPrice = (costs ?? []).reduce((n, c) => n + Number(c.cost_usd ?? 0), 0) * (Number(rate ?? 1) || 1);
+  }
   // A draft made before the plan now in use was approved: approving it would undo that approval's changes.
   const { data: inUse } = ["draft", "awaiting_approval"].includes(plan.status)
     ? await supabase.from("plans").select("id, version, approved_at").eq("project_id", projectId).eq("status", "approved").maybeSingle()
@@ -154,30 +168,39 @@ export default async function PlanPage({ params, searchParams }: {
       )}
       {(canEdit || canDecide || canApproveNow) && !outdated && (
         <section className="card approval-summary" id="approve-now" data-testid="approval-summary">
-          <h2>What you are approving</h2>
-          {approval && baseline ? <>
-            <p>Compared with <strong>plan v{baseline.version}</strong>, the approved plan now in use:{" "}
-              {approval.changed.length + approval.added.length + approval.removed.length === 0
-                ? "no task changes."
-                : <>{approval.changed.length} step{approval.changed.length === 1 ? "" : "s"} changed, {approval.added.length} added, {approval.removed.length} removed. Every other step stays as it is.</>}</p>
-            {approval.changed.length > 0 && <><h3>Changed</h3><ul className="list">{approval.changed.map((c) => (
-              <li key={c.key}><strong>{c.title}</strong> <span className="muted small">({c.key})</span>
-                {c.wasTitle !== c.title && <div className="small muted">Was: {c.wasTitle}</div>}
-                {c.description && <div className="small">Now: {c.description.length > 400 ? `${c.description.slice(0, 400)}…` : c.description}</div>}</li>))}</ul></>}
-            {approval.added.length > 0 && <><h3>Added</h3><ul className="list">{approval.added.map((c) => (
-              <li key={c.key}><strong>{c.title}</strong> <span className="muted small">({c.key})</span></li>))}</ul></>}
-            {approval.removed.length > 0 && <><h3>Removed</h3><ul className="list">{approval.removed.map((c) => (
-              <li key={c.key}><strong>{c.title}</strong> <span className="muted small">({c.key})</span></li>))}</ul></>}
-            {approval.rerun.length > 0 && <p className="small">When a run starts on this plan, these steps are done again because they changed or build on a changed step:{" "}
-              {approval.rerun.join(", ")}. Finished steps that are unchanged are reused, not done again.</p>}
+          <h2>What changes if you approve</h2>
+          {impact && baseline ? <>
+            {impact.review?.summary && <p data-testid="impact-summary">{impact.review.summary}</p>}
+            <p>Compared with <strong>plan v{baseline.version}</strong>, the plan the work runs on now:</p>
+            <ul className="impact-counts" data-testid="impact-counts">
+              <li><strong>{impact.removed.length}</strong> taken out</li>
+              <li><strong>{impact.changed.length}</strong> changed</li>
+              <li><strong>{impact.added.length}</strong> new</li>
+              <li><strong>{impact.redoOrder.length}</strong> to do (again)</li>
+              <li><strong>{impact.unchanged + impact.kept.length}</strong> already done and kept</li>
+            </ul>
+            {impact.removed.length > 0 && <><h3>Taken out</h3><ul className="list">{impact.removed.map((c) => <li key={c.key}>{c.title}</li>)}</ul></>}
+            {impact.changed.length > 0 && <><h3>Changed</h3><ul className="list">{impact.changed.map((c) => (
+              <li key={c.key}><strong>{c.title}</strong>{c.was !== c.title && <span className="small muted"> (was: {c.was})</span>}
+                {c.brief && <div className="small"><ReadMore text={`Now: ${c.brief}`} lines={2} /></div>}</li>))}</ul></>}
+            {impact.added.length > 0 && <><h3>New</h3><ul className="list">{impact.added.map((c) => <li key={c.key}><strong>{c.title}</strong></li>)}</ul></>}
+            {impact.redoOrder.length > 0 && <><h3>Then the work continues in this order</h3>
+              <ol className="list" data-testid="redo-order">{impact.redoOrder.map((c) => <li key={c.key}><strong>{c.title}</strong> <span className="small muted">· {c.reason}</span></li>)}</ol></>}
+            {impact.kept.length > 0 && <><h3>Already done and still valid</h3>
+              <p className="small muted">These build on a changed step, but the design agent found the change does not affect them, so their finished work is kept. Tick any you want redone anyway.</p>
+              <ul className="list" data-testid="kept-steps">{impact.kept.map((c) => (
+                <li key={c.key}><label className="inline"><input type="checkbox" name="redo" value={c.key} form="approve-form" /> <strong>{c.title}</strong></label>
+                  <div className="small muted">{c.why}</div></li>))}</ul></>}
+            {redoPrice != null && redoPrice > 0 && <p className="small" data-testid="redo-price">Estimated AI cost of the steps to do: about <strong>${redoPrice.toFixed(2)}</strong>, from what they cost last time.</p>}
+            {impactError && <p className="small warn-text">{impactError}</p>}
           </> : <p>{tasks?.length ?? 0} steps, {hours ? `about ${Math.round(hours)} hours of work` : "no time estimate"}, {gates} of them need your approval when they finish.</p>}
           <p className="small muted">{canApproveNow
             ? "You approve plans; the design agent never does. Approving makes this the plan the work runs on (the run on the old plan stops). \"Approve and start the run\" also starts the work right away with your last run's budget and settings."
             : canEdit ? "Submit sends it to the project owner, who approves it." : "Approve makes this the plan runs work from. Then start a run from this page."}</p>
           {canApproveNow && (
             <div className="row tight wrap approve-row" data-testid="approve-now">
-              <form action={approvePlanNow.bind(null, projectId, planId, true)}><SubmitButton pendingText="Approving and starting…">✓ Approve and start the run</SubmitButton></form>
-              <form action={approvePlanNow.bind(null, projectId, planId, false)}><SubmitButton variant="secondary" pendingText="Approving…">Approve only</SubmitButton></form>
+              <form id="approve-form" action={approvePlanNow.bind(null, projectId, planId, true)}><SubmitButton pendingText="Approving and starting…">✓ Approve and start the run</SubmitButton>{" "}
+                <SubmitButton variant="secondary" formAction={approvePlanNow.bind(null, projectId, planId, false)} pendingText="Approving…">Approve only</SubmitButton></form>
             </div>
           )}
         </section>
@@ -398,28 +421,4 @@ export default async function PlanPage({ params, searchParams }: {
       )}
     </main>
   );
-}
-
-/** Steps changed, added and removed against the approved baseline (by key), and the steps a run would do again. */
-function approvalSummary(
-  tasks: { id: string; key: string; title: string; description: string | null; task_dependencies: unknown }[],
-  base: { key: string; title: string; description: string | null }[],
-) {
-  const old = new Map(base.map((t) => [t.key, t]));
-  const changed = tasks.filter((t) => old.has(t.key) && (old.get(t.key)!.title !== t.title || (old.get(t.key)!.description ?? "") !== (t.description ?? "")))
-    .map((t) => ({ key: t.key, title: t.title, wasTitle: old.get(t.key)!.title, description: t.description }));
-  const added = tasks.filter((t) => !old.has(t.key)).map((t) => ({ key: t.key, title: t.title }));
-  const keys = new Set(tasks.map((t) => t.key));
-  const removed = base.filter((t) => !keys.has(t.key)).map((t) => ({ key: t.key, title: t.title }));
-  // Everything downstream of a changed or added step runs again.
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const dependents = new Map<string, string[]>();
-  for (const t of tasks) for (const d of (t.task_dependencies as { depends_on_task_id: string }[] | null) ?? []) {
-    const from = byId.get(d.depends_on_task_id);
-    if (from) dependents.set(from.key, [...(dependents.get(from.key) ?? []), t.key]);
-  }
-  const rerun = new Set<string>();
-  const stack = [...changed.map((c) => c.key), ...added.map((a) => a.key)];
-  while (stack.length) { const k = stack.pop()!; if (rerun.has(k)) continue; rerun.add(k); stack.push(...(dependents.get(k) ?? [])); }
-  return { changed, added, removed, rerun: tasks.filter((t) => rerun.has(t.key)).map((t) => t.key) };
 }

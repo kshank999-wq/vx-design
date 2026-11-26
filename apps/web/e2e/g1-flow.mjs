@@ -139,7 +139,7 @@ try {
   console.log("✓ task edited in draft");
 
   // The owner approves in one step; the summary says what is being approved.
-  assert.match(await page.getByTestId("approval-summary").innerText(), /What you are approving[\s\S]*You approve plans; the design agent never does/);
+  assert.match(await page.getByTestId("approval-summary").innerText(), /What changes if you approve[\s\S]*You approve plans; the design agent never does/);
   await page.getByTestId("approve-now").getByRole("button", { name: "Approve only" }).click();
   await page.getByText(/Plan v1 approved: it is the plan in use now/).waitFor();
   assert.equal(await page.getByText("Edit task").count(), 0, "editing locked after approval");

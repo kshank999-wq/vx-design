@@ -205,6 +205,9 @@ try {
   assert.match(await card.innerText(), /Proposed plan update[\s\S]*Add "Drop test of the enclosure"/);
   await card.getByRole("button", { name: "✓ Yes, update the plan" }).click();
   await page.getByText(/Plan v\d+ drafted with the change/).waitFor();
+  // The plan page says in plain words what changes: one new step, done next; everything else already done is kept.
+  assert.match(await page.getByTestId("impact-counts").innerText(), /0\s*taken out[\s\S]*0\s*changed[\s\S]*1\s*new[\s\S]*1\s*to do \(again\)[\s\S]*1\s*already done and kept/);
+  assert.match(await page.getByTestId("redo-order").innerText(), /Drop test of the enclosure · new step/);
   const { data: plans } = await admin.from("plans").select("id, version, status, generator").eq("project_id", project.id).order("version");
   const draft = plans.at(-1);
   assert.equal(draft.status, "draft");

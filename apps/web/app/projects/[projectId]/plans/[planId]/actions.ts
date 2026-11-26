@@ -59,6 +59,13 @@ export async function submitPlan(projectId: string, planId: string) {
  * the plan against the concepts and mock-ups; if it finds differences they are shown on this page and the owner chooses
  * "Approve anyway" or "Fix them in a new version". Drafts the agent made itself are not checked again, so this never loops.
  */
+/** The stored review of a just-approved plan, against the plan it replaced. */
+async function reviewPlanImpactAfter(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], projectId: string, planId: string) {
+  const { data: stored } = await supabase.from("plan_impact_reviews").select("review").eq("plan_id", planId).maybeSingle();
+  const review = stored?.review as { steps?: { key: string; redo: boolean; why: string }[] } | null;
+  return { impact: review ? { kept: (review.steps ?? []).filter((s) => !s.redo).map((s) => ({ key: s.key })) } : null };
+}
+
 export async function approvePlanNow(projectId: string, planId: string, start: boolean, form?: FormData) {
   const path = `/projects/${projectId}/plans/${planId}`;
   const { supabase, userId } = await requireUser();
@@ -88,6 +95,11 @@ export async function approvePlanNow(projectId: string, planId: string, start: b
     if (/running tasks/.test(error.message)) fail(path, "The current run is still finishing a step. It has been told to stop: press Approve again in a minute.");
     fail(path, error);
   }
+  // Steps the design agent found unaffected keep their finished work (unless the owner ticked "redo anyway").
+  const { impact } = await reviewPlanImpactAfter(supabase, projectId, planId);
+  const forced = (form?.getAll("redo") ?? []).map(String);
+  const keep = (impact?.kept ?? []).map((k) => k.key).filter((k) => !forced.includes(k));
+  if (keep.length) await supabase.rpc("keep_finished_work", { p_plan: planId, p_keys: keep, p_reason: "The design agent found the plan change does not affect this step." });
   revalidatePath(`/projects/${projectId}`, "layout");
   if (!start) redirect(`${path}?notice=${encodeURIComponent(`Plan v${plan.version} approved: it is the plan in use now. Start the run below when you are ready.`)}#start-run`);
   // Start the run with the settings of the last run (budget, supervision, risk levels, overnight).

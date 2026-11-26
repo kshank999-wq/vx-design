@@ -181,3 +181,16 @@ The first time, the agent compares the plan with your concepts and mock-ups. If 
 top of the plan page: choose **Approve anyway, as it is**, or **Yes, update the plan** to make one new version with the
 fixes. That new version is not checked again, so you approve it directly: no going in circles. An engineer (not the
 owner) sees **Submit to the owner for approval** instead.
+
+## Changing the plan without starting over
+When something changes (new information, a decision, a fix), the plan is **updated, not rebuilt**. Before you approve, the
+plan page says in plain words **What changes if you approve**:
+- **Taken out**, **Changed** (what it was and what it says now) and **New** steps;
+- **Then the work continues in this order**: only the steps that must be done (again), in the order they depend on each
+  other, each with the reason;
+- **Already done and still valid**: steps that build on a change but are not affected by it. The design agent checks each
+  one (for example, a new casing material does not change a circuit board), so their finished work is kept. Tick any you
+  want redone anyway;
+- the estimated AI cost of the steps to do, from what they cost last time.
+
+Then press **Approve and start the run**: the work carries on from there.
