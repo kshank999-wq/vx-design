@@ -103,10 +103,8 @@ try {
   await page.waitForURL(/\/plans\/[0-9a-f-]{36}/);
   const planUrl = page.url().split("?")[0];
   const planId = planUrl.split("/").pop();
-  await page.getByRole("button", { name: "Submit for approval" }).click();
-  await page.locator(".pill-awaiting_approval").first().waitFor();
-  await page.getByRole("button", { name: "Approve as baseline" }).click();
-  await page.getByText("Plan approved: it is now the project baseline.").waitFor();
+  await page.getByTestId("approve-now").getByRole("button", { name: "Approve only" }).click();
+  await page.getByText(/Plan v1 approved: it is the plan in use now/).waitFor();
   console.log("✓ plan approved (offline stand-in)");
 
   // --- Authorize an unattended run, then close the browser --------------------------------

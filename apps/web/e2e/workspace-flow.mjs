@@ -204,7 +204,7 @@ try {
   await card.waitFor();
   assert.match(await card.innerText(), /Proposed plan update[\s\S]*Add "Drop test of the enclosure"/);
   await card.getByRole("button", { name: "✓ Yes, update the plan" }).click();
-  await page.getByText(/Draft plan v\d+ made from the chat/).waitFor();
+  await page.getByText(/Plan v\d+ drafted with the change/).waitFor();
   const { data: plans } = await admin.from("plans").select("id, version, status, generator").eq("project_id", project.id).order("version");
   const draft = plans.at(-1);
   assert.equal(draft.status, "draft");

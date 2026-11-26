@@ -63,7 +63,7 @@ export async function draftPlanChange(projectId: string, messageId: number) {
   } });
   if (error) fail(path, error);
   revalidatePath(path);
-  redirect(`/projects/${projectId}/plans/${newId}?notice=${encodeURIComponent(`Draft plan v${plan.version + 1} made from the chat: review it, then submit it for approval.`)}`);
+  redirect(`/projects/${projectId}/plans/${newId}?notice=${encodeURIComponent(`Plan v${plan.version + 1} drafted with the change: check what changes below, then approve it (one click). Nothing changes until you do.`)}`);
 }
 
 export async function decideFromWorkspace(projectId: string, taskId: string, approve: boolean, form: FormData) {

@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { PlanChangeCard, type ChangeData } from "@/components/PlanChangeCard";
+import { ReadMore } from "@/components/ReadMore";
+import { proposalStates } from "@/lib/plan-proposals";
 import { STAGE_NAME, STAGES, type Stage } from "@/lib/stages";
 import { notFound } from "next/navigation";
 import { Banner } from "@/components/Banner";
@@ -9,7 +12,7 @@ import { costHistory, estimate } from "@/lib/cost-estimate";
 import { activePlanRequest, PlanRequestStatus } from "@/components/PlanRequestStatus";
 import { planChanges } from "@/lib/plan-inputs";
 import { createPlan } from "../../actions";
-import { discardPlan, authorizeRun, decidePlan, redoTask, revisePlan, submitPlan, updateTask } from "./actions";
+import { approvePlanNow, discardPlan, authorizeRun, decidePlan, redoTask, revisePlan, submitPlan, updateTask } from "./actions";
 
 interface AcceptanceTest { id: string; description: string; method: string; validationKind?: string }
 interface Generator { model?: string; offline?: boolean; prompt_version?: string; attempts?: number; adjustments?: string[];
@@ -83,6 +86,13 @@ export default async function PlanPage({ params, searchParams }: {
     ? await supabase.from("plans").select("id, version, approved_at").eq("project_id", projectId).eq("status", "approved").maybeSingle()
     : { data: null };
   const outdated = !!inUse?.approved_at && new Date(inUse.approved_at) > new Date(plan.created_at);
+  // The owner decides in one step ("Approve this plan"); an engineer sends it to the owner. The AI never approves.
+  const canApproveNow = role === "owner" && ["draft", "awaiting_approval"].includes(plan.status) && !outdated;
+  // What the agent found when it compared this plan with the concepts and mock-ups, if it did.
+  const { data: conceptCheck } = canApproveNow || canEdit
+    ? await supabase.from("project_messages").select("id, body, data").eq("project_id", projectId).eq("data->>concept_check_plan", planId).order("id", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const checkProposals = conceptCheck ? await proposalStates(supabase, projectId, [{ id: conceptCheck.id as number, author_kind: "assistant", data: conceptCheck.data }]) : {};
 
   // Tasks grouped by product stage, in plan order within each stage (S0 first).
   const groups = STAGES.map((stage) => {
@@ -132,8 +142,18 @@ export default async function PlanPage({ params, searchParams }: {
           {rev.removed.length ? <>removed {rev.removed.map((r) => `${r.key} (${r.reason})`).join(", ")}; </> : null}
           {rev.new_requirements} new or changed requirement(s); every other task kept as it was.</p>
       )}
-      {(canEdit || canDecide) && !outdated && (
-        <section className="card approval-summary" data-testid="approval-summary">
+      {conceptCheck && !outdated && ["draft", "awaiting_approval"].includes(plan.status) && (
+        <section className="card concept-check" id="concept-check" data-testid="concept-check">
+          <h2>Checked against your concepts and mock-ups</h2>
+          <ReadMore text={conceptCheck.body as string} lines={4} />
+          <PlanChangeCard projectId={projectId} messageId={conceptCheck.id as number} data={conceptCheck.data as ChangeData} state={checkProposals[String(conceptCheck.id)]} canDraft={canEdit || canApproveNow} />
+          {canApproveNow && <form action={approvePlanNow.bind(null, projectId, planId, false)}><input type="hidden" name="anyway" value="1" />
+            <SubmitButton variant="secondary" pendingText="Approving…">Approve anyway, as it is</SubmitButton></form>}
+          <p className="small muted">"Yes, update the plan" makes one new version with the fixes; that version is not checked again, so you approve it directly.</p>
+        </section>
+      )}
+      {(canEdit || canDecide || canApproveNow) && !outdated && (
+        <section className="card approval-summary" id="approve-now" data-testid="approval-summary">
           <h2>What you are approving</h2>
           {approval && baseline ? <>
             <p>Compared with <strong>plan v{baseline.version}</strong>, the approved plan now in use:{" "}
@@ -151,21 +171,28 @@ export default async function PlanPage({ params, searchParams }: {
             {approval.rerun.length > 0 && <p className="small">When a run starts on this plan, these steps are done again because they changed or build on a changed step:{" "}
               {approval.rerun.join(", ")}. Finished steps that are unchanged are reused, not done again.</p>}
           </> : <p>{tasks?.length ?? 0} steps, {hours ? `about ${Math.round(hours)} hours of work` : "no time estimate"}, {gates} of them need your approval when they finish.</p>}
-          <p className="small muted">{canEdit
-            ? "Submit sends it for approval. The design agent first checks it against your concepts and mock-ups, and holds it if something disagrees. After approval, start a run from this page."
-            : "Approve makes this the plan runs work from. Then start a run from this page."}</p>
+          <p className="small muted">{canApproveNow
+            ? "You approve plans; the design agent never does. Approving makes this the plan the work runs on (the run on the old plan stops). \"Approve and start the run\" also starts the work right away with your last run's budget and settings."
+            : canEdit ? "Submit sends it to the project owner, who approves it." : "Approve makes this the plan runs work from. Then start a run from this page."}</p>
+          {canApproveNow && (
+            <div className="row tight wrap approve-row" data-testid="approve-now">
+              <form action={approvePlanNow.bind(null, projectId, planId, true)}><SubmitButton pendingText="Approving and starting…">✓ Approve and start the run</SubmitButton></form>
+              <form action={approvePlanNow.bind(null, projectId, planId, false)}><SubmitButton variant="secondary" pendingText="Approving…">Approve only</SubmitButton></form>
+            </div>
+          )}
         </section>
       )}
       <div className="card row spread">
         <span className="small">
-          {plan.status === "draft" && "Draft: edit tasks, then submit the plan for approval."}
+          {plan.status === "draft" && (canApproveNow ? "Draft: check what changes above, then approve it." : "Draft: edit tasks, then submit the plan to the owner.")}
           {plan.status === "awaiting_approval" && "Frozen for review. An owner or reviewer approves it or returns it with notes."}
           {plan.status === "approved" && "Approved baseline. Tasks are ready to run; changes need a new revision."}
           {plan.status === "approved" && reusedCount > 0 && <span data-testid="reused-count"> {reusedCount} task(s) were unchanged since an earlier version and are reused, not run again.</span>}
           {plan.status === "superseded" && "Superseded by a newer approved plan."}
         </span>
         <div className="row">
-          {canEdit && !outdated && <form action={submitPlan.bind(null, projectId, planId)}><SubmitButton disabled={uncovered.length > 0}>Submit for approval</SubmitButton></form>}
+          {canEdit && !outdated && !canApproveNow && <form action={submitPlan.bind(null, projectId, planId)}><SubmitButton disabled={uncovered.length > 0}>Submit to the owner for approval</SubmitButton></form>}
+          {canApproveNow && <a className="btn" href="#approve-now">Approve this plan ↑</a>}
           {canRevise && <form action={revisePlan.bind(null, projectId, planId)}><SubmitButton variant="secondary">Revise as new draft</SubmitButton></form>}
         </div>
       </div>
@@ -184,7 +211,7 @@ export default async function PlanPage({ params, searchParams }: {
           )}
           {activeRun && <p className="small muted">This plan has an active run; pause, resume or cancel it from its page.</p>}
           {canRun && (
-            <form className="card stack" action={authorizeRun.bind(null, projectId, planId)}>
+            <form className="card stack" id="start-run" action={authorizeRun.bind(null, projectId, planId)}>
               <h3>Authorize a run</h3>
               <p className="small muted">A worker executes ready tasks in plan order within these limits. You can close the browser; the report is waiting here when it finishes.</p>
               <div className="row">
@@ -219,7 +246,7 @@ export default async function PlanPage({ params, searchParams }: {
         </section>
       )}
 
-      {canDecide && !outdated && (
+      {canDecide && !outdated && !canApproveNow && (
         <form className="card stack" action={decidePlan.bind(null, projectId, planId, true)}>
           <label>Review note<textarea name="note" rows={2} placeholder="Required when returning the plan" /></label>
           <div className="row">

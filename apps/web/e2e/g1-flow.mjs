@@ -138,17 +138,11 @@ try {
   await page.getByText('Saved "Schematic capture and ERC".').waitFor();
   console.log("✓ task edited in draft");
 
-  await page.getByRole("button", { name: "Submit for approval" }).click();
-  await page.locator(".pill-awaiting_approval").first().waitFor();
-  assert.equal(await page.getByText("Edit task").count(), 0, "editing locked after submit");
-  console.log("✓ submitted; edits locked");
-
-  // Returning requires a note.
-  await page.getByRole("button", { name: "Return to draft" }).click();
-  await page.locator(".banner-error").filter({ hasText: "Say what needs to change" }).waitFor();
-  await page.getByLabel("Review note").fill("Baseline for first board spin");
-  await page.getByRole("button", { name: "Approve as baseline" }).click();
-  await page.getByText("Plan approved: it is now the project baseline.").waitFor();
+  // The owner approves in one step; the summary says what is being approved.
+  assert.match(await page.getByTestId("approval-summary").innerText(), /What you are approving[\s\S]*You approve plans; the design agent never does/);
+  await page.getByTestId("approve-now").getByRole("button", { name: "Approve only" }).click();
+  await page.getByText(/Plan v1 approved: it is the plan in use now/).waitFor();
+  assert.equal(await page.getByText("Edit task").count(), 0, "editing locked after approval");
   assert.equal(await page.locator("li.task .pill-ready").count(), 6, "all tasks ready");
   await assertDependencyOrder(page);
   await shot(page, "plan-approved");

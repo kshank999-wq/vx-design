@@ -169,3 +169,15 @@ appears in the bottom-right corner. Press **🔔 Turn on alerts** once to also g
 ## Out-of-date plan drafts
 A draft made before a newer plan was approved is marked **Out of date: do not approve this draft**, because approving it
 would undo the newer plan's changes. Press **Discard this draft** to remove it. The Overview shows the **plan in use**.
+
+## Who approves a plan, and how
+**You do. The design agent never approves anything; it only proposes.** On a draft plan you see **What you are approving**
+(what changes, and which steps will run again), then one decision:
+- **✓ Approve and start the run**: the plan becomes the one in use, the run on the old plan stops, and a new run starts
+  with your last run's budget and settings. Unchanged finished steps are reused.
+- **Approve only**: approve now, start the run later from the same page.
+
+The first time, the agent compares the plan with your concepts and mock-ups. If it finds differences they appear at the
+top of the plan page: choose **Approve anyway, as it is**, or **Yes, update the plan** to make one new version with the
+fixes. That new version is not checked again, so you approve it directly: no going in circles. An engineer (not the
+owner) sees **Submit to the owner for approval** instead.

@@ -53,6 +53,55 @@ export async function submitPlan(projectId: string, planId: string) {
   revalidatePath(path);
 }
 
+/**
+ * The owner's one decision on a plan: "Approve this plan" (and optionally start the run on it straight away). The owner
+ * approves; the AI never does. It submits the draft and approves it in one go. The first time, the design agent checks
+ * the plan against the concepts and mock-ups; if it finds differences they are shown on this page and the owner chooses
+ * "Approve anyway" or "Fix them in a new version". Drafts the agent made itself are not checked again, so this never loops.
+ */
+export async function approvePlanNow(projectId: string, planId: string, start: boolean, form?: FormData) {
+  const path = `/projects/${projectId}/plans/${planId}`;
+  const { supabase, userId } = await requireUser();
+  const anyway = form?.get("anyway") === "1";
+  const { data: plan } = await supabase.from("plans").select("id, version, status, generator").eq("id", planId).maybeSingle();
+  if (!plan) fail(path, "Plan not found.");
+  const fromAgent = !!(plan.generator as { chat_message_id?: string } | null)?.chat_message_id;
+  if (!anyway && !fromAgent) {
+    const { data: checked } = await supabase.from("project_messages").select("id").eq("project_id", projectId).eq("data->>concept_check_plan", planId).limit(1);
+    if (!checked?.length) {
+      const r = await checkPlanAgainstConcepts(supabase, userId, projectId, planId);
+      if (!r.error && r.found > 0) {
+        revalidatePath(path);
+        redirect(`${path}?notice=${encodeURIComponent(`Not approved yet: the design agent found ${r.found} difference(s) with your concepts and mock-ups. They are listed at the top of this page: approve anyway, or fix them in a new version.`)}#concept-check`);
+      }
+    }
+  }
+  if (plan.status === "draft") {
+    const { error } = await supabase.rpc("submit_plan", { p_plan_id: planId });
+    if (error) fail(path, error);
+  }
+  // The run on the plan in use stops first: only one plan is worked on at a time.
+  const { data: active } = await supabase.from("runs").select("id, plan_id").eq("project_id", projectId).in("status", ["pending", "running", "paused"]);
+  for (const r of active ?? []) if (r.plan_id !== planId) await supabase.rpc("control_run", { p_run_id: r.id, p_action: "cancel" });
+  const { error } = await supabase.rpc("decide_plan", { p_plan_id: planId, p_approve: true, p_note: "Approved by the project owner." });
+  if (error) {
+    if (/running tasks/.test(error.message)) fail(path, "The current run is still finishing a step. It has been told to stop: press Approve again in a minute.");
+    fail(path, error);
+  }
+  revalidatePath(`/projects/${projectId}`, "layout");
+  if (!start) redirect(`${path}?notice=${encodeURIComponent(`Plan v${plan.version} approved: it is the plan in use now. Start the run below when you are ready.`)}#start-run`);
+  // Start the run with the settings of the last run (budget, supervision, risk levels, overnight).
+  const { data: last } = await supabase.from("runs").select("mode, max_ai_spend_usd, max_compute_spend_usd, allowed_risk_levels, max_retries_per_task, stop_conditions")
+    .eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: runId, error: e2 } = await supabase.rpc("authorize_run", {
+    p_plan_id: planId, p_mode: last?.mode ?? "guided", p_max_ai_spend_usd: Number(last?.max_ai_spend_usd ?? 25),
+    p_max_compute_spend_usd: Number(last?.max_compute_spend_usd ?? 10), p_allowed_risk_levels: last?.allowed_risk_levels ?? ["low", "medium", "high"],
+    p_max_retries_per_task: last?.max_retries_per_task ?? 2, p_task_ids: null, p_stop_conditions: last?.stop_conditions ?? {}, p_name: `Run on plan v${plan.version}`,
+  });
+  if (e2) fail(path, e2);
+  redirect(`/projects/${projectId}/runs/${runId}?notice=${encodeURIComponent(`Plan v${plan.version} approved and its run started. Finished steps that did not change are reused.`)}`);
+}
+
 /** Removes a draft nobody will approve (for example one made before a newer plan was approved). */
 export async function discardPlan(projectId: string, planId: string) {
   const path = `/projects/${projectId}/plans/${planId}`;

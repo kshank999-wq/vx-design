@@ -32,13 +32,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     supabase.from("project_messages").select("id, author_kind, data, created_at").eq("project_id", projectId).eq("author_kind", "assistant").order("id", { ascending: false }).limit(150),
   ]);
   const baseline = (plans ?? []).find((p) => p.status === "approved");
+  const { data: auth } = await supabase.auth.getUser();
+  const { data: me } = auth.user ? await supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", auth.user.id).maybeSingle() : { data: null };
+  const myRole = me?.role ?? "viewer";
   const pending = (plans ?? []).find((p) => ["draft", "awaiting_approval"].includes(p.status)
     && !(baseline?.approved_at && new Date(baseline.approved_at) > new Date(p.created_at)) && (!baseline || p.version > baseline.version));
   const states = await proposalStates(supabase, projectId, (msgs ?? []).filter((m) => hasProposal(m.data)));
   Object.assign(badges, {
     questions: questions ?? 0,
     proposals: Object.values(states).filter((x) => x.state === "open").length,
-    plan: pending ? { id: pending.id, version: pending.version, state: pending.status === "draft" ? "submit" : "approve" } : null,
+    // The owner approves in one step, so for them a draft is simply "to approve".
+    plan: pending ? { id: pending.id, version: pending.version, state: pending.status === "draft" && myRole !== "owner" ? "submit" : "approve" } : null,
     stopped: run && ["stopped", "failed"].includes(run.status) ? { id: run.id, reason: run.stop_reason } : null,
   });
   if (!run) return NextResponse.json({ run: null, questions: questions ?? 0, badges });
