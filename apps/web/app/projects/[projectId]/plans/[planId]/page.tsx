@@ -122,6 +122,7 @@ export default async function PlanPage({ params, searchParams }: {
       <p className="crumbs"><Link href="/projects">Projects</Link> / <Link href={`/projects/${projectId}`}>{(plan.projects as { name: string }).name}</Link> /</p>
       <div className="row spread">
         <h1>Plan v{plan.version}</h1>
+        {canApproveNow && <a className="btn btn-go" href="#approve-now" data-testid="approve-jump">✓ Approve this plan</a>}
         <span className={`pill pill-${plan.status} big`}>{STATUS_LABEL[plan.status] ?? plan.status}</span>
       </div>
       <Banner error={error} notice={notice} />
@@ -199,7 +200,7 @@ export default async function PlanPage({ params, searchParams }: {
             : canEdit ? "Submit sends it to the project owner, who approves it." : "Approve makes this the plan runs work from. Then start a run from this page."}</p>
           {canApproveNow && (
             <div className="row tight wrap approve-row" data-testid="approve-now">
-              <form id="approve-form" action={approvePlanNow.bind(null, projectId, planId, true)}><SubmitButton pendingText="Approving and starting…">✓ Approve and start the run</SubmitButton>{" "}
+              <form id="approve-form" action={approvePlanNow.bind(null, projectId, planId, true)}><SubmitButton variant="go" pendingText="Approving and starting…">✓ Approve and start the run</SubmitButton>{" "}
                 <SubmitButton variant="secondary" formAction={approvePlanNow.bind(null, projectId, planId, false)} pendingText="Approving…">Approve only</SubmitButton></form>
             </div>
           )}

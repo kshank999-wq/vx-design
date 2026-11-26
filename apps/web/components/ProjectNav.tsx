@@ -54,13 +54,14 @@ export function ProjectNav({ base, name, groups }: { base: string; name: string;
   }, [base, name]);
   const [canNotify, setCanNotify] = useState(false);
   useEffect(() => { try { setCanNotify("Notification" in window && Notification.permission === "default"); } catch { /* none */ } }, []);
-  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/runs`, label: "Runs" }, { href: `${base}/questions`, label: "Questions" }, { href: `${base}/usage`, label: "AI usage" }];
+  // In the order people work: what we are making, the plan, the decisions it needs, the work, the results, the cost.
+  const top = [{ href: base, label: "Overview" }, { href: `${base}/inputs`, label: "Inputs" }, { href: `${base}/plan`, label: "Plan" }, { href: `${base}/questions`, label: "Questions" }, { href: `${base}/runs`, label: "Runs" }, { href: `${base}/workspace`, label: "Workspace" }, { href: `${base}/usage`, label: "AI usage" }];
   return (
     <nav className="project-nav" aria-label="Project" ref={ref} data-testid="project-nav">
       <Link href={base} className="pn-name" title={name}>{name}</Link>
       <span className="pn-sep" />
       {top.map((t) => <Link key={t.href} href={t.href} className="pn-item" aria-current={here(t.href) ? "page" : undefined}>{t.label}
-        {t.label === "Overview" && badges?.plan && (
+        {t.label === "Plan" && badges?.plan && (
           <span className="pn-badges" data-testid="plan-badge"><span className="pn-badge pn-badge-wait" title={`Plan v${badges.plan.version} needs you: ${badges.plan.state === "submit" ? "review it and submit it for approval" : "approve it or return it"}`}>
             plan v{badges.plan.version}: {badges.plan.state === "submit" ? "submit" : "approve"}</span></span>)}
         {t.label === "Workspace" && (badges?.proposals ?? 0) > 0 && (
@@ -111,7 +112,7 @@ function alerts(before: Badges | null, now: Badges, base: string): { text: strin
   if ((now.waiting ?? 0) > (before.waiting ?? 0)) out.push({ text: `${(now.waiting ?? 0) - (before.waiting ?? 0)} result(s) waiting for your approval`, href: `${base}/runs` });
   if ((now.questions ?? 0) > (before.questions ?? 0)) out.push({ text: `${(now.questions ?? 0) - (before.questions ?? 0)} new question(s) for you`, href: `${base}/questions` });
   if ((now.proposals ?? 0) > (before.proposals ?? 0)) out.push({ text: "The design agent proposed a plan update", href: `${base}/workspace#plan-updates` });
-  if (now.plan && now.plan.id !== before.plan?.id) out.push({ text: `Plan v${now.plan.version} needs you: ${now.plan.state === "submit" ? "submit it for approval" : "approve it"}`, href: `${base}/plans/${now.plan.id}` });
+  if (now.plan && now.plan.id !== before.plan?.id) out.push({ text: `Plan v${now.plan.version} needs you: ${now.plan.state === "submit" ? "submit it for approval" : "approve it"}`, href: `${base}/plan` });
   if ((now.paused_runs ?? 0) > (before.paused_runs ?? 0)) out.push({ text: "A run was paused", href: `${base}/runs` });
   return out;
 }

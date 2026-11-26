@@ -819,3 +819,19 @@ main.run-page { max-width: 1760px; display: grid; grid-template-columns: minmax(
 .toast button { background: none; border: 0; color: #fff; font-size: 18px; cursor: pointer; }
 .impact-counts { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 8px 0 12px; }
 .impact-counts li { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card, #fff); }
+
+/* Big green go button (approve). */
+.btn-go { background: #16a34a; color: #fff; border: 0; font-size: 17px; padding: 12px 22px; border-radius: 10px; font-weight: 700; box-shadow: 0 2px 8px rgba(22,163,74,.35); }
+.btn-go:hover { background: #15803d; }
+/* Plan page: steps highlighted by the version that changed them; changes listed on the right. */
+main.plan-overview { max-width: 1400px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.plan-steps { list-style: decimal; padding-left: 28px; display: flex; flex-direction: column; gap: 8px; }
+.plan-step { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; scroll-margin-top: 150px; }
+.plan-step:target { outline: 3px solid #2e90fa; }
+.plan-changes { position: sticky; top: 140px; max-height: calc(100vh - 156px); overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.plan-changes h2 { margin: 0; }
+.change-box { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; color: var(--fg); }
+.change-box:hover { outline: 2px solid #2e90fa; }
+.struck { text-decoration: line-through; opacity: .7; }
+.plan-archive li { padding-left: 10px; }
+@media (max-width: 900px) { main.plan-overview { grid-template-columns: 1fr; } .plan-changes { position: static; max-height: none; } }

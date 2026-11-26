@@ -194,3 +194,13 @@ plan page says in plain words **What changes if you approve**:
 - the estimated AI cost of the steps to do, from what they cost last time.
 
 Then press **Approve and start the run**: the work carries on from there.
+
+## The Plan page
+**Plan** in the project menu (after Inputs) shows the latest plan: the new version waiting for you, or the one in use.
+- **✓ Approve this plan** (green, top right) approves it and starts the work again; only affected steps are redone.
+- Each step is **highlighted in the colour of the plan version that last changed it** (v2 pink, v3 beige, v4 green, v5
+  blue, and so on; the first plan has no colour).
+- The **Changes** list on the right shows every change, newest first, in the same colours. Click one to jump to the step.
+- **Earlier versions** lists every plan with what it changed.
+
+The menu is in the order you work: Overview, Inputs, Plan, Questions, Runs, Workspace, AI usage.

@@ -208,6 +208,13 @@ try {
   // The plan page says in plain words what changes: one new step, done next; everything else already done is kept.
   assert.match(await page.getByTestId("impact-counts").innerText(), /0\s*taken out[\s\S]*0\s*changed[\s\S]*1\s*new[\s\S]*1\s*to do \(again\)[\s\S]*1\s*already done and kept/);
   assert.match(await page.getByTestId("redo-order").innerText(), /Drop test of the enclosure · new step/);
+  // The Plan page: the new version with a big green approve button, the new step highlighted, the change listed on the right.
+  await page.goto(`${BASE}/projects/${project.id}/plan`);
+  await page.getByTestId("approve-plan-top").getByRole("button", { name: "✓ Approve this plan" }).waitFor();
+  assert.match(await page.getByTestId("plan-changes").innerText(), /v2 · .* · new\s*Drop test of the enclosure/);
+  assert.match(await page.locator("#step-drop-test-of-the-enclosure").innerText(), /changed in v2/);
+  assert.match(await page.getByTestId("plan-archive").innerText(), /v1/);
+  await shot(page, "plan-page");
   const { data: plans } = await admin.from("plans").select("id, version, status, generator").eq("project_id", project.id).order("version");
   const draft = plans.at(-1);
   assert.equal(draft.status, "draft");
