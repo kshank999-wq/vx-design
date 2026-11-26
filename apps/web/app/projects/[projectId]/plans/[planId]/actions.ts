@@ -114,14 +114,14 @@ export async function approvePlanNow(projectId: string, planId: string, start: b
   redirect(`/projects/${projectId}/runs/${runId}?notice=${encodeURIComponent(`Plan v${plan.version} approved and its run started. Finished steps that did not change are reused.`)}`);
 }
 
-/** Removes a draft nobody will approve (for example one made before a newer plan was approved). */
+/** Archives a draft nobody will approve (kept in the archive, never deleted) (for example one made before a newer plan was approved). */
 export async function discardPlan(projectId: string, planId: string) {
   const path = `/projects/${projectId}/plans/${planId}`;
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc("discard_plan_draft", { p_plan: planId });
   if (error) fail(path, error);
   revalidatePath(`/projects/${projectId}`, "layout");
-  redirect(`/projects/${projectId}?tab=plans&notice=${encodeURIComponent("The out-of-date draft was discarded.")}`);
+  redirect(`/projects/${projectId}?tab=plans&notice=${encodeURIComponent("The draft was archived: it stays in the plan archive for reference.")}`);
 }
 
 export async function decidePlan(projectId: string, planId: string, approve: boolean, form: FormData) {

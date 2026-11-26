@@ -26,7 +26,7 @@ export default async function PlanOverviewPage({ params, searchParams }: {
   const [{ data: project }, { data: me }, { data: plans }] = await Promise.all([
     supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
     supabase.from("project_members").select("role").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
-    supabase.from("plans").select("id, version, status, created_at, approved_at, summary").eq("project_id", projectId).order("version"),
+    supabase.from("plans").select("id, version, status, created_at, approved_at, summary, generator").eq("project_id", projectId).order("version"),
   ]);
   if (!project) notFound();
   const all = plans ?? [];
@@ -106,7 +106,7 @@ export default async function PlanOverviewPage({ params, searchParams }: {
             const c = changes.filter((x) => x.version === p.version);
             return (
               <li key={p.id} style={{ borderLeft: `6px solid ${colorOf(p.version) === "transparent" ? "var(--line)" : colorOf(p.version)}` }}>
-                <Link href={`/projects/${projectId}/plans/${p.id}`}><strong>v{p.version}</strong></Link> <span className="muted small">· {label(p.status)} · {new Date(p.created_at).toLocaleDateString()}</span>
+                <Link href={`/projects/${projectId}/plans/${p.id}`}><strong>v{p.version}</strong></Link> <span className="muted small">· {(p.generator as { archived_at?: string } | null)?.archived_at ? "archived draft (never approved)" : label(p.status)} · {new Date(p.created_at).toLocaleDateString()}</span>
                 <div className="small muted">{p.version === 1 ? "The first plan." : c.length ? `${c.filter((x) => x.kind === "changed").length} changed, ${c.filter((x) => x.kind === "new").length} new, ${c.filter((x) => x.kind === "taken out").length} taken out` : "No step changes."}</div>
               </li>
             );

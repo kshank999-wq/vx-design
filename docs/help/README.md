@@ -168,7 +168,7 @@ appears in the bottom-right corner. Press **🔔 Turn on alerts** once to also g
 
 ## Out-of-date plan drafts
 A draft made before a newer plan was approved is marked **Out of date: do not approve this draft**, because approving it
-would undo the newer plan's changes. Press **Discard this draft** to remove it. The Overview shows the **plan in use**.
+would undo the newer plan's changes. Press **Archive this draft** to move it to the plan archive (it is kept for reference, never deleted). The Overview shows the **plan in use**.
 
 ## Who approves a plan, and how
 **You do. The design agent never approves anything; it only proposes.** On a draft plan you see **What you are approving**
