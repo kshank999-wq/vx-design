@@ -240,11 +240,37 @@ export class WorkerDb {
   async project(projectId: string): Promise<{ name: string; description: string | null }> {
     const { data, error } = await this.client.from("projects").select("name, description").eq("id", projectId).single();
     if (error) throw new Error(`project: ${error.message}`);
-    const [answers, look] = await Promise.all([this.answeredQuestions(projectId), this.lookContext(projectId)]);
+    const [answers, look, inputs] = await Promise.all([this.answeredQuestions(projectId), this.lookContext(projectId), this.inputsContext(projectId)]);
     const parts = [data.description ?? ""];
     if (look) parts.push(look);
+    if (inputs) parts.push(inputs);
     if (answers.length) parts.push(`The owner's answers to earlier questions (follow them):\n${answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n")}`);
     return { name: data.name, description: parts.filter(Boolean).join("\n\n") || null };
+  }
+
+  /**
+   * The project's inputs as every task sees them: the parts the owner chose (PT-n) with their summary and the specs
+   * read from their datasheets, and every other file the owner gave (datasheets, drawings, 3D models, earlier designs).
+   * Without this a step only had its own brief and asked for documents that were already uploaded.
+   */
+  async inputsContext(projectId: string): Promise<string | null> {
+    const [{ data: parts }, { data: refs }] = await Promise.all([
+      this.client.from("project_parts").select("id, mpn, manufacturer, role, subsystem, status, note, specs, summary").eq("project_id", projectId).order("created_at").order("id"),
+      this.client.from("project_references").select("ref_no, kind, title, note, filename, part_id").eq("project_id", projectId).order("ref_no"),
+    ]);
+    if (!parts?.length && !refs?.length) return null;
+    const lines = ["The owner's inputs: these documents and parts are already provided. Use their facts; do not ask for documents listed here. " +
+      "If a figure you need is not below, take it from the named file if you can, otherwise state a clearly marked assumption and continue."];
+    (parts ?? []).forEach((p, i) => {
+      const specs = (Array.isArray(p.specs) ? p.specs as { name: string; value: string }[] : []).slice(0, 40).map((x) => `${x.name}: ${x.value}`).join("; ");
+      const files = (refs ?? []).filter((r) => r.part_id === p.id).map((r) => `${r.filename} (${r.kind.replace(/_/g, " ")})`).join(", ");
+      lines.push(`- PT-${i + 1} ${p.mpn}${p.manufacturer ? ` (${p.manufacturer})` : ""}${p.role ? `, ${p.role}` : ""}${p.subsystem ? `, ${p.subsystem}` : ""}, ${p.status}` +
+        `${p.summary ? `. ${p.summary}` : ""}${specs ? `. Specs: ${specs}` : ""}${p.note ? `. Note: ${p.note}` : ""}${files ? `. Files: ${files}` : ""}`);
+    });
+    for (const r of (refs ?? []).filter((x) => !x.part_id && !["mockup", "render", "sketch", "photo"].includes(x.kind))) {
+      lines.push(`- REF-${r.ref_no} ${r.kind.replace(/_/g, " ")}: ${r.title} (${r.filename})${r.note ? `: ${r.note}` : ""}`);
+    }
+    return lines.join("\n").slice(0, 24000);
   }
 
   /** The current design freeze with its image, for describing the look. */
