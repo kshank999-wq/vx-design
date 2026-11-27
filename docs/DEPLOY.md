@@ -39,6 +39,10 @@ These are yours to make before deployment:
    recorded in the project's migration history, as the Supabase CLI does. Seed rows go into a fresh database only.
    Then it turns on email confirmation, allows confirmation links back to `VX_SITE_URL/auth/callback` only (plus
    `VX_EXTRA_REDIRECTS`, e.g. Vercel preview URLs) and switches off anonymous sign-ins. Re-run it after each release.
+   For the live site pass the custom domain and the preview pattern, or they are dropped from the allow list:
+   `VX_EXTRA_REDIRECTS="https://vx-design.com/auth/callback,https://www.vx-design.com/auth/callback,https://vx-design-kshank999-5979s-projects.vercel.app/auth/callback,https://vx-design-*-kshank999-5979s-projects.vercel.app/auth/callback"`.
+   Vercel's Deployment Protection is set to preview deployments only (Settings → Deployment Protection → Standard
+   Protection), so vx-design.com and vx-design.vercel.app are public and sign-in is the app's own.
 4. Create the signing key for assistant messages. Keep the printed value for the web app:
 
    ```bash
