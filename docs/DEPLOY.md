@@ -42,7 +42,9 @@ These are yours to make before deployment:
    For the live site pass the custom domain and the preview pattern, or they are dropped from the allow list:
    `VX_EXTRA_REDIRECTS="https://vx-design.com/auth/callback,https://www.vx-design.com/auth/callback,https://vx-design-kshank999-5979s-projects.vercel.app/auth/callback,https://vx-design-*-kshank999-5979s-projects.vercel.app/auth/callback"`.
    Vercel's Deployment Protection is set to preview deployments only (Settings → Deployment Protection → Standard
-   Protection), so vx-design.com and vx-design.vercel.app are public and sign-in is the app's own.
+   Protection), so vx-design.com and vx-design.vercel.app are public and sign-in is the app's own. Email links use
+   https://vx-design.com: Supabase Auth site URL, and `VX_SITE_URL=https://vx-design.com` on Vercel (production); run
+   deploy-db.sh with `VX_SITE_URL=https://vx-design.com` too, or it puts the old address back.
 4. Create the signing key for assistant messages. Keep the printed value for the web app:
 
    ```bash
